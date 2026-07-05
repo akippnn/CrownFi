@@ -47,7 +47,7 @@ export default function TicketsPage() {
     setBusy(true);
     try {
       // Step 1 — build the purchase tx.
-      const prep = await postJson<any>("/api/tickets/prepare-buy", { tier, buyerAddress: address });
+      const prep = await postJson<any>("/api/tickets/prepare-buy", { tier, buyerAddress: address, fanId: fan.id });
       if (!prep.ok) throw new Error((prep.data as any)?.error ?? "prepare_failed");
 
       if ((prep.data as any).mock) {
@@ -62,7 +62,7 @@ export default function TicketsPage() {
       if (signed.error || !signed.signedXdr) throw new Error(signed.error ?? "You cancelled the signature.");
 
       // Step 3 — submit + mint the ticket NFT.
-      const conf = await postJson<any>("/api/tickets/confirm-buy", { tier, fanId: fan.id, signedXdr: signed.signedXdr });
+      const conf = await postJson<any>("/api/tickets/confirm-buy", { tier, fanId: fan.id, signedXdr: signed.signedXdr, intentId: (prep.data as any).intentId });
       if (!conf.ok) throw new Error((conf.data as any)?.error ?? "confirm_failed");
 
       flash(`Paid ${(prep.data as any).priceUsdc} USDC on-chain — ${tier} ticket minted, seat ${(conf.data as any)?.ticket?.seat ?? ""}.`, "ok");

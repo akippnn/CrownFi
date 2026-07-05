@@ -235,7 +235,7 @@ export async function readUsdcBalance(address: string): Promise<number> {
 // STEP 1 of a purchase: build an UNSIGNED transaction for the buyer to approve in Freighter.
 // The buyer is the transaction SOURCE, so their single Freighter signature authorizes both the
 // buy() call and the USDC transfers it makes (source-account auth). Returns the tx XDR.
-export async function buildBuyTx(params: { buyerAddress: string; listingId: number }): Promise<{ xdr: string }> {
+export async function buildBuyTx(params: { buyerAddress: string; listingId: number }): Promise<{ xdr: string; txHash: string }> {
   const { sdk, srv, passphrase } = await server();
   const contractId = requireEnv("SALE_SPLITTER_CONTRACT_ID");
   const source = await srv.getAccount(params.buyerAddress); // buyer pays the fee + authorizes
@@ -250,7 +250,7 @@ export async function buildBuyTx(params: { buyerAddress: string; listingId: numb
     .setTimeout(180)
     .build();
   tx = await srv.prepareTransaction(tx); // simulate + assemble footprint/auth
-  return { xdr: tx.toXDR() };
+  return { xdr: tx.toXDR(), txHash: Buffer.from(tx.hash()).toString("hex") };
 }
 
 // Build an UNSIGNED AuditAnchor.publish() tx for the ADMIN to sign in Freighter.
@@ -262,7 +262,7 @@ export async function buildAnchorTx(params: {
   merkleRoot: string;
   tallyHash: string;
   totalVotes: number;
-}): Promise<{ xdr: string }> {
+}): Promise<{ xdr: string; txHash: string }> {
   const { sdk, srv, passphrase } = await server();
   const contractId = requireEnv("AUDIT_ANCHOR_CONTRACT_ID");
   const source = await srv.getAccount(params.adminAddress);
@@ -279,13 +279,20 @@ export async function buildAnchorTx(params: {
     .setTimeout(180)
     .build();
   tx = await srv.prepareTransaction(tx);
-  return { xdr: tx.toXDR() };
+  return { xdr: tx.toXDR(), txHash: Buffer.from(tx.hash()).toString("hex") };
 }
 
 // STEP 2 of a purchase (or admin anchor): submit the Freighter-signed XDR and wait for confirmation.
-export async function submitSignedXdr(signedXdr: string): Promise<{ txHash: string }> {
+export async function submitSignedXdr(
+  signedXdr: string,
+  expected?: { source?: string; txHash?: string }
+): Promise<{ txHash: string }> {
   const { sdk, srv, passphrase } = await server();
   const tx = sdk.TransactionBuilder.fromXDR(signedXdr, passphrase);
+  const source = String((tx as any).source ?? "");
+  const bodyHash = Buffer.from(tx.hash()).toString("hex");
+  if (expected?.source && source !== expected.source) throw new Error("signed transaction source mismatch");
+  if (expected?.txHash && bodyHash !== expected.txHash) throw new Error("signed transaction does not match prepared CrownFi intent");
   const sent = await srv.sendTransaction(tx);
   if (sent.status === "ERROR") throw new Error(`submit failed: ${JSON.stringify(sent.errorResult ?? sent)}`);
   let got = await srv.getTransaction(sent.hash);

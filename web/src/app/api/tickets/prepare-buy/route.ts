@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { buildBuyTx } from "@/lib/stellar";
 import { TICKET_TIERS, tierListingId } from "@/lib/tiers";
+import { createTxIntent } from "@/lib/txIntents";
 
 const LIVE = (process.env.STELLAR_MODE ?? "mock") === "live";
 
@@ -17,8 +18,9 @@ export async function POST(req: NextRequest) {
   if (!buyerAddress.startsWith("G")) return NextResponse.json({ error: "connect_wallet" }, { status: 400 });
 
   try {
-    const { xdr } = await buildBuyTx({ buyerAddress, listingId });
-    return NextResponse.json({ xdr, tier, priceUsdc: (TICKET_TIERS as any)[tier].priceUsdc, listingId });
+    const { xdr, txHash } = await buildBuyTx({ buyerAddress, listingId });
+    const intent = createTxIntent({ kind: "ticket-buy", fanId: String(body?.fanId ?? ""), tier, listingId, expectedSource: buyerAddress, txHash });
+    return NextResponse.json({ xdr, intentId: intent.id, tier, priceUsdc: (TICKET_TIERS as any)[tier].priceUsdc, listingId });
   } catch (e: any) {
     console.error("[api/tickets/prepare-buy] failed:", e);
     return NextResponse.json({ error: e?.message ?? "prepare_failed" }, { status: 500 });

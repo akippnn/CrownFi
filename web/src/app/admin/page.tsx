@@ -5,7 +5,7 @@ import { useSession } from "@/session/SessionProvider";
 import { flag, short } from "@/lib/format";
 import { Toast } from "@/components/ui";
 import { getJson, postJson } from "@/lib/api";
-import { signWithFreighter } from "@/wallet/freighter";
+import { signAdminMessage, signWithFreighter } from "@/wallet/freighter";
 
 type Tab = "overview" | "rounds" | "contestants" | "requests";
 
@@ -29,12 +29,31 @@ export default function AdminPage() {
 
   function flash(msg: string, tone: "ok" | "err" = "ok") { setToast({ msg, tone }); setTimeout(() => setToast({ msg: "", tone }), 2600); }
 
+  async function ensureAdminSession(): Promise<boolean> {
+    if (!address) { flash("Connect your admin wallet first.", "err"); return false; }
+
+    const challenge = await postJson<any>("/api/admin/challenge", { address });
+    if (!challenge.ok) { flash("Admin wallet is not authorized server-side.", "err"); return false; }
+
+    const signed = await signAdminMessage((challenge.data as any).message, address);
+    if (signed.error || !signed.signature) { flash(signed.error ?? "Admin signature was cancelled.", "err"); return false; }
+
+    const verified = await postJson<any>("/api/admin/verify", {
+      address,
+      message: (challenge.data as any).message,
+      signature: signed.signature,
+    });
+    if (!verified.ok) { flash("Could not verify admin signature.", "err"); return false; }
+    return true;
+  }
+
+
   async function closeRound(id: string) {
-    if (!address) { flash("Connect your admin wallet first.", "err"); return; }
+    if (!(await ensureAdminSession())) return;
     setBusy(id);
     try {
       // Step 1 — compute the tally + build the anchor tx.
-      const prep = await postJson<any>(`/api/rounds/${id}/prepare-close`, { adminAddress: address });
+      const prep = await postJson<any>(`/api/rounds/${id}/prepare-close`, { adminAddress: address! });
       if (!prep.ok) throw new Error((prep.data as any)?.error ?? "prepare_failed");
 
       if ((prep.data as any).mock) {
@@ -45,11 +64,11 @@ export default function AdminPage() {
       }
 
       // Step 2 — admin signs the anchor in Freighter.
-      const signed = await signWithFreighter((prep.data as any).xdr, address);
+      const signed = await signWithFreighter((prep.data as any).xdr, address!);
       if (signed.error || !signed.signedXdr) throw new Error(signed.error ?? "You cancelled the signature.");
 
       // Step 3 — submit + persist.
-      const conf = await postJson<any>(`/api/rounds/${id}/confirm-close`, { signedXdr: signed.signedXdr });
+      const conf = await postJson<any>(`/api/rounds/${id}/confirm-close`, { signedXdr: signed.signedXdr, intentId: (prep.data as any).intentId });
       if (!conf.ok) throw new Error((conf.data as any)?.error ?? "confirm_failed");
 
       flash(`Anchored on Stellar ✓ Root ${short((conf.data as any).merkleRoot, 6)}`, "ok");
@@ -66,15 +85,18 @@ export default function AdminPage() {
     }
   }
   async function createRound(title: string) {
+    if (!(await ensureAdminSession())) return;
     const res = await fetch("/api/rounds", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ title }) });
     if (res.ok) { loadAll(); flash("Round created"); } else flash("Could not create round", "err");
   }
   async function createContestant(body: any) {
+    if (!(await ensureAdminSession())) return;
     const res = await fetch("/api/contestants", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
     const data = await res.json();
     if (res.ok) { loadAll(); flash("Contestant added"); } else flash(data.error ?? "Error", "err");
   }
   async function decideRequest(id: string, status: string) {
+    if (!(await ensureAdminSession())) return;
     const res = await fetch("/api/organizer-requests", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ id, status }) });
     if (res.ok) { loadAll(); flash(status === "approved" ? "Organizer approved" : "Request rejected"); } else flash("Error", "err");
   }

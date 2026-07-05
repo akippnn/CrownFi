@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { voteLeaf } from "@/lib/merkle";
 import { rateLimit } from "@/lib/ratelimit";
+import { clientIp } from "@/lib/ip";
 
 // Off-chain vote intake. Fast path: rate limit, quota check, then a single insert whose
 // unique constraint (roundId, fanId) is the real duplicate-vote guard.
 export async function POST(req: NextRequest) {
-  const ip = req.headers.get("x-forwarded-for") ?? "local";
+  const ip = clientIp(req);
   const rl = rateLimit(`vote:${ip}`);
   if (!rl.ok) return NextResponse.json({ error: "rate_limited" }, { status: 429 });
 

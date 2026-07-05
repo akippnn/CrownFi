@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { readJson } from "@/lib/http";
+import { requireAdmin } from "@/lib/adminAuth";
 
 export async function GET() {
   return readJson(() => db.contestant.findMany({ orderBy: { name: "asc" } }));
 }
 
 export async function POST(req: NextRequest) {
+  const admin = requireAdmin(req);
+  if (admin instanceof NextResponse) return admin;
+
   const body = await req.json().catch(() => null);
   const name = String(body?.name ?? "").trim();
   const country = String(body?.country ?? "").trim();

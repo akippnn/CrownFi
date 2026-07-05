@@ -11,7 +11,7 @@ async function main() {
   if (!PAYOUT) throw new Error("Set DEMO_CONTESTANT_PAYOUT in .env (the contestant payout wallet).");
 
   const collectibles = await db.collectible.findMany({ orderBy: { createdAt: "asc" } });
-  const used = collectibles.map((c) => c.listingId).filter((x): x is number => x != null);
+  const used = collectibles.map((c: { listingId: number | null }) => c.listingId).filter((x: number | null): x is number => x != null);
   let nextId = used.length ? Math.max(...used) + 1 : 1;
 
   for (const c of collectibles) {

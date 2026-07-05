@@ -47,7 +47,7 @@ export default function CollectPage() {
     setBusy(c.id);
     try {
       // Step 1 — ask the backend to build the purchase transaction.
-      const prep = await postJson<any>("/api/collectibles/prepare-buy", { collectibleId: c.id, buyerAddress: address });
+      const prep = await postJson<any>("/api/collectibles/prepare-buy", { collectibleId: c.id, buyerAddress: address, fanId: fan.id });
       if (!prep.ok) throw new Error((prep.data as any)?.error ?? "prepare_failed");
 
       if ((prep.data as any).mock) {
@@ -64,7 +64,7 @@ export default function CollectPage() {
       if (signed.error || !signed.signedXdr) throw new Error(signed.error ?? "You cancelled the signature.");
 
       // Step 3 — submit + mint the NFT.
-      const conf = await postJson<any>("/api/collectibles/confirm-buy", { collectibleId: c.id, fanId: fan.id, signedXdr: signed.signedXdr });
+      const conf = await postJson<any>("/api/collectibles/confirm-buy", { collectibleId: c.id, fanId: fan.id, signedXdr: signed.signedXdr, intentId: (prep.data as any).intentId });
       if (!conf.ok) throw new Error((conf.data as any)?.error ?? "confirm_failed");
 
       flash(`Collected! ${priceUsdc} USDC split on-chain to the contestant. +10 points.`, "ok");

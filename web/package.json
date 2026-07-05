@@ -8,7 +8,10 @@
     "start": "next start",
     "lint": "next lint",
     "seed": "tsx prisma/seed.ts",
-    "test:merkle": "tsx src/lib/merkle.test.ts"
+    "test:merkle": "tsx src/lib/merkle.test.ts",
+    "typecheck": "prisma generate && tsc --noEmit",
+    "check": "npm run typecheck && npm run test:merkle",
+    "security:audit": "npm audit --audit-level=moderate"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

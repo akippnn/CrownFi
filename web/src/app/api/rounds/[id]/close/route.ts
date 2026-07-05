@@ -1,12 +1,16 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { merkleRoot } from "@/lib/merkle";
 import { tallyHash, TallyEntry } from "@/lib/tally";
 import { anchorCheckpoint } from "@/lib/stellar";
+import { requireAdmin } from "@/lib/adminAuth";
 
 // Close a round: aggregate the tally off-chain, build the Merkle root over ordered leaves,
 // anchor the root + tally hash on Stellar, and persist the checkpoint for receipt generation.
-export async function POST(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const admin = requireAdmin(req);
+  if (admin instanceof NextResponse) return admin;
+
   const { id: roundId } = await ctx.params;
 
   const round = await db.votingRound.findUnique({ where: { id: roundId } });

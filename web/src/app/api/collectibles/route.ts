@@ -4,6 +4,8 @@ import { getWallet } from "@/wallet";
 import { buyCollectible } from "@/lib/stellar";
 import { readJson } from "@/lib/http";
 
+const LIVE = (process.env.STELLAR_MODE ?? "mock") === "live";
+
 export async function GET() {
   return readJson(() =>
     db.collectible.findMany({
@@ -16,6 +18,8 @@ export async function GET() {
 // Buy a collectible: resolve wallet, mint (mock or live via the sale-splitter), record the purchase,
 // and reward loyalty points. In live mode the payment split happens on-chain.
 export async function POST(req: NextRequest) {
+  if (LIVE) return NextResponse.json({ error: "use_prepare_confirm_flow" }, { status: 409 });
+
   const body = await req.json().catch(() => null);
   if (!body?.fanId || !body?.collectibleId)
     return NextResponse.json({ error: "missing_fields" }, { status: 400 });

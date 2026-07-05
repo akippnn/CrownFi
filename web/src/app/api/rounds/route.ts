@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { readJson } from "@/lib/http";
+import { requireAdmin } from "@/lib/adminAuth";
 
 export async function GET() {
   return readJson(() =>
@@ -12,6 +13,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const admin = requireAdmin(req);
+  if (admin instanceof NextResponse) return admin;
+
   const body = await req.json().catch(() => null);
   const title = String(body?.title ?? "").trim();
   if (!title) return NextResponse.json({ error: "missing_title" }, { status: 400 });
