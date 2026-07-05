@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la .env .env.example)",
+      "Bash(ls node_modules)",
+      "Bash(npx tsx *)",
+      "Bash(npx tsc *)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(command -v cargo)",
+      "Bash(cargo --version)",
+      "Bash(cargo test *)",
+      "Bash(command -v rustup)",
+      "Bash(rustup --version)",
+      "Bash(rustup toolchain *)",
+      "Bash(rustup check *)",
+      "Bash(rustup update *)",
+      "Bash(rustup target *)",
+      "Bash(CR=\"C:/Users/Miles Napilan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/stellar-tokens-0.4.1\"; echo \"=== non_fungible mod files ===\"; find \"$CR/src/non_fungible\" -name \"*.rs\" | head; echo \"\"; echo \"=== royalties mod.rs ===\"; sed -n '1,140p' \"$CR/src/non_fungible/extensions/royalties/mod.rs\")",
+      "Bash(grep -rn operator __TRACKED_VAR__/src/non_fungible/extensions/royalties/storage.rs)",
+      "Bash(grep -rn 'enforce_owner_auth\\\\|fn only_owner' __TRACKED_VAR__/src/)",
+      "Bash(CM=\"C:/Users/Miles Napilan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/stellar-macros-0.4.1\"; echo \"=== supported traits in default_impl ===\"; grep -rn \"is not supported by\\\\|NonFungibleToken\\\\|NonFungibleBurnable\\\\|FungibleToken\\\\|=> {\" \"$CM/src/\" | grep -iE \"supported|=> \\\\{|Trait\" | head -40)",
+      "Bash(cargo build *)",
+      "Bash(cp prisma/schema.prisma /tmp/schema.prisma.bak)",
+      "Bash(cp prisma/schema.prisma prisma/schema.prisma.bak)",
+      "Bash(cp .env .env.bak)",
+      "Bash(cp .env.smoke .env)",
+      "Bash(DATABASE_URL=\"file:./smoke.db\" npx prisma db push --skip-generate --accept-data-loss)",
+      "Bash(npx prisma *)",
+      "Bash(PORT=3111 npx next dev -p 3111)",
+      "Bash(echo \"started, pid $!\")"
+    ]
+  }
+}

@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* CrownFi light theme: white background, gold accent (matches the deck). */
+:root { color-scheme: light; }
+
+body {
+  color: #23252f;
+  background:
+    radial-gradient(1100px 520px at 50% -12%, rgba(201,162,39,0.10), transparent 60%),
+    linear-gradient(180deg, #ffffff 0%, #faf7ef 100%);
+  background-attachment: fixed;
+  min-height: 100vh;
+}
+
+@layer components {
+  /* Was frosted-glass-on-dark. Now a clean white card with a soft warm shadow. */
+  .glass { @apply rounded-2xl border border-[#e7e2d3] bg-white shadow-[0_12px_34px_-20px_rgba(120,100,40,0.28)]; }
+  .glass-hover { @apply transition hover:border-[#d8b24a] hover:shadow-[0_18px_44px_-22px_rgba(184,145,47,0.38)]; }
+  .btn-gold { @apply inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-b from-[#d4af37] to-[#b8912f] px-5 py-2.5 text-sm font-semibold text-[#1a1f35] shadow-[0_10px_24px_-10px_rgba(184,145,47,0.55)] transition hover:brightness-[1.05] active:brightness-95 disabled:opacity-40; }
+  .btn-ghost { @apply inline-flex items-center justify-center gap-2 rounded-full border border-[#d9d3c3] px-5 py-2.5 text-sm font-medium text-[#3a3f52] transition hover:border-[#c9a227] hover:bg-[#faf6ea] disabled:opacity-40; }
+  .chip { @apply inline-flex items-center gap-1 rounded-full border border-[#e7e2d3] bg-[#faf7ef] px-2.5 py-1 text-xs text-[#5f6172]; }
+  .eyebrow { @apply text-[11px] font-semibold uppercase tracking-[0.22em] text-[#a97f16]; }
+  .field { @apply w-full rounded-xl border border-[#dcd6c6] bg-white px-3 py-2.5 text-sm text-[#23252f] placeholder-[#9a968b] outline-none transition focus:border-[#c9a227] focus:ring-2 focus:ring-[#e6cf8f]; }
+  .tag-on { @apply inline-flex items-center gap-1 rounded-full bg-[#e1f5ee] px-2 py-0.5 text-[11px] font-semibold text-[#0f6e56]; }
+  .tag-off { @apply inline-flex items-center gap-1 rounded-full bg-[#f1eee4] px-2 py-0.5 text-[11px] font-semibold text-[#6b6552]; }
+  .surface-soft { @apply bg-[#faf7ef]; }
+}
+
+.mono { font-family: ui-monospace, "SF Mono", "JetBrains Mono", monospace; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+*:focus-visible { outline: 2px solid #c9a227; outline-offset: 2px; border-radius: 6px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
+}

@@ -1,0 +1,27 @@
+[workspace]
+resolver = "2"
+members = ["audit-anchor", "ticket", "collectible", "sale-splitter", "usdc-test"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+
+[workspace.dependencies]
+soroban-sdk = "22.0.0"
+
+# OpenZeppelin Stellar Contracts (audited token building blocks).
+# Pin to the version you generate from the OpenZeppelin Contract Wizard for Stellar.
+# The token contracts below reference these; confirm exact crate names/versions there:
+#   https://docs.openzeppelin.com/stellar-contracts
+stellar-tokens = "0.4.1"
+stellar-access = "0.4.1"
+stellar-macros = "0.4.1"
+
+[profile.release]
+opt-level = "z"
+overflow-checks = true
+debug = 0
+strip = "symbols"
+lto = true
+panic = "abort"
+codegen-units = 1

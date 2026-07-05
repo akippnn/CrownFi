@@ -1,0 +1,11 @@
+node_modules
+.next
+.env
+.env.local
+*.db
+*.db-journal
+dev.db
+target
+/contracts/**/target
+.DS_Store
+prisma/migrations/dev.db*

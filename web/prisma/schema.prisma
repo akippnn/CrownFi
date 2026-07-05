@@ -1,0 +1,133 @@
+// CrownFi data model (MVP).
+// Database: Supabase Postgres. Set DATABASE_URL (pooled) + DIRECT_URL (direct) in web/.env.
+// One-time setup instructions: see SUPABASE.md in the repo root.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")   // Supabase pooled (6543, ?pgbouncer=true)
+  directUrl = env("DIRECT_URL")     // Supabase direct (5432) for migrations
+}
+
+model Fan {
+  id            String     @id @default(cuid())
+  handle        String     @unique
+  email         String?    @unique
+  walletAddress String?   @unique
+  points        Int        @default(0)
+  createdAt     DateTime   @default(now())
+  votes         Vote[]
+  tickets       Ticket[]
+  purchases     Purchase[]
+}
+
+model Contestant {
+  id           String        @id @default(cuid())
+  name         String
+  country      String
+  sash         String        @unique
+  portraitUrl  String?
+  createdAt    DateTime      @default(now())
+  votes        Vote[]
+  collectibles Collectible[]
+}
+
+model VotingRound {
+  id         String       @id @default(cuid())
+  title      String
+  status     String       @default("open") // open | closed
+  openedAt   DateTime     @default(now())
+  closedAt   DateTime?
+  votes      Vote[]
+  checkpoint Checkpoint?
+}
+
+// One vote per fan per round is enforced by the unique constraint below (dedup at the DB layer).
+model Vote {
+  id           String      @id @default(cuid())
+  round        VotingRound @relation(fields: [roundId], references: [id])
+  roundId      String
+  fan          Fan         @relation(fields: [fanId], references: [id])
+  fanId        String
+  contestant   Contestant  @relation(fields: [contestantId], references: [id])
+  contestantId String
+  leafHash     String      // sha256(fanId|contestantId|roundId)
+  createdAt    DateTime    @default(now())
+
+  @@unique([roundId, fanId]) // duplicate-vote prevention
+  @@index([roundId])
+}
+
+// On-chain proof for a closed round. In live mode, anchorTx is the real Stellar transaction hash.
+model Checkpoint {
+  id         String      @id @default(cuid())
+  round      VotingRound @relation(fields: [roundId], references: [id])
+  roundId    String      @unique
+  merkleRoot String
+  tallyHash  String
+  totalVotes Int
+  anchorTx   String?     // Stellar tx hash (or mock)
+  tallyJson  String      // aggregated results snapshot
+  leavesJson String      // ordered leaf hashes, for proof generation
+  createdAt  DateTime    @default(now())
+}
+
+model Ticket {
+  id        String   @id @default(cuid())
+  fan       Fan      @relation(fields: [fanId], references: [id])
+  fanId     String
+  eventName String
+  tier      String
+  seat      String
+  priceUsdc Float
+  tokenId   String?  // on-chain NFT token id (or mock)
+  mintTx    String?  // Stellar tx hash (or mock)
+  status    String   @default("minted")
+  createdAt DateTime @default(now())
+}
+
+// Catalog item: a contestant's collectible portrait edition.
+model Collectible {
+  id           String     @id @default(cuid())
+  contestant   Contestant @relation(fields: [contestantId], references: [id])
+  contestantId String
+  title        String
+  metadataUri  String     // ipfs://...
+  priceUsdc    Float
+  edition      Int
+  listingId    Int?       @unique // sale-splitter listing id (set when registered on-chain)
+  createdAt    DateTime   @default(now())
+  purchases    Purchase[]
+}
+
+// A fan's purchase of a collectible (records ownership + the minted token).
+model Purchase {
+  id            String      @id @default(cuid())
+  fan           Fan         @relation(fields: [fanId], references: [id])
+  fanId         String
+  collectible   Collectible @relation(fields: [collectibleId], references: [id])
+  collectibleId String
+  priceUsdc     Float
+  tokenId       String?
+  mintTx        String?
+  createdAt     DateTime    @default(now())
+
+  @@index([fanId])
+}
+
+// An application from a pageant organizer to run their event on CrownFi.
+// Admin reviews and approves before the organizer gets create access.
+model OrganizerRequest {
+  id          String   @id @default(cuid())
+  orgName     String
+  contactName String
+  email       String
+  pageantName String
+  country     String
+  message     String?
+  status      String   @default("pending") // pending | approved | rejected
+  createdAt   DateTime @default(now())
+}
