@@ -75,17 +75,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setConnecting(true); setError(""); setNeedsInstall(false);
     try {
       const res = await connectFreighter();
-      if (res.notInstalled) {
-        const mockAddress = "G" + Array.from({ length: 55 }, () => "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[Math.floor(Math.random() * 32)]).join("");
-        const linked = await linkFan(mockAddress);
-        if (linked) {
-          setError("Freighter not detected. Auto-connected with a mock address for offline testing.");
-          setTimeout(() => setError(""), 5000);
-        } else {
-          setNeedsInstall(true);
-        }
-        return;
-      }
+      if (res.notInstalled) setNeedsInstall(true);
       if (res.error || !res.address) { setError(res.error ?? "Could not connect"); return; }
       await linkFan(res.address);
     } finally {
