@@ -14,7 +14,7 @@ This pass fixed several high-signal issues that a judge or reviewer could quickl
 - direct mock mint endpoints are blocked in live mode;
 - organizer request review, fan listing, contestant creation, round creation, and round closing are no longer protected only by client UI;
 - npm audit is clean after overriding the vulnerable transitive PostCSS copy;
-- scheduled GitHub Actions now run no-GHAS-required security checks: npm audit, TypeScript/Merkle checks, Rust format/test/audit, a secret smoke test, and a local CodeQL scan that does not upload to GitHub code scanning.
+- scheduled GitHub Actions now run no-GHAS-required security checks: npm audit, TypeScript/Merkle checks, Rust format/test, blocking Rust vulnerability audit, non-blocking Rust advisory reporting, a secret smoke test, and a local CodeQL scan that does not upload to GitHub code scanning.
 
 ## Changes made in this pass
 
@@ -27,7 +27,7 @@ This pass fixed several high-signal issues that a judge or reviewer could quickl
 | Live-mode direct mint bypass | Fixed | Legacy `POST /api/tickets` and `POST /api/collectibles` now reject in live mode and require prepare/confirm flow. |
 | Faucet abuse | Improved | Added IP rate limiting and capped per-request mint amount. |
 | Local artifacts | Fixed | Removed tracked `.claude/settings.local.json` and `web/tsconfig.tsbuildinfo`; ignored them going forward. |
-| CI/security automation | Adjusted | Added scheduled + PR/push workflows that work without GitHub Advanced Security: npm audit, TypeScript/Merkle checks, Rust format/test/audit, cargo-audit, secret smoke tests, and local CodeQL with upload disabled. |
+| CI/security automation | Adjusted | Added scheduled + PR/push workflows that work without GitHub Advanced Security: npm audit, TypeScript/Merkle checks, Rust format/test, blocking cargo-audit vulnerability checks, non-blocking Rust advisory reports, secret smoke tests, and local CodeQL with upload disabled. |
 
 ## Verification performed
 
@@ -46,10 +46,23 @@ Results:
 - `npm audit --audit-level=moderate`: **0 vulnerabilities**
 - `npm run test:merkle`: **passed**
 
-Not fully run locally:
+Not fully run locally in the patch container:
 
 - `npm run typecheck`: blocked in this container because Prisma tried to download engines from `binaries.prisma.sh` and DNS/network access failed. The GitHub workflow runs `npm ci` normally and then `prisma generate && tsc --noEmit`.
-- `cargo test`, `cargo fmt`, `cargo audit`: not run locally because this container does not have `cargo`/`rustc`. The GitHub workflow installs/uses Rust stable and runs these checks.
+- `cargo test`, `cargo fmt`, `cargo audit`: not run in the patch container because it does not have `cargo`/`rustc`. The GitHub workflow installs/uses Rust stable and runs these checks.
+
+Follow-up validation on the reviewer machine passed:
+
+- `npm ci`
+- `npm audit --audit-level=moderate`
+- `npm audit --audit-level=moderate --omit=dev`
+- `npm run typecheck`
+- `npm run test:merkle`
+- `cargo fmt --all -- --check`
+- `cargo test --workspace --locked`
+- committed-secret smoke test
+
+`cargo audit --deny warnings` reports transitive advisory warnings from the Soroban/Stellar dependency chain. The workflow now keeps `cargo audit` as a blocking vulnerability check and reports `cargo audit --deny warnings` as a non-blocking advisory step.
 
 ## Fixed findings
 
@@ -215,7 +228,20 @@ Extra concern:
 
 - `ticket` and `collectible` depend on OpenZeppelin Stellar crates and macros. Verify the exact `stellar-tokens` API and `ContractOverrides` pattern against the pinned crate version in CI.
 
-### E. Voting privacy is only pseudonymous
+### E. Rust dependency advisory warnings are transitive through Soroban
+
+**Severity:** Low/Medium supply-chain visibility  
+**Status:** Documented / non-blocking CI report
+
+`cargo audit --deny warnings` reports advisory warnings for Rust crates pulled through the Soroban/Stellar dependency chain:
+
+- `derivative 2.2.0` — unmaintained, pulled through Arkworks/Soroban dependencies;
+- `paste 1.0.15` — unmaintained, pulled through Arkworks/Soroban dependencies;
+- `num-bigint 0.4.7` — yanked, pulled through Arkworks/Soroban dependencies.
+
+These are not direct CrownFi dependencies. The project keeps `cargo audit` as a blocking vulnerability check, while `cargo audit --deny warnings` is retained as a non-blocking visibility check. Revisit this when upgrading Soroban/Stellar SDK versions. Do not force random overrides into the Soroban dependency tree without verifying compatibility.
+
+### F. Voting privacy is only pseudonymous
 
 **Severity:** Medium  
 **Status:** Open
@@ -227,7 +253,7 @@ Recommended fix:
 - derive leaf commitments from a server-held round salt or voter-specific blind nonce;
 - preserve receipt verification without exposing the full mapping.
 
-### F. Round IDs are compressed to `u32` on-chain
+### G. Round IDs are compressed to `u32` on-chain
 
 **Severity:** Low/Medium  
 **Status:** Open
@@ -238,7 +264,7 @@ Recommended fix:
 
 - use `BytesN<32>` or `String` round identifiers in the contract storage key instead of `u32`.
 
-### G. Server-side admin auth should also check request origin
+### H. Server-side admin auth should also check request origin
 
 **Severity:** Low/Medium  
 **Status:** Open
@@ -256,7 +282,9 @@ Runs on PR, push to `main`, weekly schedule, and manual dispatch. It intentional
 - npm lockfile integrity smoke check;
 - `npm run typecheck`;
 - `npm run test:merkle`;
-- Rust format/test/audit for contracts;
+- Rust format/test for contracts;
+- blocking `cargo audit` vulnerability check;
+- non-blocking `cargo audit --deny warnings` advisory report;
 - secret smoke test for committed Stellar secret keys and real-looking DB URLs.
 
 ### `.github/workflows/codeql.yml`
