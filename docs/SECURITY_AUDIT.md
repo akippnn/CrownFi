@@ -14,7 +14,7 @@ This pass fixed several high-signal issues that a judge or reviewer could quickl
 - direct mock mint endpoints are blocked in live mode;
 - organizer request review, fan listing, contestant creation, round creation, and round closing are no longer protected only by client UI;
 - npm audit is clean after overriding the vulnerable transitive PostCSS copy;
-- scheduled GitHub Actions now run CodeQL, dependency review, npm audit, Rust tests/audit, and a secret smoke test.
+- scheduled GitHub Actions now run no-GHAS-required security checks: npm audit, TypeScript/Merkle checks, Rust format/test/audit, a secret smoke test, and a local CodeQL scan that does not upload to GitHub code scanning.
 
 ## Changes made in this pass
 
@@ -27,7 +27,7 @@ This pass fixed several high-signal issues that a judge or reviewer could quickl
 | Live-mode direct mint bypass | Fixed | Legacy `POST /api/tickets` and `POST /api/collectibles` now reject in live mode and require prepare/confirm flow. |
 | Faucet abuse | Improved | Added IP rate limiting and capped per-request mint amount. |
 | Local artifacts | Fixed | Removed tracked `.claude/settings.local.json` and `web/tsconfig.tsbuildinfo`; ignored them going forward. |
-| CI/security automation | Added | Added scheduled + PR/push workflows for CodeQL, dependency review, npm audit, Rust checks, cargo-audit, and secret smoke tests. |
+| CI/security automation | Adjusted | Added scheduled + PR/push workflows that work without GitHub Advanced Security: npm audit, TypeScript/Merkle checks, Rust format/test/audit, cargo-audit, secret smoke tests, and local CodeQL with upload disabled. |
 
 ## Verification performed
 
@@ -249,19 +249,27 @@ The httpOnly cookie uses `SameSite=Strict`, which helps. For production, mutatio
 
 ### `.github/workflows/security.yml`
 
-Runs on PR, push to `main`, weekly schedule, and manual dispatch:
+Runs on PR, push to `main`, weekly schedule, and manual dispatch. It intentionally avoids GitHub Advanced Security-only checks because the current repository does not have Dependency Review / code scanning enabled.
 
-- Dependency Review Action on PRs;
 - `npm ci`;
+- `npm audit --audit-level=moderate`;
+- npm lockfile integrity smoke check;
 - `npm run typecheck`;
 - `npm run test:merkle`;
-- `npm audit --audit-level=moderate`;
 - Rust format/test/audit for contracts;
 - secret smoke test for committed Stellar secret keys and real-looking DB URLs.
 
 ### `.github/workflows/codeql.yml`
 
-Runs CodeQL for JavaScript/TypeScript with `security-extended` and `security-and-quality` queries.
+Runs CodeQL for JavaScript/TypeScript with `security-extended` and `security-and-quality` queries using `upload: false`. This keeps the scan runnable in CI without requiring GitHub code scanning to be enabled. Results are visible in the Actions log, not the repository Security tab.
+
+### Deferred repository-security features
+
+Enable these later when someone with repository settings permission can do it:
+
+- Dependency graph / Dependency Review;
+- GitHub code scanning upload;
+- Dependabot alerts and version/security update PRs.
 
 ## Recommended presentation wording
 

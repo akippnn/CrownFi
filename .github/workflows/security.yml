@@ -17,35 +17,47 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  dependency-review:
-    name: Dependency review
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Review dependency changes
-        uses: actions/dependency-review-action@v4
-        with:
-          fail-on-severity: moderate
-          deny-licenses: GPL-2.0, GPL-3.0, AGPL-1.0, AGPL-3.0
-
-  web-security:
-    name: Web app audit
+  dependency-hygiene:
+    name: Dependency hygiene
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: web
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/checkout@v5
         with:
-          node-version: 22
+          persist-credentials: false
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Audit npm dependencies
+        run: npm run security:audit
+      - name: Check npm lockfile integrity
+        run: |
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          git diff --exit-code package.json package-lock.json
+
+  web-security:
+    name: Web app checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
           cache: npm
           cache-dependency-path: web/package-lock.json
       - name: Install dependencies
@@ -54,8 +66,6 @@ jobs:
         run: npm run typecheck
       - name: Test Merkle receipts
         run: npm run test:merkle
-      - name: Audit npm dependencies
-        run: npm run security:audit
 
   contracts-security:
     name: Soroban contracts audit
@@ -65,10 +75,12 @@ jobs:
         working-directory: contracts
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - name: Setup Rust stable
         run: |
-          rustup update stable
+          rustup toolchain install stable --profile minimal
           rustup default stable
       - name: Format check
         run: cargo fmt --all -- --check
@@ -84,17 +96,29 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - name: Look for high-risk committed secrets
         run: |
           set -euo pipefail
-          if git grep -n -I -E '(^|[^A-Z2-7])S[A-Z2-7]{55}([^A-Z2-7]|$)' -- \
-            ':!contracts/DEPLOY_GUIDE.md' ':!web/.env.example'; then
+          STELLAR_SECRET_RE='(^|[^A-Z2-7])S[A-Z2-7]{55}([^A-Z2-7]|$)'
+          DB_URL_RE='postgresql://[^[:space:]]+:[^<][^@[:space:]]+@'
+
+          if git grep -n -I -E "$STELLAR_SECRET_RE" -- \
+            . \
+            ':!contracts/DEPLOY_GUIDE.md' \
+            ':!web/.env.example' \
+            ':!.github/workflows/*'; then
             echo "Potential Stellar secret key committed." >&2
             exit 1
           fi
-          if git grep -n -I -E 'postgresql://[^[:space:]]+:[^<][^@[:space:]]+@' -- \
-            ':!SUPABASE.md' ':!web/.env.example'; then
+
+          if git grep -n -I -E "$DB_URL_RE" -- \
+            . \
+            ':!SUPABASE.md' \
+            ':!web/.env.example' \
+            ':!.github/workflows/*'; then
             echo "Potential database URL with real password committed." >&2
             exit 1
           fi
