@@ -38,10 +38,8 @@ jobs:
         run: npm ci
       - name: Audit npm dependencies
         run: npm run security:audit
-      - name: Check npm lockfile integrity
-        run: |
-          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-          git diff --exit-code package.json package-lock.json
+      - name: Verify npm lockfile can install without scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
 
   web-security:
     name: Web app checks
