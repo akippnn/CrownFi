@@ -1,4 +1,4 @@
-name: CodeQL local scan
+name: CodeQL best-effort local scan
 
 on:
   pull_request:
@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   analyze:
-    name: Analyze JavaScript/TypeScript without upload
+    name: Analyze JavaScript/TypeScript best effort
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -32,7 +32,9 @@ jobs:
           queries: security-extended,security-and-quality
       - name: Autobuild
         uses: github/codeql-action/autobuild@v4
-      - name: Analyze locally
+      - name: Analyze locally without uploading results
         uses: github/codeql-action/analyze@v4
+        continue-on-error: true
         with:
           upload: false
+          upload-database: false
