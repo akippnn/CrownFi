@@ -10,9 +10,9 @@
 // USDC on Stellar (so 1 USDC = 10_000_000 base units).
 
 use soroban_sdk::{contract, contractimpl, Address, Env, String};
-use stellar_tokens::fungible::{Base, FungibleToken};
 use stellar_access::ownable::{self as ownable, Ownable};
 use stellar_macros::{default_impl, only_owner};
+use stellar_tokens::fungible::{Base, FungibleToken};
 
 #[contract]
 pub struct UsdcTest;

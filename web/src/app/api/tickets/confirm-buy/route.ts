@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { submitSignedXdr, mintTicket } from "@/lib/stellar";
 import { TICKET_TIERS, tierListingId } from "@/lib/tiers";
+import { consumeTxIntent } from "@/lib/txIntents";
 
 // STEP 2 of a USDC ticket purchase: submit the buyer-signed USDC payment, then mint the ticket NFT.
 export async function POST(req: NextRequest) {
@@ -9,7 +10,8 @@ export async function POST(req: NextRequest) {
   const tier = String(body?.tier ?? "");
   const fanId = String(body?.fanId ?? "");
   const signedXdr = String(body?.signedXdr ?? "");
-  if (!fanId || !signedXdr || tierListingId(tier) == null)
+  const intentId = String(body?.intentId ?? "");
+  if (!fanId || !signedXdr || !intentId || tierListingId(tier) == null)
     return NextResponse.json({ error: "missing_fields" }, { status: 400 });
 
   const fan = await db.fan.findUnique({ where: { id: fanId } });
@@ -20,8 +22,13 @@ export async function POST(req: NextRequest) {
   const seat = `GA-${Math.floor(Math.random() * 900 + 100)}`;
 
   try {
-    // 1) Submit the buyer-signed USDC payment (split to the event treasury).
-    const payment = await submitSignedXdr(signedXdr);
+    const intent = consumeTxIntent(intentId);
+    if (!intent || intent.kind !== "ticket-buy" || intent.fanId !== fan.id || intent.tier !== tier) {
+      return NextResponse.json({ error: "invalid_or_expired_intent" }, { status: 409 });
+    }
+
+    // 1) Submit the exact buyer-signed USDC payment prepared by CrownFi.
+    const payment = await submitSignedXdr(signedXdr, { source: fan.walletAddress, txHash: intent.txHash });
     // 2) Mint the ticket NFT to the buyer (platform-signed).
     const mint = await mintTicket({ toAddress: fan.walletAddress, eventName: "Coronation Night 2026", tier, seat });
     // 3) Record it.

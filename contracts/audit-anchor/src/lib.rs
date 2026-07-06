@@ -62,7 +62,8 @@ impl AuditAnchor {
         };
         e.storage().persistent().set(&DataKey::Round(round_id), &cp);
 
-        e.events().publish((symbol_short!("publish"), round_id), merkle_root);
+        e.events()
+            .publish((symbol_short!("publish"), round_id), merkle_root);
     }
 
     pub fn get(e: Env, round_id: u32) -> Option<Checkpoint> {

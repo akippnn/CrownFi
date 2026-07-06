@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { buildBuyTx } from "@/lib/stellar";
+import { createTxIntent } from "@/lib/txIntents";
 
 const LIVE = (process.env.STELLAR_MODE ?? "mock") === "live";
 
@@ -22,8 +23,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "connect_wallet" }, { status: 400 });
 
   try {
-    const { xdr } = await buildBuyTx({ buyerAddress, listingId: collectible.listingId });
-    return NextResponse.json({ xdr, priceUsdc: collectible.priceUsdc, listingId: collectible.listingId });
+    const { xdr, txHash } = await buildBuyTx({ buyerAddress, listingId: collectible.listingId });
+    const intent = createTxIntent({
+      kind: "collectible-buy",
+      fanId: String(body?.fanId ?? ""),
+      collectibleId,
+      listingId: collectible.listingId,
+      expectedSource: buyerAddress,
+      txHash,
+    });
+    return NextResponse.json({ xdr, intentId: intent.id, priceUsdc: collectible.priceUsdc, listingId: collectible.listingId });
   } catch (e: any) {
     console.error("[api/collectibles/prepare-buy] failed:", e);
     return NextResponse.json({ error: e?.message ?? "prepare_failed" }, { status: 500 });

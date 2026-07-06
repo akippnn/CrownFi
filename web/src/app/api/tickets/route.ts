@@ -4,6 +4,8 @@ import { getWallet } from "@/wallet";
 import { mintTicket } from "@/lib/stellar";
 import { readJson } from "@/lib/http";
 
+const LIVE = (process.env.STELLAR_MODE ?? "mock") === "live";
+
 export async function GET() {
   return readJson(() =>
     db.ticket.findMany({
@@ -15,6 +17,8 @@ export async function GET() {
 
 // Purchase a ticket: resolve the fan's wallet, mint the NFT (mock or live), persist.
 export async function POST(req: NextRequest) {
+  if (LIVE) return NextResponse.json({ error: "use_prepare_confirm_flow" }, { status: 409 });
+
   const body = await req.json().catch(() => null);
   if (!body?.fanId || !body?.eventName || !body?.tier)
     return NextResponse.json({ error: "missing_fields" }, { status: 400 });

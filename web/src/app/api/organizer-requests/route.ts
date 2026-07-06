@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { readJson } from "@/lib/http";
+import { requireAdmin } from "@/lib/adminAuth";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const admin = requireAdmin(req);
+  if (admin instanceof NextResponse) return admin;
+
   return readJson(() => db.organizerRequest.findMany({ orderBy: { createdAt: "desc" } }));
 }
 
@@ -26,6 +30,9 @@ export async function POST(req: NextRequest) {
 
 // Admin: approve or reject a request.
 export async function PATCH(req: NextRequest) {
+  const admin = requireAdmin(req);
+  if (admin instanceof NextResponse) return admin;
+
   const b = await req.json().catch(() => null);
   if (!b?.id || !["approved", "rejected"].includes(b?.status))
     return NextResponse.json({ error: "invalid" }, { status: 400 });

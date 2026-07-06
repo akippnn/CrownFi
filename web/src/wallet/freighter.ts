@@ -11,6 +11,7 @@ import {
   getAddress,
   getNetworkDetails,
   signTransaction,
+  signMessage,
 } from "@stellar/freighter-api";
 
 export const TESTNET_PASSPHRASE = "Test SDF Network ; September 2015";
@@ -83,4 +84,20 @@ export async function signWithFreighter(
   const res = await signTransaction(xdr, { networkPassphrase: TESTNET_PASSPHRASE, address });
   if (res.error) return { error: String(res.error) };
   return { signedXdr: res.signedTxXdr };
+}
+
+
+// Sign a short admin-auth challenge. The backend verifies the SEP-53 signature and returns
+// an httpOnly admin session cookie; private keys never leave Freighter.
+export async function signAdminMessage(
+  message: string,
+  address: string
+): Promise<{ signature?: string; error?: string }> {
+  const res = await signMessage(message, { address });
+  if (res.error) return { error: errMsg(res.error) || "Message signing was rejected." };
+  if (!res.signedMessage) return { error: "No signature returned by Freighter." };
+  const signature = typeof res.signedMessage === "string"
+    ? res.signedMessage
+    : Buffer.from(res.signedMessage).toString("base64");
+  return { signature };
 }

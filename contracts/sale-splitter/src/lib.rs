@@ -22,11 +22,11 @@ const MAX_BPS: u32 = 10_000;
 #[contracttype]
 pub enum DataKey {
     Admin,
-    Usdc,          // SAC address of USDC
-    Platform,      // platform treasury address
-    PlatformBps,   // platform fee in basis points
+    Usdc,        // SAC address of USDC
+    Platform,    // platform treasury address
+    PlatformBps, // platform fee in basis points
     Paused,
-    Listing(u32),  // listing_id -> Listing
+    Listing(u32), // listing_id -> Listing
 }
 
 #[contracttype]
@@ -42,14 +42,22 @@ pub struct SaleSplitter;
 
 #[contractimpl]
 impl SaleSplitter {
-    pub fn __constructor(e: Env, admin: Address, usdc: Address, platform: Address, platform_bps: u32) {
+    pub fn __constructor(
+        e: Env,
+        admin: Address,
+        usdc: Address,
+        platform: Address,
+        platform_bps: u32,
+    ) {
         if platform_bps > MAX_BPS {
             panic!("platform bps out of range");
         }
         e.storage().instance().set(&DataKey::Admin, &admin);
         e.storage().instance().set(&DataKey::Usdc, &usdc);
         e.storage().instance().set(&DataKey::Platform, &platform);
-        e.storage().instance().set(&DataKey::PlatformBps, &platform_bps);
+        e.storage()
+            .instance()
+            .set(&DataKey::PlatformBps, &platform_bps);
         e.storage().instance().set(&DataKey::Paused, &false);
     }
 
@@ -59,7 +67,14 @@ impl SaleSplitter {
         if price <= 0 {
             panic!("price must be positive");
         }
-        e.storage().persistent().set(&DataKey::Listing(listing_id), &Listing { price, contestant, active });
+        e.storage().persistent().set(
+            &DataKey::Listing(listing_id),
+            &Listing {
+                price,
+                contestant,
+                active,
+            },
+        );
     }
 
     pub fn set_paused(e: Env, paused: bool) {
@@ -72,7 +87,11 @@ impl SaleSplitter {
     pub fn buy(e: Env, buyer: Address, listing_id: u32) -> i128 {
         buyer.require_auth();
 
-        if e.storage().instance().get(&DataKey::Paused).unwrap_or(false) {
+        if e.storage()
+            .instance()
+            .get(&DataKey::Paused)
+            .unwrap_or(false)
+        {
             panic!("sales paused");
         }
 
@@ -99,7 +118,8 @@ impl SaleSplitter {
         // TODO(full build): cross-call Collectible.mint(buyer) via its contract id here, so payment
         // and mint happen atomically in one transaction.
 
-        e.events().publish((symbol_short!("sale"), listing_id), (buyer, to_contestant));
+        e.events()
+            .publish((symbol_short!("sale"), listing_id), (buyer, to_contestant));
         to_contestant
     }
 

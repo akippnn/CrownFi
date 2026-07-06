@@ -12,9 +12,9 @@
 // versions. The royalty API mirrors ERC-2981 (basis-point fees).
 
 use soroban_sdk::{contract, contractimpl, contracttype, symbol_short, Address, Env, String};
-use stellar_tokens::non_fungible::{royalties::NonFungibleRoyalties, Base, NonFungibleToken};
 use stellar_access::ownable::{self as ownable, Ownable};
 use stellar_macros::{default_impl, only_owner};
+use stellar_tokens::non_fungible::{royalties::NonFungibleRoyalties, Base, NonFungibleToken};
 
 const MAX_BPS: u32 = 10_000;
 
@@ -31,7 +31,13 @@ pub struct Collectible;
 #[contractimpl]
 impl Collectible {
     // royalty_bps: creator fee in basis points (1000 = 10%). royalty_receiver is the contestant.
-    pub fn __constructor(e: &Env, owner: Address, royalty_receiver: Address, royalty_bps: u32, max_supply: u32) {
+    pub fn __constructor(
+        e: &Env,
+        owner: Address,
+        royalty_receiver: Address,
+        royalty_bps: u32,
+        max_supply: u32,
+    ) {
         if royalty_bps > MAX_BPS {
             panic!("royalty bps out of range");
         }
@@ -89,7 +95,13 @@ impl NonFungibleRoyalties for Collectible {
         Base::set_default_royalty(e, &receiver, basis_points);
     }
 
-    fn set_token_royalty(e: &Env, token_id: u32, receiver: Address, basis_points: u32, _operator: Address) {
+    fn set_token_royalty(
+        e: &Env,
+        token_id: u32,
+        receiver: Address,
+        basis_points: u32,
+        _operator: Address,
+    ) {
         ownable::enforce_owner_auth(e);
         Base::set_token_royalty(e, token_id, &receiver, basis_points);
     }
