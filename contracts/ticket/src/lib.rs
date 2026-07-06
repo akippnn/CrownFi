@@ -17,9 +17,9 @@ use soroban_sdk::{contract, contractimpl, contracttype, symbol_short, Address, E
 // NOTE: `ContractOverrides` is intentionally NOT imported here — the `#[default_impl]` macro on the
 // `NonFungibleToken` impl injects its own `use stellar_tokens::non_fungible::ContractOverrides;`,
 // and importing it a second time would be a duplicate-definition error.
-use stellar_tokens::non_fungible::{Base, NonFungibleToken};
 use stellar_access::ownable::{self as ownable, Ownable};
 use stellar_macros::{default_impl, only_owner};
+use stellar_tokens::non_fungible::{Base, NonFungibleToken};
 
 #[contracttype]
 pub enum Cfg {
@@ -76,7 +76,10 @@ impl Ticket {
     }
 
     pub fn resale_open(e: &Env) -> bool {
-        e.storage().instance().get(&Cfg::ResaleOpen).unwrap_or(false)
+        e.storage()
+            .instance()
+            .get(&Cfg::ResaleOpen)
+            .unwrap_or(false)
     }
 }
 
@@ -89,14 +92,24 @@ pub struct TicketOverrides;
 
 impl ContractOverrides for TicketOverrides {
     fn transfer(e: &Env, from: &Address, to: &Address, token_id: u32) {
-        if !e.storage().instance().get(&Cfg::ResaleOpen).unwrap_or(false) {
+        if !e
+            .storage()
+            .instance()
+            .get(&Cfg::ResaleOpen)
+            .unwrap_or(false)
+        {
             panic!("resale window is closed");
         }
         Base::transfer(e, from, to, token_id);
     }
 
     fn transfer_from(e: &Env, spender: &Address, from: &Address, to: &Address, token_id: u32) {
-        if !e.storage().instance().get(&Cfg::ResaleOpen).unwrap_or(false) {
+        if !e
+            .storage()
+            .instance()
+            .get(&Cfg::ResaleOpen)
+            .unwrap_or(false)
+        {
             panic!("resale window is closed");
         }
         Base::transfer_from(e, spender, from, to, token_id);
