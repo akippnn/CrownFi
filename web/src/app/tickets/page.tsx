@@ -1,5 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useSession } from "@/session/SessionProvider";
 import { Toast } from "@/components/ui";
 import { short } from "@/lib/format";
@@ -7,17 +9,19 @@ import { getJson, postJson } from "@/lib/api";
 import { signWithFreighter } from "@/wallet/freighter";
 import { TIER_LIST } from "@/lib/tiers";
 
-type Ticket = { id: string; eventName: string; tier: string; seat: string; priceUsdc: number; tokenId?: string; fan: { handle: string } };
+type Ticket = { id: string; eventName: string; tier: string; seat: string; priceUsdc: number; tokenId?: string; status: string; fan: { handle: string } };
 
 const TIERS = TIER_LIST.map((t) => ({ name: t.name, price: t.priceUsdc, perks: t.perks }));
 
 export default function TicketsPage() {
   const { fan, address } = useSession();
+  const router = useRouter();
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [tier, setTier] = useState("Gold");
   const [busy, setBusy] = useState(false);
   const [balance, setBalance] = useState<number | null>(null);
   const [toast, setToast] = useState({ msg: "", tone: "ok" as "ok" | "err" });
+  const [lastTicketId, setLastTicketId] = useState<string | null>(null);
 
   function load() { getJson<Ticket[]>("/api/tickets", []).then(setTickets); }
   useEffect(load, []);
@@ -53,7 +57,9 @@ export default function TicketsPage() {
       if ((prep.data as any).mock) {
         const r = await postJson<any>("/api/tickets", { fanId: fan.id, eventName: "Coronation Night 2026", tier, priceUsdc: TIERS.find((x) => x.name === tier)!.price });
         if (!r.ok) throw new Error((r.data as any)?.error ?? "buy_failed");
-        flash(`Ticket minted (mock). Seat ${(r.data as any)?.ticket?.seat ?? ""}.`, "ok");
+        const newId = (r.data as any)?.ticket?.id;
+        if (newId) setLastTicketId(newId);
+        flash(`Ticket minted! Seat ${(r.data as any)?.ticket?.seat ?? ""}.`, "ok");
         return;
       }
 
@@ -65,6 +71,8 @@ export default function TicketsPage() {
       const conf = await postJson<any>("/api/tickets/confirm-buy", { tier, fanId: fan.id, signedXdr: signed.signedXdr, intentId: (prep.data as any).intentId });
       if (!conf.ok) throw new Error((conf.data as any)?.error ?? "confirm_failed");
 
+      const confId = (conf.data as any)?.ticket?.id;
+      if (confId) setLastTicketId(confId);
       flash(`Paid ${(prep.data as any).priceUsdc} USDC on-chain — ${tier} ticket minted, seat ${(conf.data as any)?.ticket?.seat ?? ""}.`, "ok");
     } catch (e: any) {
       const m = String(e?.message ?? "");
@@ -112,24 +120,57 @@ export default function TicketsPage() {
         {!fan && <span className="ml-3 text-sm text-[#7a7768]">Connect your Freighter wallet to buy.</span>}
       </div>
 
+      {lastTicketId && (
+        <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 flex items-start gap-3">
+          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-emerald-500 text-white mt-0.5">
+            <span className="text-sm font-bold">✓</span>
+          </div>
+          <div className="flex-1">
+            <div className="text-sm font-bold text-emerald-800">Ticket purchased successfully!</div>
+            <p className="text-xs text-emerald-700 mt-0.5">Your claim voucher is ready. Print it or save it as PDF to present at the venue.</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Link href={`/tickets/${lastTicketId}`} className="btn-gold !py-1.5 !px-4 !text-xs">
+                View Claim Voucher
+              </Link>
+              <Link href={`/tickets/verify/${lastTicketId}`} className="btn-ghost !py-1.5 !px-4 !text-xs">
+                Test QR Verification
+              </Link>
+              <button onClick={() => setLastTicketId(null)} className="text-xs text-emerald-600 underline underline-offset-2 hover:text-emerald-800">
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {mine.length > 0 && (
         <div className="mt-10">
           <h2 className="mb-3 font-display text-2xl text-[#23252f]">Your tickets</h2>
           <div className="grid gap-3 sm:grid-cols-2">
             {mine.map((t) => (
-              <div key={t.id} className="glass overflow-hidden">
-                <div className="flex items-stretch">
-                  <div className="grid w-24 shrink-0 place-items-center bg-gradient-to-b from-gold to-gold-deep text-ink">
+              <div key={t.id} className="glass overflow-hidden flex flex-col justify-between">
+                <div className="flex items-stretch h-full">
+                  <div className="grid w-24 shrink-0 place-items-center bg-gradient-to-b from-[#d4af37] to-[#b8912f] text-[#1a1f35]">
                     <div className="text-center">
                       <div className="font-display text-lg font-bold">{t.tier}</div>
-                      <div className="text-[10px]">SEAT</div>
+                      <div className="text-[10px] tracking-wider opacity-75">SEAT</div>
                       <div className="text-sm font-semibold">{t.seat}</div>
                     </div>
                   </div>
-                  <div className="flex-1 p-4">
-                    <div className="font-medium text-[#23252f]">{t.eventName}</div>
-                    <div className="text-xs text-[#7a7768]">{t.priceUsdc} USDC</div>
-                    {t.tokenId && <div className="mono mt-2 text-[11px] text-emerald">NFT {short(t.tokenId, 6)}</div>}
+                  <div className="flex-1 p-4 flex flex-col justify-between">
+                    <div>
+                      <div className="font-medium text-[#23252f]">{t.eventName}</div>
+                      <div className="text-xs text-[#7a7768]">{t.priceUsdc} USDC</div>
+                      {t.tokenId && <div className="mono mt-2 text-[11px] text-emerald font-semibold">NFT {short(t.tokenId, 6)}</div>}
+                    </div>
+                    <div className="mt-4 flex items-center justify-between border-t border-[#e7e2d3] pt-3">
+                      <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${t.status === "redeemed" ? "bg-red-100 text-red-700" : "bg-emerald/10 text-emerald"}`}>
+                        {t.status || "minted"}
+                      </span>
+                      <Link href={`/tickets/${t.id}`} className="btn-ghost !px-3 !py-1 text-xs font-semibold !rounded-full">
+                        Claim Voucher
+                      </Link>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -137,6 +178,20 @@ export default function TicketsPage() {
           </div>
         </div>
       )}
+
+      <div className="mt-8 border-t border-[#e7e2d3] pt-6">
+        <h3 className="text-sm font-semibold text-[#23252f]">Testing & Demo:</h3>
+        <p className="text-xs text-[#7a7768] mt-1 leading-relaxed">
+          Want to preview the ticket voucher print layout and verification scanner flow? Check out the{" "}
+          <Link href="/tickets/demo-ticket-12345" className="text-[#b8912f] font-semibold underline hover:text-[#a97f16]">
+            Demo Claim Voucher Layout
+          </Link>{" "}
+          or the{" "}
+          <Link href="/tickets/verify/demo-ticket-12345" className="text-[#b8912f] font-semibold underline hover:text-[#a97f16]">
+            Redemption Verification Page
+          </Link> (where you can scan and mark it as redeemed).
+        </p>
+      </div>
 
       <Toast msg={toast.msg} tone={toast.tone} />
     </div>
