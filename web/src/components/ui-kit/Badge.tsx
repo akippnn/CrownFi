@@ -4,34 +4,34 @@ import type { Emphasis, Tone } from "./types";
 
 const tones: Record<Tone, Record<Emphasis, string>> = {
   neutral: {
-    solid: "bg-ink text-white",
-    soft: "bg-[#f1eee4] text-[#6b6552]",
-    outline: "border-line text-[#5f6172]",
-    ghost: "text-[#5f6172]",
+    solid: "bg-white text-black",
+    soft: "bg-white/10 text-white/80",
+    outline: "border-line text-white/70",
+    ghost: "text-white/70",
   },
   gold: {
-    solid: "bg-gold text-navy",
-    soft: "bg-[#fbf2d0] text-gold-ink",
-    outline: "border-gold-soft text-gold-ink",
-    ghost: "text-gold-ink",
+    solid: "bg-gold text-black",
+    soft: "bg-gold/15 text-gold-soft",
+    outline: "border-gold/25 text-gold-soft",
+    ghost: "text-gold-soft",
   },
   success: {
-    solid: "bg-emerald text-ink",
+    solid: "bg-emerald text-black",
     soft: "bg-emerald-soft text-emerald-ink",
-    outline: "border-emerald text-emerald-ink",
+    outline: "border-emerald/30 text-emerald-ink",
     ghost: "text-emerald-ink",
   },
   danger: {
     solid: "bg-ruby text-white",
     soft: "bg-ruby-soft text-ruby",
-    outline: "border-ruby text-ruby",
+    outline: "border-ruby/30 text-ruby",
     ghost: "text-ruby",
   },
   info: {
-    solid: "bg-navy text-white",
-    soft: "bg-[#e8ecfa] text-navy",
-    outline: "border-[#cbd5f6] text-navy",
-    ghost: "text-navy",
+    solid: "bg-gold-deep text-black",
+    soft: "bg-white/5 text-gold-soft",
+    outline: "border-line text-gold-soft",
+    ghost: "text-gold-soft",
   },
 };
 
