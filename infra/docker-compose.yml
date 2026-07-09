@@ -1,0 +1,74 @@
+name: crownfi-platform
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: crownfi
+      POSTGRES_USER: crownfi
+      POSTGRES_PASSWORD: crownfi
+    ports:
+      - "5432:5432"
+    volumes:
+      - crownfi_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crownfi -d crownfi"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ..
+      dockerfile: services/api/Dockerfile
+    environment:
+      CROWNFI_API_BIND: 0.0.0.0:8080
+      CROWNFI_API_MODE: local-demo
+      STELLAR_MODE: mock
+      ADMIN_DEMO_TOKEN: local-admin-demo-token
+      DATABASE_URL: postgresql://crownfi:crownfi@postgres:5432/crownfi
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ..
+      dockerfile: web/Dockerfile
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
+      DATABASE_URL: postgresql://crownfi:crownfi@postgres:5432/crownfi
+      DIRECT_URL: postgresql://crownfi:crownfi@postgres:5432/crownfi
+      STELLAR_MODE: mock
+      WALLET_PROVIDER: mock
+      NEXT_PUBLIC_STELLAR_NETWORK: testnet
+      NEXT_PUBLIC_STELLAR_NETWORK_PASSPHRASE: Test SDF Network ; September 2015
+      ADMIN_WALLETS: ""
+      NEXT_PUBLIC_ADMIN_WALLETS: ""
+      ADMIN_SESSION_SECRET: local-compose-only-change-me
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_started
+
+volumes:
+  crownfi_postgres:
