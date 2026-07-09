@@ -5,7 +5,7 @@ export function Card({ children, className, ...props }: HTMLAttributes<HTMLDivEl
   return (
     <div
       className={cn(
-        "rounded-2xl border border-line bg-white shadow-[0_12px_34px_-20px_rgba(120,100,40,0.28)]",
+        "rounded-2xl border border-line bg-navy-2/65 backdrop-blur-xl shadow-[0_12px_40px_-20px_rgba(0,0,0,0.8)]",
         className,
       )}
       {...props}
@@ -25,7 +25,7 @@ export function CardHeader({ children, className, ...props }: HTMLAttributes<HTM
 
 export function CardTitle({ children, className, ...props }: HTMLAttributes<HTMLHeadingElement> & { children: ReactNode }) {
   return (
-    <h3 className={cn("font-display text-xl font-semibold text-ink", className)} {...props}>
+    <h3 className={cn("font-display text-xl font-semibold text-white", className)} {...props}>
       {children}
     </h3>
   );
@@ -33,7 +33,7 @@ export function CardTitle({ children, className, ...props }: HTMLAttributes<HTML
 
 export function CardDescription({ children, className, ...props }: HTMLAttributes<HTMLParagraphElement> & { children: ReactNode }) {
   return (
-    <p className={cn("text-sm leading-6 text-[#5f6172]", className)} {...props}>
+    <p className={cn("text-sm leading-6 text-gold-soft/50", className)} {...props}>
       {children}
     </p>
   );
@@ -49,7 +49,7 @@ export function CardContent({ children, className, ...props }: HTMLAttributes<HT
 
 export function CardFooter({ children, className, ...props }: HTMLAttributes<HTMLDivElement> & { children: ReactNode }) {
   return (
-    <div className={cn("flex flex-wrap items-center gap-3 border-t border-line p-5", className)} {...props}>
+    <div className={cn("flex flex-wrap items-center gap-3 border-t border-line/60 p-5", className)} {...props}>
       {children}
     </div>
   );

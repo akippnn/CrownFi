@@ -2,24 +2,28 @@ import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode } from "reac
 import { cn } from "./classNames";
 import type { Size } from "./types";
 
-type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
+type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "embossed";
 
 const base =
-  "inline-flex min-h-11 items-center justify-center gap-2 rounded-full font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-soft disabled:pointer-events-none disabled:opacity-45";
+  "inline-flex items-center justify-center gap-2.5 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-soft disabled:pointer-events-none disabled:opacity-45";
 
 const sizes: Record<Size, string> = {
-  sm: "px-3 py-1.5 text-xs",
-  md: "px-5 py-2.5 text-sm",
-  lg: "px-6 py-3 text-base",
+  sm: "h-9 px-4.5 text-xs font-display font-semibold rounded-xl",
+  md: "h-11 px-6 text-sm font-display font-semibold rounded-2xl",
+  lg: "h-13 px-8 text-base font-display font-bold rounded-2xl",
 };
 
 const variants: Record<ButtonVariant, string> = {
   primary:
-    "bg-gradient-to-b from-gold to-gold-deep text-navy shadow-[0_10px_24px_-10px_rgba(184,145,47,0.55)] hover:brightness-[1.05] active:brightness-95",
+    "btn-gold hover:text-black active:scale-95 transition-all duration-150",
   secondary:
-    "border border-line bg-white text-ink shadow-[0_10px_26px_-18px_rgba(80,70,40,0.32)] hover:border-gold-soft hover:bg-cream",
-  ghost: "border border-transparent text-[#3a3f52] hover:border-line hover:bg-cream",
-  danger: "bg-ruby text-white shadow-[0_10px_24px_-14px_rgba(225,29,72,0.55)] hover:brightness-105 active:brightness-95",
+    "btn-ghost active:scale-95 transition-all duration-150 shadow-[0_4px_15px_rgba(0,0,0,0.4)]",
+  ghost:
+    "border border-transparent text-gold-soft/80 hover:text-gold hover:bg-white/5 active:scale-95 transition-all duration-150",
+  danger:
+    "bg-ruby text-white border border-transparent shadow-[0_4px_15px_rgba(244,63,94,0.25)] hover:brightness-105 active:scale-95 transition-all duration-150",
+  embossed:
+    "btn-skeuomorphic-gold hover:text-white active:scale-95 transition-all duration-150",
 };
 
 export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
