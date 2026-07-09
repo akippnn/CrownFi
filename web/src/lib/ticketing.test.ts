@@ -23,7 +23,7 @@ async function runTests() {
   assert(TICKET_TIERS.Silver.priceUsdc === 50, "Silver tier is 50 USDC");
   assert(TICKET_TIERS.Gold.priceUsdc === 100, "Gold tier is 100 USDC");
   assert(TICKET_TIERS.Diamond.priceUsdc === 200, "Diamond tier is 200 USDC");
-  assert(TIER_LIST.length === 3, "There are exactly 3 ticket tiers");
+  assert(TIER_LIST.length === 4, "There are exactly 4 ticket tiers");
 
   // Clean up database tables before test
   await db.ticket.deleteMany({});
@@ -64,10 +64,9 @@ async function runTests() {
       }),
     });
     const res = await ticketPOST(req);
-    assert(res.status === 200, "POST /api/tickets returns 200 via mock fallback when fan is not found");
+    assert(res.status === 404, "POST /api/tickets returns 404 when fan is not found");
     const json = await res.json();
-    assert(json.ok === true, "Mock fallback response has ok: true");
-    assert(json.ticket.fan.handle === "demo_fan", "Auto-generated fan handle is 'demo_fan'");
+    assert(json.error === "fan_not_found", "Unknown fan does not get a ticket minted");
   }
 
   // 5. Test POST /api/tickets - Success (Mock purchase with real fan)
