@@ -3,5 +3,8 @@ export * from "./Button";
 export * from "./Card";
 export * from "./Field";
 export * from "./Layout";
+export * from "./Collectible";
+export * from "./OrnatePortrait";
+export * from "./FeatureCard";
 export * from "./classNames";
 export type * from "./types";
