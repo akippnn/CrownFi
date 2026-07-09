@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
   }
 
   const address = fan.walletAddress ?? (await getWallet().ensureAddress(fan.handle));
-  const seat = body.seat ?? `GA-${Math.floor(Math.random() * 900 + 100)}`;
+  const seat = body.seat ?? "Unassigned";
   
   let tokenId = "mock-token-id-" + Math.floor(Math.random() * 100000);
   let mintTx = "mock-tx-hash-" + Math.floor(Math.random() * 1000000);

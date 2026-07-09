@@ -37,34 +37,40 @@ The ticketing system has four main components:
 ## 2. End-to-End Purchase Flow
 
 ```
-USER CLICKS "BUY GOLD TICKET"
+USER CLICKS "BUY GOLD TICKET" (Pricing Card)
 │
 ├─ 1. POST /api/tickets/prepare-buy
 │     Body: { tier: "Gold", buyerAddress: "G..." }
 │
 ├─ 2a. MOCK MODE → API returns { mock: true }
 │      → Frontend POSTs to /api/tickets to create record
-│      → Ticket saved with mock tokenId/mintTx
+│      → Ticket saved with seat = "Unassigned" and mock tokenId/mintTx
 │
 ├─ 2b. LIVE MODE → API returns unsigned XDR
 │      → Freighter popup asks user to sign USDC payment
 │      → Signed XDR POSTed to /api/tickets/confirm-buy
 │      → Backend submits payment + mints NFT on Stellar
-│      → Ticket saved with real tokenId + txHash
+│      → Ticket saved with seat = "Unassigned" and real tokenId + txHash
 │
-├─ 3. Success banner appears with:
+├─ 3. Purchase succeeds → Seat assignment modal automatically pops open
+│     → Displays interactive SVG SeatMap filtered to the ticket's tier
+│     → User taps a seat (e.g. Row 2 · Seat 5)
+│     → User clicks "Confirm Seat Choice"
+│     → POST /api/tickets/[id]/assign-seat updates DB & mock store
+│
+├─ 4. Success banner appears on /tickets dashboard:
 │     → "View Claim Voucher" → /tickets/[id]
 │     → "Test QR Verification" → /tickets/verify/[id]
 │
-├─ 4. Voucher page renders with dynamic QR code
+├─ 5. Voucher page renders with dynamic QR code
+│     → Renders assigned seat number (e.g. Row 2 Seat 5)
 │     → QR encodes: /tickets/verify/[id]
 │     → "Print / Save PDF" triggers window.print()
 │
-└─ 5. QR scanned at venue entrance
+└─ 6. QR scanned at venue entrance
       → /tickets/verify/[id] checks status
       → Usher clicks "Confirm & Redeem"
       → POST /api/tickets/[id] sets status = "redeemed"
-      → Future scans show "Already Redeemed"
 ```
 
 ---
@@ -73,14 +79,17 @@ USER CLICKS "BUY GOLD TICKET"
 
 | File | Purpose |
 |------|---------|
-| `web/src/app/tickets/page.tsx` | Dashboard: tier selector, buy button, ticket cards, success banner |
-| `web/src/app/tickets/[id]/page.tsx` | Printable voucher: QR code, transaction table, buyer info, on-chain proof |
+| `web/src/app/tickets/page.tsx` | Dashboard: tier cards, buy button, tickets list, seat selection modal overlay |
+| `web/src/components/SeatMap.tsx` | Interactive seatmap: 12 curved rows of seat icons, color-coded and filtered by tier |
+| `web/src/app/tickets/[id]/page.tsx` | Printable voucher: QR code, transaction details, assigned seat label, on-chain proof |
 | `web/src/app/tickets/verify/[id]/page.tsx` | Verification: status check, ticket details, redeem button |
-| `web/src/app/api/tickets/route.ts` | `GET` list tickets, `POST` create ticket (mock purchase) |
+| `web/src/app/api/tickets/route.ts` | `GET` list tickets, `POST` create ticket (seat defaults to "Unassigned") |
 | `web/src/app/api/tickets/[id]/route.ts` | `GET` single ticket, `POST` mark as redeemed |
+| `web/src/app/api/tickets/[id]/assign-seat/route.ts` | `POST` saves seat assignment in DB and mock store |
 | `web/src/app/api/tickets/prepare-buy/route.ts` | Build unsigned Soroban XDR for Freighter |
-| `web/src/app/api/tickets/confirm-buy/route.ts` | Submit signed XDR, mint NFT, save ticket |
+| `web/src/app/api/tickets/confirm-buy/route.ts` | Submit signed XDR, mint NFT, save ticket (seat defaults to "Unassigned") |
 | `web/src/lib/stellar.ts` | Soroban calls: `mintTicket`, `buildBuyTx`, `submitSignedXdr` |
+| `web/src/lib/tiers.ts` | Tier metadata (prices, listingIds, visual colors) for Diamond, Platinum, Gold, Silver |
 | `web/src/wallet/freighter.ts` | Freighter adapter: connect, sign, get address |
 | `web/src/session/SessionProvider.tsx` | Session context: wallet address, fan identity, admin status |
 | `web/prisma/schema.prisma` | Database schema including the `Ticket` model |
