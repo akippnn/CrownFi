@@ -49,7 +49,7 @@ function TicketsPageInner() {
     if (!assigningTicket || !chosenSeat) return;
     setSavingSeat(true);
     try {
-      const r = await postJson<any>(`/api/tickets/${assigningTicket.id}/assign-seat`, { seat: chosenSeat.label });
+      const r = await postJson<any>(`/api/tickets/${assigningTicket.id}/assign-seat`, { seat: chosenSeat.label, fanId: fan?.id });
       if (!r.ok) throw new Error((r.data as any)?.error ?? "assign_failed");
       flash(`Seat ${chosenSeat.label} assigned successfully!`, "ok");
       setAssigningTicket(null);
@@ -145,7 +145,7 @@ function TicketsPageInner() {
         <div>
           <div className="eyebrow mb-2">Coronation Night 2026</div>
           <h1 className="font-display text-4xl font-semibold text-[#23252f]">Fair tickets, on-chain</h1>
-          <p className="mt-2 text-sm text-[#5f6172]">Pay in <b>USDC</b>, and each ticket is an NFT with a tier and seat. Resale is capped by the contract, so scalpers lose. <span className="tag-on ml-1">on-chain</span></p>
+          <p className="mt-2 text-sm text-[#5f6172]">Pay in <b>USDC</b>, and each ticket is a verifiable digital pass with a tier and seat. Programmable controls can reduce counterfeits and resale abuse, but they do not fully eliminate off-platform scalping. <span className="tag-on ml-1">on-chain</span></p>
         </div>
         {address && (
           <div className="glass px-4 py-3 text-right">

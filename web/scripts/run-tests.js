@@ -31,17 +31,17 @@ try {
 
   // 4. Run prisma generate and prisma db push
   console.log('Running prisma generate...');
-  execSync('npx.cmd prisma generate', { cwd: path.join(__dirname, '..'), stdio: 'inherit' });
+  execSync('npx prisma generate', { cwd: path.join(__dirname, '..'), stdio: 'inherit' });
 
   console.log('Running prisma db push...');
-  execSync('npx.cmd prisma db push --accept-data-loss', { cwd: path.join(__dirname, '..'), stdio: 'inherit' });
+  execSync('npx prisma db push --accept-data-loss', { cwd: path.join(__dirname, '..'), stdio: 'inherit' });
 
   // 5. Run tests
   console.log('\n--- Running Merkle Tests ---');
-  execSync('npx.cmd tsx src/lib/merkle.test.ts', { cwd: path.join(__dirname, '..'), stdio: 'inherit' });
+  execSync('npx tsx src/lib/merkle.test.ts', { cwd: path.join(__dirname, '..'), stdio: 'inherit' });
 
   console.log('\n--- Running Ticketing Tests ---');
-  execSync('npx.cmd tsx src/lib/ticketing.test.ts', { cwd: path.join(__dirname, '..'), stdio: 'inherit' });
+  execSync('npx tsx src/lib/ticketing.test.ts', { cwd: path.join(__dirname, '..'), stdio: 'inherit' });
 
   console.log('\nAll test suites completed successfully!');
 } catch (error) {
@@ -58,7 +58,7 @@ try {
     // 7. Re-generate original client
     console.log('Re-generating original Prisma client...');
     try {
-      execSync('npx.cmd prisma generate', { cwd: path.join(__dirname, '..'), stdio: 'ignore' });
+      execSync('npx prisma generate', { cwd: path.join(__dirname, '..'), stdio: 'ignore' });
       console.log('Original Prisma client restored.');
     } catch (e) {
       console.error('Failed to restore original Prisma client:', e);
