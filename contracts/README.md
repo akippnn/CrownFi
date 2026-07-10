@@ -55,3 +55,23 @@ cargo test
 ```
 
 Then copy the printed contract ids into `web/.env` and set `STELLAR_MODE=live`.
+
+## How CrownFi uses these contracts with Freighter
+
+CrownFi prepares unsigned Testnet transaction XDR on the server. A fan's Freighter wallet signs the
+`sale-splitter.buy` transaction, so the buyer—not CrownFi—authorizes the test-USDC payment and pays
+the network fee. CrownFi validates the returned signed XDR against its short-lived transaction
+intent, submits it to Soroban RPC, and waits for success before minting the ticket or collectible in
+a separate platform-authorized transaction.
+
+For voting proof, the allowlisted Freighter admin signs `audit-anchor.publish`; the contract records
+the closed round's Merkle root and tally hash. Raw votes and voter identity stay off-chain.
+
+Each successful Testnet transaction has a public receipt:
+
+```text
+https://stellar.expert/explorer/testnet/tx/<transaction-hash>
+```
+
+Payment/split and NFT mint are separate receipts. Hashes emitted by `STELLAR_MODE=mock` are simulated
+and will not resolve in Stellar Expert.
