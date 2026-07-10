@@ -1,34 +1,25 @@
-import Link from "next/link";
+import { CheckCircle2 } from "lucide-react";
+import { Button, ButtonLink, Card, CardContent } from "@/components/ui-kit";
 import { TICKETING_COPY } from "@/lib/tickets/ticketCopy";
 
-type TicketSuccessBannerProps = {
-  ticketId: string | null;
-  onDismiss: () => void;
-};
+type TicketSuccessBannerProps = { ticketId: string | null; onDismiss: () => void };
 
 export function TicketSuccessBanner({ ticketId, onDismiss }: TicketSuccessBannerProps) {
   if (!ticketId) return null;
-
   return (
-    <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 flex items-start gap-3">
-      <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-emerald-500 text-white mt-0.5">
-        <span className="text-sm font-bold">✓</span>
-      </div>
-      <div className="flex-1">
-        <div className="text-sm font-bold text-emerald-800">{TICKETING_COPY.successTitle}</div>
-        <p className="text-xs text-emerald-700 mt-0.5">{TICKETING_COPY.successDescription}</p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Link href={`/tickets/${ticketId}`} className="btn-gold !py-1.5 !px-4 !text-xs">
-            View Claim Voucher
-          </Link>
-          <Link href={`/tickets/verify/${ticketId}`} className="btn-ghost !py-1.5 !px-4 !text-xs">
-            Test QR Verification
-          </Link>
-          <button onClick={onDismiss} className="text-xs text-emerald-600 underline underline-offset-2 hover:text-emerald-800">
-            Dismiss
-          </button>
+    <Card className="mt-6 border-emerald/30 bg-emerald/5">
+      <CardContent className="flex items-start gap-4 pt-5">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-emerald/15 text-emerald"><CheckCircle2 size={22} /></span>
+        <div className="flex-1">
+          <h3 className="font-display text-xl font-semibold text-white">{TICKETING_COPY.successTitle}</h3>
+          <p className="mt-1 text-sm text-gold-soft/50">{TICKETING_COPY.successDescription}</p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <ButtonLink href={`/tickets/${ticketId}`} size="sm">View claim voucher</ButtonLink>
+            <ButtonLink href={`/tickets/verify/${ticketId}`} size="sm" variant="secondary">Test QR verification</ButtonLink>
+            <Button size="sm" variant="ghost" onClick={onDismiss}>Dismiss</Button>
+          </div>
         </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }

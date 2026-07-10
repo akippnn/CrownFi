@@ -1,25 +1,33 @@
+import { ArrowRight, Ticket } from "lucide-react";
+import { Button, Card, CardContent } from "@/components/ui-kit";
 import { TICKETING_COPY } from "@/lib/tickets/ticketCopy";
 
 type TicketCheckoutPanelProps = {
   busy: boolean;
   fanConnected: boolean;
   tier: string;
+  price: number;
   onBuy: () => void;
 };
 
-export function TicketCheckoutPanel({ busy, fanConnected, tier, onBuy }: TicketCheckoutPanelProps) {
+export function TicketCheckoutPanel({ busy, fanConnected, tier, price, onBuy }: TicketCheckoutPanelProps) {
   return (
-    <div className="mt-8 border-t border-[#e7e2d3] pt-6 flex flex-wrap items-center justify-between gap-4">
-      <div>
-        <h3 className="font-display text-lg font-semibold text-[#23252f]">{TICKETING_COPY.bookingHeading}</h3>
-        <p className="text-xs text-[#7a7768] mt-0.5">{TICKETING_COPY.bookingDescription}</p>
-      </div>
-      <div className="flex items-center gap-3">
-        <button className="btn-gold" disabled={busy || !fanConnected} onClick={onBuy}>
-          {busy ? "Confirm in wallet…" : `Buy ${tier} Ticket`}
-        </button>
-        {!fanConnected && <span className="text-sm text-[#7a7768]">{TICKETING_COPY.connectToBuy}</span>}
-      </div>
-    </div>
+    <Card className="mt-6 border-gold/25">
+      <CardContent className="flex flex-wrap items-center justify-between gap-5 pt-5">
+        <div className="flex items-start gap-3">
+          <span className="grid h-11 w-11 place-items-center rounded-2xl border border-gold/20 bg-gold/10 text-gold"><Ticket size={21} /></span>
+          <div>
+            <h3 className="font-display text-xl font-semibold text-white">{TICKETING_COPY.bookingHeading}</h3>
+            <p className="mt-1 text-sm text-gold-soft/45">{tier} tier · {price} USDC · seat selected after purchase</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          {!fanConnected && <span className="text-sm text-gold-soft/45">{TICKETING_COPY.connectToBuy}</span>}
+          <Button disabled={busy || !fanConnected} onClick={onBuy}>
+            Review purchase <ArrowRight size={16} />
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
