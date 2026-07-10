@@ -48,6 +48,8 @@ Either way, the flows below are identical — only whether the tx is real vs sim
 address *is* your identity.
 
 - Click **Connect Freighter** (top-right). A **Freighter popup** appears → approve it.
+- On mobile, open CrownFi from Freighter's in-app **Discover** browser. The ordinary Safari/Chrome
+  mobile browser does not expose Freighter's web wallet API to CrownFi.
 - **Buying a ticket or a collectible pops Freighter again** — because the fan pays real USDC, they
   sign that transaction themselves. This is the "money moves on-chain" moment.
 - **Closing + anchoring a round pops Freighter** too — the admin signs the on-chain proof (no USDC,
@@ -144,6 +146,7 @@ Contracts (Rust/Soroban) live in [`contracts/`](../../contracts/); app (Next.js 
 |---|---|
 | Page shows "Unexpected end of JSON input" / no data | DB not configured — check `web/.env`, see [`../setup/supabase.md`](../setup/supabase.md) |
 | Clicking **Connect** does nothing | Freighter not installed / not on Testnet. Install it, reload. |
+| Freighter is not detected on a phone | Open CrownFi inside Freighter mobile's Discover browser, not a regular mobile browser. |
 | No **Admin** tab | Your wallet isn't in `NEXT_PUBLIC_ADMIN_WALLETS`, or you didn't restart after editing `.env` |
 | Can't vote ("No active round") | An admin needs to create/open a round |
 | Actions feel instant with fake tx hashes | You're in `STELLAR_MODE="mock"` (that's fine for testing) |
