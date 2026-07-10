@@ -7,6 +7,7 @@ import { Badge, ConfirmModal } from "@/components/ui-kit";
 import { short } from "@/lib/format";
 import { getJson, postJson } from "@/lib/api";
 import { signWithFreighter } from "@/wallet/freighter";
+import { testnetTransactionUrl } from "@/lib/stellarExplorer";
 import { TIER_LIST } from "@/lib/tiers";
 import { TicketHero } from "@/components/tickets/TicketHero";
 import { TicketTierSelector } from "@/components/tickets/TicketTierSelector";
@@ -30,6 +31,7 @@ function TicketsPageInner() {
   const [balance, setBalance] = useState<number | null>(null);
   const [toast, setToast] = useState({ msg: "", tone: "ok" as "ok" | "err" });
   const [lastTicketId, setLastTicketId] = useState<string | null>(null);
+  const [lastTransaction, setLastTransaction] = useState<{ paymentTx: string; mintTx: string } | null>(null);
   const [reviewingPurchase, setReviewingPurchase] = useState(false);
 
   const [assigningTicket, setAssigningTicket] = useState<Ticket | null>(null);
@@ -143,6 +145,7 @@ function TicketsPageInner() {
         setLastTicketId(newTicket.id);
         setAssigningTicket(newTicket);
       }
+      setLastTransaction({ paymentTx: (conf.data as any).paymentTx, mintTx: (conf.data as any).mintTx });
       flash(`Paid ${(prep.data as any).priceUsdc} USDC on-chain — ticket minted! Please choose your seat.`, "ok");
       setReviewingPurchase(false);
     } catch (e: any) {
@@ -164,6 +167,16 @@ function TicketsPageInner() {
       <TicketTierSelector tiers={TIERS} selectedTier={tier} onSelectTier={handleTierChange} />
       <TicketCheckoutPanel busy={busy} fanConnected={Boolean(fan)} tier={tier} price={selectedTier.price} onBuy={() => setReviewingPurchase(true)} />
       <TicketSuccessBanner ticketId={lastTicketId} onDismiss={() => setLastTicketId(null)} />
+      {lastTransaction && (
+        <div className="mb-6 rounded-2xl border border-emerald/30 bg-emerald/10 p-4 text-sm text-gold-soft">
+          <div className="font-semibold text-white">Confirmed on Stellar Testnet</div>
+          <p className="mt-1 text-gold-soft/65">Your payment and CrownFi ticket mint are separate on-chain transactions.</p>
+          <div className="mt-3 flex flex-wrap gap-3">
+            {testnetTransactionUrl(lastTransaction.paymentTx) && <a className="font-semibold text-gold underline underline-offset-2" href={testnetTransactionUrl(lastTransaction.paymentTx)!} target="_blank" rel="noopener noreferrer">View payment</a>}
+            {testnetTransactionUrl(lastTransaction.mintTx) && <a className="font-semibold text-gold underline underline-offset-2" href={testnetTransactionUrl(lastTransaction.mintTx)!} target="_blank" rel="noopener noreferrer">View ticket mint</a>}
+          </div>
+        </div>
+      )}
       <TicketList tickets={mine} onChooseSeat={(ticket) => { setAssigningTicket(ticket); setChosenSeat(null); }} />
       <TicketDemoLinks />
       <ConfirmModal
