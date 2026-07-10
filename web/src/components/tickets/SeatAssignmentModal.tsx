@@ -16,25 +16,25 @@ export function SeatAssignmentModal({ ticket, selectedSeat, saving, onSelectSeat
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="fixed inset-0 bg-[#1a1f35]/70 backdrop-blur-sm transition-opacity" onClick={() => { if (!saving) onCancel(); }} />
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onClick={() => { if (!saving) onCancel(); }} />
 
-      <div className="relative w-full max-w-4xl glass bg-white p-6 shadow-2xl z-10 max-h-[90vh] overflow-y-auto flex flex-col justify-between rounded-3xl border border-[#eee6d3]">
-        <div className="mb-4 flex items-start justify-between border-b border-[#eee6d3] pb-3">
+      <div className="relative w-full max-w-4xl glass bg-cream dark:bg-black/90 p-6 shadow-2xl z-10 max-h-[90vh] overflow-y-auto flex flex-col justify-between rounded-3xl border border-line">
+        <div className="mb-4 flex items-start justify-between border-b border-line pb-3">
           <div>
-            <h3 className="font-display text-2xl font-semibold text-[#23252f]">Assign Seat: {ticket.tier} Tier</h3>
-            <p className="mt-1 text-xs text-[#7a7768]">Select any available seat inside your highlighted <b>{ticket.tier}</b> zone.</p>
+            <h3 className="font-display text-2xl font-semibold text-ink dark:text-white">Assign Seat: {ticket.tier} Tier</h3>
+            <p className="mt-1 text-xs text-ink/65 dark:text-gold-soft/65">Select any available seat inside your highlighted <b>{ticket.tier}</b> zone.</p>
           </div>
           <button
             onClick={onCancel}
             disabled={saving}
-            className="rounded-full p-1.5 text-[#7a7768] hover:bg-[#faf7ef] hover:text-[#23252f] transition"
+            className="rounded-full p-1.5 text-ink/50 dark:text-gold-soft/50 hover:bg-gold/15 dark:hover:bg-gold/10 hover:text-ink dark:hover:text-white transition"
             aria-label="Close seat assignment"
           >
             ✕
           </button>
         </div>
 
-        <div className="my-2 border border-[#e7e2d3] rounded-2xl overflow-hidden bg-[#1a1f35]">
+        <div className="my-2 border border-line rounded-2xl overflow-hidden bg-[#1a1f35]">
           <SeatMap
             tierFilter={ticket.tier as any}
             initialSelectedSeatId={convertToSeatId(ticket.seat, ticket.tier)}
@@ -42,12 +42,12 @@ export function SeatAssignmentModal({ ticket, selectedSeat, saving, onSelectSeat
           />
         </div>
 
-        <div className="mt-4 flex items-center justify-between border-t border-[#eee6d3] pt-3">
+        <div className="mt-4 flex items-center justify-between border-t border-line pt-3">
           <div className="text-sm">
             {selectedSeat ? (
-              <span className="text-emerald-700 font-semibold">Selected: Row {selectedSeat.row} · Seat {selectedSeat.col}</span>
+              <span className="text-emerald dark:text-emerald-ink font-semibold">Selected: Row {selectedSeat.row} · Seat {selectedSeat.col}</span>
             ) : (
-              <span className="text-[#7a7768]">Please tap a seat to select.</span>
+              <span className="text-ink/60 dark:text-gold-soft/60">Please tap a seat to select.</span>
             )}
           </div>
           <div className="flex items-center gap-3">
