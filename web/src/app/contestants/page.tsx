@@ -8,6 +8,7 @@ import { Toast } from "@/components/ui";
 import { short } from "@/lib/format";
 import { getJson, postJson } from "@/lib/api";
 import { signWithFreighter } from "@/wallet/freighter";
+import { testnetTransactionUrl } from "@/lib/stellarExplorer";
 import {
   Badge,
   Button,
@@ -34,6 +35,7 @@ export default function CollectPage() {
   const [busy, setBusy] = useState("");
   const [balance, setBalance] = useState<number | null>(null);
   const [toast, setToast] = useState({ msg: "", tone: "ok" as "ok" | "err" });
+  const [lastTransaction, setLastTransaction] = useState<{ paymentTx: string; mintTx: string } | null>(null);
 
   function load() {
     getJson<Collectible[]>("/api/collectibles", []).then(setItems);
@@ -101,6 +103,7 @@ export default function CollectPage() {
       });
       if (!confirmed.ok) throw new Error((confirmed.data as any)?.error ?? "confirm_failed");
 
+      setLastTransaction({ paymentTx: (confirmed.data as any).paymentTx, mintTx: (confirmed.data as any).mintTx });
       flash(`Collected for ${priceUsdc} USDC. The contestant payment split was submitted on-chain.`, "ok");
       setSelected(null);
     } catch (error: any) {
@@ -137,6 +140,17 @@ export default function CollectPage() {
           </Card>
         )}
       </div>
+
+      {lastTransaction && (
+        <div className="rounded-2xl border border-emerald/30 bg-emerald/10 p-4 text-sm text-gold-soft">
+          <div className="font-semibold text-white">Confirmed on Stellar Testnet</div>
+          <p className="mt-1 text-gold-soft/65">The payment split and collectible mint are recorded as separate transactions.</p>
+          <div className="mt-3 flex flex-wrap gap-3">
+            {testnetTransactionUrl(lastTransaction.paymentTx) && <a className="font-semibold text-gold underline underline-offset-2" href={testnetTransactionUrl(lastTransaction.paymentTx)!} target="_blank" rel="noopener noreferrer">View payment split</a>}
+            {testnetTransactionUrl(lastTransaction.mintTx) && <a className="font-semibold text-gold underline underline-offset-2" href={testnetTransactionUrl(lastTransaction.mintTx)!} target="_blank" rel="noopener noreferrer">View collectible mint</a>}
+          </div>
+        </div>
+      )}
 
       {items.length === 0 ? (
         <EmptyState title="No collectibles are available" description="Contestant collectibles will appear here after an administrator publishes them." />
