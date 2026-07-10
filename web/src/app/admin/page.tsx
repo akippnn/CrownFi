@@ -6,6 +6,7 @@ import { flag, short } from "@/lib/format";
 import { Toast } from "@/components/ui";
 import { getJson, postJson } from "@/lib/api";
 import { signAdminMessage, signWithFreighter } from "@/wallet/freighter";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui-kit";
 
 type Tab = "overview" | "rounds" | "contestants" | "requests";
 
@@ -105,8 +106,8 @@ export default function AdminPage() {
     return (
       <div className="glass mx-auto max-w-md p-8 text-center">
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full surface-soft text-[#a97f16]"><Icons.Lock size={22} strokeWidth={1.75} /></div>
-        <h1 className="mt-3 font-display text-2xl text-[#23252f]">Admin area</h1>
-        <p className="mt-2 text-sm text-[#5f6172]">Connect an allowlisted admin wallet to manage rounds, contestants, and anchoring.</p>
+        <h1 className="mt-3 font-display text-2xl text-ink dark:text-white">Admin area</h1>
+        <p className="mt-2 text-sm text-ink/75 dark:text-gold-soft/75">Connect an allowlisted admin wallet to manage rounds, contestants, and anchoring.</p>
         <button className="btn-gold mt-4" onClick={() => connect()}>{connecting ? "Connecting..." : "Connect admin wallet"}</button>
       </div>
     );
@@ -117,12 +118,12 @@ export default function AdminPage() {
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="eyebrow mb-2">Organizer console</div>
-          <h1 className="font-display text-4xl font-semibold text-[#23252f]">Admin</h1>
+          <h1 className="font-display text-4xl font-semibold text-ink dark:text-white">Admin</h1>
         </div>
-        <div className="flex gap-1 rounded-full border border-[#e7e2d3] bg-[#faf7ef] p-1">
+        <div className="flex gap-1 rounded-full border border-line bg-cream dark:bg-gold/10 p-1">
           {(["overview", "rounds", "contestants", "requests"] as Tab[]).map((t) => (
             <button key={t} onClick={() => setTab(t)}
-              className={`rounded-full px-4 py-1.5 text-sm capitalize transition ${tab === t ? "bg-gold text-ink" : "text-[#3a3f52] hover:text-[#23252f]"}`}>{t}</button>
+              className={`rounded-full px-4 py-1.5 text-sm capitalize transition ${tab === t ? "bg-gold text-ink font-semibold" : "text-ink/65 hover:text-ink dark:text-gold-soft/75 dark:hover:text-white"}`}>{t}</button>
           ))}
         </div>
       </div>
@@ -152,28 +153,44 @@ function Overview({ stats }: { stats: any }) {
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {cards.map((c) => (
-          <div key={c.label} className="glass p-4">
-            <div className="font-display text-3xl font-semibold text-[#b8912f]">{c.v.toLocaleString?.() ?? c.v}</div>
-            <div className="mt-1 text-[11px] uppercase tracking-wider text-[#7a7768]">{c.label}</div>
-          </div>
+          <Card key={c.label} className="border-gold/15 bg-navy-2/40">
+            <CardContent className="p-4 text-left">
+              <div className="font-display text-3xl font-semibold text-gold">{c.v.toLocaleString?.() ?? c.v}</div>
+              <div className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-gold-soft/75">{c.label}</div>
+            </CardContent>
+          </Card>
         ))}
       </div>
-      <div className="glass p-5">
-        <h2 className="mb-4 font-display text-xl text-[#23252f]">Vote leaderboard</h2>
-        {top.length === 0 ? <p className="text-sm text-[#7a7768]">No votes yet.</p> : (
-          <div className="space-y-3">
-            {top.map((t: any) => (
-              <div key={t.name} className="flex items-center gap-3">
-                <div className="w-40 shrink-0 truncate text-sm text-[#23252f]/80">{flag(t.sash)} {t.name}</div>
-                <div className="h-3 flex-1 overflow-hidden rounded-full bg-[#f1ecdf]">
-                  <div className="h-full rounded-full bg-gradient-to-r from-gold-deep to-gold" style={{ width: `${(t.votes / max) * 100}%` }} />
+
+      <Card className="border-gold/15 bg-navy-2/40">
+        <CardHeader className="pb-2 border-b border-gold/10">
+          <CardTitle className="text-white text-lg font-display uppercase tracking-wider">Vote Leaderboard</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-4">
+          {top.length === 0 ? (
+            <p className="text-sm text-gold-soft/50">No votes yet.</p>
+          ) : (
+            <div className="space-y-4">
+              {top.map((t: any) => (
+                <div key={t.name} className="flex items-center gap-4">
+                  <div className="w-40 shrink-0 truncate text-sm font-semibold text-white/95">
+                    {flag(t.sash)} {t.name}
+                  </div>
+                  <div className="h-3 flex-1 overflow-hidden rounded-full bg-black/40 border border-gold/10">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-gold-deep to-gold"
+                      style={{ width: `${(t.votes / max) * 100}%` }}
+                    />
+                  </div>
+                  <div className="w-12 shrink-0 text-right text-sm font-bold text-gold">
+                    {t.votes}
+                  </div>
                 </div>
-                <div className="w-10 shrink-0 text-right text-sm font-semibold text-[#b8912f]">{t.votes}</div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -189,9 +206,9 @@ function Rounds({ rounds, busy, onClose, onCreate }: any) {
       {rounds.map((r: any) => (
         <div key={r.id} className="glass flex flex-wrap items-center justify-between gap-3 p-4">
           <div>
-            <div className="font-display text-lg text-[#23252f]">{r.title}</div>
-            <div className="text-xs text-[#7a7768]">
-              <span className={r.status === "open" ? "text-emerald" : "text-[#7a7768]"}>{r.status}</span> · {r._count?.votes ?? 0} votes
+            <div className="font-display text-lg text-ink dark:text-white">{r.title}</div>
+            <div className="text-xs text-ink/60 dark:text-gold-soft/60">
+              <span className={r.status === "open" ? "text-emerald" : "text-ink/60 dark:text-gold-soft/60"}>{r.status}</span> · {r._count?.votes ?? 0} votes
               {r.checkpoint && <span className="mono ml-2 text-emerald">root {short(r.checkpoint.merkleRoot, 6)}</span>}
             </div>
           </div>
@@ -219,8 +236,8 @@ function Contestants({ contestants, onCreate }: any) {
           <div key={c.id} className="glass flex items-center gap-3 p-4">
             <span className="text-2xl">{flag(c.sash)}</span>
             <div>
-              <div className="font-medium text-[#23252f]">{c.name}</div>
-              <div className="text-xs text-[#7a7768]">{c.country} · {c.sash}</div>
+              <div className="font-medium text-ink dark:text-white">{c.name}</div>
+              <div className="text-xs text-ink/60 dark:text-gold-soft/60">{c.country} · {c.sash}</div>
             </div>
           </div>
         ))}
@@ -232,14 +249,14 @@ function Contestants({ contestants, onCreate }: any) {
 function Requests({ requests, onDecide }: any) {
   return (
     <div className="space-y-3">
-      {requests.length === 0 && <div className="glass p-6 text-center text-[#7a7768]">No organizer requests yet.</div>}
+      {requests.length === 0 && <div className="glass p-6 text-center text-ink/60 dark:text-gold-soft/60">No organizer requests yet.</div>}
       {requests.map((r: any) => (
         <div key={r.id} className="glass p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <div className="font-display text-lg text-[#23252f]">{r.pageantName}</div>
-              <div className="text-xs text-[#7a7768]">{r.orgName} · {r.country} · {r.contactName} ({r.email})</div>
-              {r.message && <p className="mt-2 max-w-xl text-sm text-[#3a3f52]">{r.message}</p>}
+              <div className="font-display text-lg text-ink dark:text-white">{r.pageantName}</div>
+              <div className="text-xs text-ink/60 dark:text-gold-soft/60">{r.orgName} · {r.country} · {r.contactName} ({r.email})</div>
+              {r.message && <p className="mt-2 max-w-xl text-sm text-ink/75 dark:text-gold-soft/75">{r.message}</p>}
             </div>
             <div className="flex shrink-0 items-center gap-2">
               {r.status === "pending" ? (

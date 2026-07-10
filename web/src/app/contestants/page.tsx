@@ -81,12 +81,12 @@ export default function CollectPage() {
       <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="eyebrow mb-2">Support the crown</div>
-          <h1 className="font-display text-4xl font-semibold text-[#23252f]">Collectibles that fund contestants</h1>
-          <p className="mt-2 text-sm text-[#5f6172]">Buy an official portrait in <b>USDC</b>. The payment is split on-chain — the contestant gets her cut instantly. <span className="tag-on ml-1">on-chain</span></p>
+          <h1 className="font-display text-4xl font-semibold text-ink dark:text-white">Collectibles that fund contestants</h1>
+          <p className="mt-2 text-sm text-ink/75 dark:text-gold-soft/75">Buy an official portrait in <b>USDC</b>. The payment is split on-chain — the contestant gets her cut instantly. <span className="tag-on ml-1">on-chain</span></p>
         </div>
         {address && (
           <div className="glass px-4 py-3 text-right">
-            <div className="text-xs uppercase tracking-wider text-[#7a7768]">Your test USDC</div>
+            <div className="text-xs uppercase tracking-wider text-ink/65 dark:text-gold-soft/65">Your test USDC</div>
             <div className="font-display text-2xl font-semibold text-[#b8912f]">{balance == null ? "…" : balance.toFixed(2)}</div>
             <button className="btn-ghost mt-2 !px-3 !py-1.5 text-xs" disabled={busy === "faucet"} onClick={getTestUsdc}>
               {busy === "faucet" ? "Sending…" : "Get test USDC"}
@@ -102,8 +102,8 @@ export default function CollectPage() {
           <div key={c.id} className="glass overflow-hidden p-3">
             <Portrait id={c.contestant.id} name={c.contestant.name} sash={c.contestant.sash} />
             <div className="px-1 pt-3">
-              <div className="font-display text-lg text-[#23252f]">{c.contestant.name}</div>
-              <div className="text-xs text-[#7a7768]">{c.title}</div>
+              <div className="font-display text-lg text-ink dark:text-white">{c.contestant.name}</div>
+              <div className="text-xs text-ink/65 dark:text-gold-soft/65">{c.title}</div>
               <div className="mt-3 flex items-center justify-between">
                 <span className="font-semibold text-[#b8912f]">{c.priceUsdc} USDC</span>
                 <button className="btn-gold !px-4 !py-2" disabled={busy === c.id} onClick={() => buy(c)}>

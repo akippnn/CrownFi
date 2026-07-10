@@ -22,8 +22,8 @@ export default function OrganizePage() {
     return (
       <div className="glass mx-auto max-w-lg p-8 text-center">
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full surface-soft text-[#a97f16]"><Icons.Crown size={22} strokeWidth={1.75} /></div>
-        <h1 className="mt-3 font-display text-2xl text-[#23252f]">Request received</h1>
-        <p className="mt-2 text-sm text-[#5f6172]">Thank you. The CrownFi team will review your pageant and get back to you at {f.email}.</p>
+        <h1 className="mt-3 font-display text-2xl text-ink dark:text-white">Request received</h1>
+        <p className="mt-2 text-sm text-ink/75 dark:text-gold-soft/75">Thank you. The CrownFi team will review your pageant and get back to you at {f.email}.</p>
       </div>
     );
   }
@@ -32,17 +32,17 @@ export default function OrganizePage() {
     <div className="mx-auto max-w-2xl">
       <div className="mb-8">
         <div className="eyebrow mb-2">For organizers</div>
-        <h1 className="font-display text-4xl font-semibold text-[#23252f]">Run your pageant on CrownFi</h1>
-        <p className="mt-2 text-sm text-[#5f6172]">Apply to host voting, ticketing, and collectibles for your event. Our team reviews every request before granting organizer access.</p>
+        <h1 className="font-display text-4xl font-semibold text-ink dark:text-white">Run your pageant on CrownFi</h1>
+        <p className="mt-2 text-sm text-ink/75 dark:text-gold-soft/75">Apply to host voting, ticketing, and collectibles for your event. Our team reviews every request before granting organizer access.</p>
       </div>
       <div className="glass grid gap-4 p-6">
         <div className="grid gap-4 sm:grid-cols-2">
-          <label className="text-sm"><div className="mb-1 text-[#5f6172]">Organization</div><input className="field" value={f.orgName} onChange={set("orgName")} placeholder="Miss Universe Philippines" /></label>
-          <label className="text-sm"><div className="mb-1 text-[#5f6172]">Pageant name</div><input className="field" value={f.pageantName} onChange={set("pageantName")} placeholder="Coronation Night 2026" /></label>
-          <label className="text-sm"><div className="mb-1 text-[#5f6172]">Contact name</div><input className="field" value={f.contactName} onChange={set("contactName")} placeholder="Your name" /></label>
-          <label className="text-sm"><div className="mb-1 text-[#5f6172]">Email</div><input className="field" type="email" value={f.email} onChange={set("email")} placeholder="you@org.com" /></label>
-          <label className="text-sm sm:col-span-2"><div className="mb-1 text-[#5f6172]">Country</div><input className="field" value={f.country} onChange={set("country")} placeholder="Philippines" /></label>
-          <label className="text-sm sm:col-span-2"><div className="mb-1 text-[#5f6172]">Tell us about your event (optional)</div><textarea className="field min-h-24" value={f.message} onChange={set("message")} placeholder="Scale, dates, what you need..." /></label>
+          <label className="text-sm"><div className="mb-1 text-ink/70 dark:text-gold-soft/70">Organization</div><input className="field" value={f.orgName} onChange={set("orgName")} placeholder="Miss Universe Philippines" /></label>
+          <label className="text-sm"><div className="mb-1 text-ink/70 dark:text-gold-soft/70">Pageant name</div><input className="field" value={f.pageantName} onChange={set("pageantName")} placeholder="Coronation Night 2026" /></label>
+          <label className="text-sm"><div className="mb-1 text-ink/70 dark:text-gold-soft/70">Contact name</div><input className="field" value={f.contactName} onChange={set("contactName")} placeholder="Your name" /></label>
+          <label className="text-sm"><div className="mb-1 text-ink/70 dark:text-gold-soft/70">Email</div><input className="field" type="email" value={f.email} onChange={set("email")} placeholder="you@org.com" /></label>
+          <label className="text-sm sm:col-span-2"><div className="mb-1 text-ink/70 dark:text-gold-soft/70">Country</div><input className="field" value={f.country} onChange={set("country")} placeholder="Philippines" /></label>
+          <label className="text-sm sm:col-span-2"><div className="mb-1 text-ink/70 dark:text-gold-soft/70">Tell us about your event (optional)</div><textarea className="field min-h-24" value={f.message} onChange={set("message")} placeholder="Scale, dates, what you need..." /></label>
         </div>
         {err && <p className="text-sm text-ruby">{err}</p>}
         <button className="btn-gold w-fit" disabled={busy || !valid} onClick={submit}>{busy ? "Submitting..." : "Submit request"}</button>
