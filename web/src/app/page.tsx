@@ -159,7 +159,7 @@ export default function Home() {
               <div>
                 <div className="text-[10px] text-ink/55 dark:text-gold-soft/50 uppercase tracking-widest">Price</div>
                 <div className="text-xs font-semibold text-ink dark:text-white mt-0.5">
-                  {activeDelegate ? (activeDelegate.name.length * 8.5).toFixed(2) : "10.00"} XLM
+                  25 USDC / 250 XLM
                 </div>
               </div>
             </div>
@@ -176,7 +176,7 @@ export default function Home() {
                 edition={`EDITION 1 of ${activeDelegate.name.length * 10}`}
                 id={`ID:${activeDelegate.id.toUpperCase()}`}
                 imageUrl={activeDelegate.portraitUrl || getPortraitPath(activeDelegate.sash)}
-                onMint={() => window.location.href = `/vote?candidate=${activeDelegate.id}`}
+                onMint={() => window.location.href = `/contestants?candidate=${activeDelegate.id}`}
               />
             )}
           </div>
