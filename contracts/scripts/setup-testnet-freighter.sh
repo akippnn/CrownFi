@@ -87,6 +87,23 @@ database_configured() {
   [[ -f "$WEB_DIR/.env" ]] && grep -q '^DATABASE_URL="postgresql://' "$WEB_DIR/.env" && ! grep -q '^DATABASE_URL=.*<' "$WEB_DIR/.env"
 }
 
+prompt_for_database() {
+  local database_url direct_url
+  database_configured && return
+  say "Optional database setup"
+  note "The only values this script cannot create are your Postgres URLs."
+  note "For Supabase: create a project → click Connect → ORMs → Prisma, then copy the pooled DATABASE_URL and DIRECT_URL."
+  if ! ask_yes_no "Paste those database URLs now?"; then
+    return
+  fi
+  read -r -s -p "DATABASE_URL (pooled): " database_url; printf '\n'
+  read -r -s -p "DIRECT_URL (direct): " direct_url; printf '\n'
+  [[ "$database_url" == postgresql://* && "$direct_url" == postgresql://* ]] || fail "Both database values must start with postgresql://. Run the script again when you have the Prisma URLs."
+  upsert_env "$WEB_DIR/.env" "DATABASE_URL" "$database_url"
+  upsert_env "$WEB_DIR/.env" "DIRECT_URL" "$direct_url"
+  note "✓ Database URLs saved to web/.env without displaying them."
+}
+
 say "CrownFi + Freighter Testnet setup"
 note "This deploys real Testnet contracts. Testnet XLM is free, but never paste a mainnet secret into this flow."
 
@@ -122,6 +139,8 @@ if [[ ! -f "$WEB_DIR/.env" ]]; then
   cp "$WEB_DIR/.env.example" "$WEB_DIR/.env"
   note "Created web/.env from web/.env.example. You still need to replace the database placeholders."
 fi
+
+prompt_for_database
 
 say "Writing Testnet values to web/.env"
 upsert_env "$WEB_DIR/.env" "STELLAR_MODE" "live"
