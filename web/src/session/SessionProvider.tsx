@@ -8,6 +8,7 @@ type Ctx = {
   fan: Fan | null;
   address: string | null;
   isAdmin: boolean;
+  adminAllowlistConfigured: boolean;
   ready: boolean;
   connecting: boolean;
   error: string;
@@ -76,14 +77,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     try {
       const res = await connectFreighter();
       if (res.notInstalled) {
-        const mockAddress = "G" + Array.from({ length: 55 }, () => "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[Math.floor(Math.random() * 32)]).join("");
-        const linked = await linkFan(mockAddress);
-        if (linked) {
-          setError("Freighter not detected. Auto-connected with a mock address for offline testing.");
-          setTimeout(() => setError(""), 5000);
-        } else {
-          setNeedsInstall(true);
-        }
+        // Never substitute a fabricated G-address for an actual Testnet wallet.
+        // A real transaction must be signed by Freighter and sourced from a
+        // funded Stellar account. Mock wallet flows remain available through
+        // their server-side test fixtures, not this Connect button.
+        setError("Freighter was not detected. Install the browser extension, or open CrownFi from Freighter mobile's Discover browser.");
+        setNeedsInstall(true);
         return;
       }
       if (res.error || !res.address) { setError(res.error ?? "Could not connect"); return; }
@@ -97,9 +96,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   function clearError() { setError(""); setNeedsInstall(false); }
 
   const isAdmin = !!address && ADMIN.includes(address);
+  const adminAllowlistConfigured = ADMIN.length > 0;
 
   return (
-    <C.Provider value={{ fan, address, isAdmin, ready, connecting, error, needsInstall, connect, disconnect, refresh, clearError }}>
+    <C.Provider value={{ fan, address, isAdmin, adminAllowlistConfigured, ready, connecting, error, needsInstall, connect, disconnect, refresh, clearError }}>
       {children}
     </C.Provider>
   );

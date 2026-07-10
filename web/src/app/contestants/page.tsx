@@ -1,23 +1,45 @@
 "use client";
+
 import { useCallback, useEffect, useState } from "react";
+import { Gem, WalletCards } from "lucide-react";
 import { useSession } from "@/session/SessionProvider";
-import { SpotlightCarousel, Slide } from "@/components/Carousel";
 import { Portrait } from "@/components/Portrait";
 import { Toast } from "@/components/ui";
 import { short } from "@/lib/format";
 import { getJson, postJson } from "@/lib/api";
 import { signWithFreighter } from "@/wallet/freighter";
+import { testnetTransactionUrl } from "@/lib/stellarExplorer";
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  ConfirmModal,
+  EmptyState,
+  SectionHeader,
+} from "@/components/ui-kit";
 
-type Collectible = { id: string; title: string; priceUsdc: number; metadataUri: string; tokenId?: string; contestant: { id: string; name: string; country: string; sash: string } };
+type Collectible = {
+  id: string;
+  title: string;
+  priceUsdc: number;
+  metadataUri: string;
+  tokenId?: string;
+  contestant: { id: string; name: string; country: string; sash: string };
+};
 
 export default function CollectPage() {
   const { fan, address } = useSession();
   const [items, setItems] = useState<Collectible[]>([]);
+  const [selected, setSelected] = useState<Collectible | null>(null);
   const [busy, setBusy] = useState("");
   const [balance, setBalance] = useState<number | null>(null);
   const [toast, setToast] = useState({ msg: "", tone: "ok" as "ok" | "err" });
+  const [lastTransaction, setLastTransaction] = useState<{ paymentTx: string; mintTx: string } | null>(null);
 
-  function load() { getJson<Collectible[]>("/api/collectibles", []).then(setItems); }
+  function load() {
+    getJson<Collectible[]>("/api/collectibles", []).then(setItems);
+  }
   useEffect(load, []);
 
   const refreshBalance = useCallback(() => {
@@ -31,90 +53,160 @@ export default function CollectPage() {
     setTimeout(() => setToast({ msg: "", tone: "ok" }), 3200);
   }
 
-  const slides: Slide[] = items.map((c) => ({ id: c.contestant.id, name: c.contestant.name, country: c.contestant.country, sash: c.contestant.sash }));
-
   async function getTestUsdc() {
-    if (!address) { flash("Connect your Freighter wallet first.", "err"); return; }
+    if (!address) {
+      flash("Connect your Freighter wallet first.", "err");
+      return;
+    }
     setBusy("faucet");
-    const r = await postJson<any>("/api/faucet", { walletAddress: address, amountUsdc: 50 });
+    const response = await postJson<any>("/api/faucet", { walletAddress: address, amountUsdc: 50 });
     setBusy("");
-    if (r.ok) { flash("+50 test USDC sent to your wallet.", "ok"); refreshBalance(); }
-    else flash(`Faucet failed: ${(r.data as any)?.error ?? "error"}`, "err");
+    if (response.ok) {
+      flash("+50 test USDC sent to your wallet.", "ok");
+      refreshBalance();
+    } else flash(`Faucet failed: ${(response.data as any)?.error ?? "error"}`, "err");
   }
 
-  async function buy(c: Collectible) {
-    if (!fan || !address) { flash("Connect your Freighter wallet first.", "err"); return; }
-    setBusy(c.id);
+  async function buy() {
+    const collectible = selected;
+    if (!collectible) return;
+    if (!fan || !address) {
+      flash("Connect your Freighter wallet first.", "err");
+      return;
+    }
+    setBusy(collectible.id);
     try {
-      // Step 1 — ask the backend to build the purchase transaction.
-      const prep = await postJson<any>("/api/collectibles/prepare-buy", { collectibleId: c.id, buyerAddress: address, fanId: fan.id });
+      const prep = await postJson<any>("/api/collectibles/prepare-buy", {
+        collectibleId: collectible.id,
+        buyerAddress: address,
+        fanId: fan.id,
+      });
       if (!prep.ok) throw new Error((prep.data as any)?.error ?? "prepare_failed");
 
       if ((prep.data as any).mock) {
-        // Mock mode: no chain — just mint.
-        const r = await postJson<any>("/api/collectibles", { fanId: fan.id, collectibleId: c.id });
-        if (!r.ok) throw new Error((r.data as any)?.error ?? "buy_failed");
-        flash("Collected (mock). +10 points.", "ok");
+        const response = await postJson<any>("/api/collectibles", { fanId: fan.id, collectibleId: collectible.id });
+        if (!response.ok) throw new Error((response.data as any)?.error ?? "buy_failed");
+        flash("Collectible minted in local demo mode. +10 points.", "ok");
+        setSelected(null);
         return;
       }
 
-      // Step 2 — buyer approves the USDC payment in Freighter.
       const { xdr, priceUsdc } = prep.data as any;
       const signed = await signWithFreighter(xdr, address);
       if (signed.error || !signed.signedXdr) throw new Error(signed.error ?? "You cancelled the signature.");
 
-      // Step 3 — submit + mint the NFT.
-      const conf = await postJson<any>("/api/collectibles/confirm-buy", { collectibleId: c.id, fanId: fan.id, signedXdr: signed.signedXdr, intentId: (prep.data as any).intentId });
-      if (!conf.ok) throw new Error((conf.data as any)?.error ?? "confirm_failed");
+      const confirmed = await postJson<any>("/api/collectibles/confirm-buy", {
+        collectibleId: collectible.id,
+        fanId: fan.id,
+        signedXdr: signed.signedXdr,
+        intentId: (prep.data as any).intentId,
+      });
+      if (!confirmed.ok) throw new Error((confirmed.data as any)?.error ?? "confirm_failed");
 
-      flash(`Collected! ${priceUsdc} USDC split on-chain to the contestant. +10 points.`, "ok");
-    } catch (e: any) {
-      const m = String(e?.message ?? "");
-      flash(m.includes("balance") || m.includes("trustline") ? "Not enough test USDC — click ‘Get test USDC’ first." : `Could not buy: ${m}`, "err");
+      setLastTransaction({ paymentTx: (confirmed.data as any).paymentTx, mintTx: (confirmed.data as any).mintTx });
+      flash(`Collected for ${priceUsdc} USDC. The contestant payment split was submitted on-chain.`, "ok");
+      setSelected(null);
+    } catch (error: any) {
+      const message = String(error?.message ?? "");
+      flash(message.includes("balance") || message.includes("trustline") ? "Not enough test USDC — use the faucet first." : `Could not collect: ${message}`, "err");
     } finally {
-      setBusy(""); load(); refreshBalance();
+      setBusy("");
+      load();
+      refreshBalance();
     }
   }
 
   return (
-    <div>
-      <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <div className="eyebrow mb-2">Support the crown</div>
-          <h1 className="font-display text-4xl font-semibold text-[#23252f]">Collectibles that fund contestants</h1>
-          <p className="mt-2 text-sm text-[#5f6172]">Buy an official portrait in <b>USDC</b>. The payment is split on-chain — the contestant gets her cut instantly. <span className="tag-on ml-1">on-chain</span></p>
-        </div>
+    <div className="space-y-8">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <SectionHeader
+          className="mb-0"
+          eyebrow="Support the crown"
+          title="Collect official contestant portraits"
+          description="Each collectible is a digital keepsake tied to a contestant. In live mode, USDC payments are split on-chain so the contestant receives their share transparently."
+        />
         {address && (
-          <div className="glass px-4 py-3 text-right">
-            <div className="text-xs uppercase tracking-wider text-[#7a7768]">Your test USDC</div>
-            <div className="font-display text-2xl font-semibold text-[#b8912f]">{balance == null ? "…" : balance.toFixed(2)}</div>
-            <button className="btn-ghost mt-2 !px-3 !py-1.5 text-xs" disabled={busy === "faucet"} onClick={getTestUsdc}>
-              {busy === "faucet" ? "Sending…" : "Get test USDC"}
-            </button>
-          </div>
+          <Card className="min-w-52">
+            <CardContent className="flex items-center justify-between gap-4 pt-5">
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gold-soft/40">Test USDC balance</div>
+                <div className="mt-1 font-display text-3xl font-semibold text-gold">{balance == null ? "…" : balance.toFixed(2)}</div>
+              </div>
+              <Button size="sm" variant="secondary" disabled={busy === "faucet"} onClick={getTestUsdc}>
+                <WalletCards size={15} />
+                {busy === "faucet" ? "Sending…" : "Get USDC"}
+              </Button>
+            </CardContent>
+          </Card>
         )}
       </div>
 
-      <SpotlightCarousel slides={slides} cta="View" />
+      {lastTransaction && (
+        <div className="rounded-2xl border border-emerald/30 bg-emerald/10 p-4 text-sm text-gold-soft">
+          <div className="font-semibold text-white">Confirmed on Stellar Testnet</div>
+          <p className="mt-1 text-gold-soft/65">The payment split and collectible mint are recorded as separate transactions.</p>
+          <div className="mt-3 flex flex-wrap gap-3">
+            {testnetTransactionUrl(lastTransaction.paymentTx) && <a className="font-semibold text-gold underline underline-offset-2" href={testnetTransactionUrl(lastTransaction.paymentTx)!} target="_blank" rel="noopener noreferrer">View payment split</a>}
+            {testnetTransactionUrl(lastTransaction.mintTx) && <a className="font-semibold text-gold underline underline-offset-2" href={testnetTransactionUrl(lastTransaction.mintTx)!} target="_blank" rel="noopener noreferrer">View collectible mint</a>}
+          </div>
+        </div>
+      )}
 
-      <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {items.map((c) => (
-          <div key={c.id} className="glass overflow-hidden p-3">
-            <Portrait id={c.contestant.id} name={c.contestant.name} sash={c.contestant.sash} />
-            <div className="px-1 pt-3">
-              <div className="font-display text-lg text-[#23252f]">{c.contestant.name}</div>
-              <div className="text-xs text-[#7a7768]">{c.title}</div>
-              <div className="mt-3 flex items-center justify-between">
-                <span className="font-semibold text-[#b8912f]">{c.priceUsdc} USDC</span>
-                <button className="btn-gold !px-4 !py-2" disabled={busy === c.id} onClick={() => buy(c)}>
-                  {busy === c.id ? "Confirm in wallet…" : "Collect"}
-                </button>
+      {items.length === 0 ? (
+        <EmptyState title="No collectibles are available" description="Contestant collectibles will appear here after an administrator publishes them." />
+      ) : (
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {items.map((collectible) => (
+            <Card key={collectible.id} className="overflow-hidden p-3 transition hover:-translate-y-0.5 hover:border-gold/35">
+              <Portrait id={collectible.contestant.id} name={collectible.contestant.name} sash={collectible.contestant.sash} />
+              <CardContent className="px-2 pb-2 pt-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h2 className="truncate font-display text-xl font-semibold text-white">{collectible.contestant.name}</h2>
+                    <p className="mt-1 text-sm text-gold-soft/45">{collectible.contestant.country} · {collectible.title}</p>
+                  </div>
+                  <Badge tone="gold" className="shrink-0">{collectible.priceUsdc} USDC</Badge>
+                </div>
+                {collectible.tokenId && <div className="mono mt-3 text-[11px] text-emerald">Token {short(collectible.tokenId, 7)}</div>}
+                <Button className="mt-4 w-full" variant="secondary" onClick={() => setSelected(collectible)}>
+                  <Gem size={16} />
+                  View collectible
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <ConfirmModal
+        open={Boolean(selected)}
+        onClose={() => setSelected(null)}
+        onConfirm={buy}
+        title={selected ? `Collect ${selected.contestant.name}` : "Collect portrait"}
+        description="Review the collectible and payment before opening Freighter."
+        confirmLabel={selected ? `Collect for ${selected.priceUsdc} USDC` : "Collect"}
+        pendingLabel="Confirm in wallet…"
+        pending={Boolean(selected && busy === selected.id)}
+      >
+        {selected && (
+          <div className="grid gap-5 sm:grid-cols-[150px_1fr]">
+            <Portrait id={selected.contestant.id} name={selected.contestant.name} sash={selected.contestant.sash} />
+            <div className="space-y-4">
+              <div>
+                <Badge tone="gold">Official portrait</Badge>
+                <h3 className="mt-3 font-display text-2xl font-semibold text-white">{selected.title}</h3>
+                <p className="mt-1 text-sm text-gold-soft/50">{selected.contestant.country} · sash {selected.contestant.sash}</p>
               </div>
-              {c.tokenId && <div className="mono mt-2 text-[11px] text-emerald">NFT {short(c.tokenId, 6)}</div>}
+              <dl className="space-y-2 rounded-2xl border border-line bg-black/25 p-4 text-sm">
+                <div className="flex justify-between gap-4"><dt className="text-gold-soft/45">Price</dt><dd className="font-semibold text-gold">{selected.priceUsdc} USDC</dd></div>
+                <div className="flex justify-between gap-4"><dt className="text-gold-soft/45">Wallet</dt><dd className="mono text-xs text-gold-soft">{address ? short(address, 8) : "Not connected"}</dd></div>
+                <div className="flex justify-between gap-4"><dt className="text-gold-soft/45">Network</dt><dd className="text-gold-soft">Stellar testnet or local demo</dd></div>
+              </dl>
+              {!fan && <p className="text-sm text-ruby">Connect Freighter before collecting.</p>}
             </div>
           </div>
-        ))}
-      </div>
+        )}
+      </ConfirmModal>
 
       <Toast msg={toast.msg} tone={toast.tone} />
     </div>

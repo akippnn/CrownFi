@@ -1,0 +1,55 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: crownfi
+      POSTGRES_USER: crownfi
+      POSTGRES_PASSWORD: crownfi-local
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crownfi -d crownfi"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - crownfi_postgres:/var/lib/postgresql/data
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile.dev
+    working_dir: /app
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://crownfi:crownfi-local@db:5432/crownfi
+      DIRECT_URL: postgresql://crownfi:crownfi-local@db:5432/crownfi
+      WALLET_PROVIDER: mock
+      STELLAR_MODE: mock
+      STELLAR_NETWORK: testnet
+      RATELIMIT_MODE: memory
+      VOTE_QUOTA_PER_ROUND: "1"
+      ADMIN_SESSION_SECRET: local-docker-development-only
+      ADMIN_WALLETS: ""
+      NEXT_PUBLIC_ADMIN_WALLETS: ""
+      NEXT_PUBLIC_STELLAR_NETWORK: TESTNET
+      NEXT_PUBLIC_STELLAR_NETWORK_PASSPHRASE: Test SDF Network ; September 2015
+      NEXT_PUBLIC_APP_ORIGIN: http://localhost:3001
+      NEXT_TELEMETRY_DISABLED: "1"
+      WATCHPACK_POLLING: "true"
+    command: >
+      sh -c "npm ci &&
+      npx prisma generate &&
+      npx prisma db push &&
+      npm run dev -- --hostname 0.0.0.0"
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./web:/app
+      - crownfi_node_modules:/app/node_modules
+      - crownfi_next_cache:/app/.next
+
+volumes:
+  crownfi_postgres:
+  crownfi_node_modules:
+  crownfi_next_cache:
