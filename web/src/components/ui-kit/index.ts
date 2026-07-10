@@ -3,6 +3,7 @@ export * from "./Button";
 export * from "./Card";
 export * from "./Field";
 export * from "./Layout";
+export * from "./Modal";
 export * from "./Collectible";
 export * from "./OrnatePortrait";
 export * from "./FeatureCard";
