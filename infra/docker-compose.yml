@@ -4,11 +4,9 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: crownfi
-      POSTGRES_USER: crownfi
-      POSTGRES_PASSWORD: crownfi
-    ports:
-      - "5432:5432"
+      POSTGRES_DB: ${POSTGRES_DB:?set in infra/.env}
+      POSTGRES_USER: ${POSTGRES_USER:?set in infra/.env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in infra/.env}
     volumes:
       - crownfi_postgres:/var/lib/postgresql/data
     healthcheck:
@@ -19,8 +17,6 @@ services:
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -33,13 +29,10 @@ services:
       dockerfile: services/api/Dockerfile
     environment:
       CROWNFI_API_BIND: 0.0.0.0:8080
-      CROWNFI_API_MODE: local-demo
-      STELLAR_MODE: mock
-      ADMIN_DEMO_TOKEN: local-admin-demo-token
-      DATABASE_URL: postgresql://crownfi:crownfi@postgres:5432/crownfi
+      CROWNFI_API_MODE: ${CROWNFI_API_MODE:-testnet}
+      STELLAR_MODE: ${STELLAR_MODE:-mock}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       REDIS_URL: redis://redis:6379
-    ports:
-      - "8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -52,18 +45,17 @@ services:
       dockerfile: web/Dockerfile
     environment:
       NODE_ENV: production
-      NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
-      DATABASE_URL: postgresql://crownfi:crownfi@postgres:5432/crownfi
-      DIRECT_URL: postgresql://crownfi:crownfi@postgres:5432/crownfi
-      STELLAR_MODE: mock
-      WALLET_PROVIDER: mock
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      DIRECT_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      STELLAR_MODE: ${STELLAR_MODE:-mock}
+      WALLET_PROVIDER: ${WALLET_PROVIDER:-mock}
       NEXT_PUBLIC_STELLAR_NETWORK: testnet
       NEXT_PUBLIC_STELLAR_NETWORK_PASSPHRASE: Test SDF Network ; September 2015
       ADMIN_WALLETS: ""
       NEXT_PUBLIC_ADMIN_WALLETS: ""
-      ADMIN_SESSION_SECRET: local-compose-only-change-me
+      ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET:?set a long random value in infra/.env}
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
       postgres:
         condition: service_healthy
