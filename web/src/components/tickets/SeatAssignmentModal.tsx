@@ -1,4 +1,5 @@
 import { SeatMap, type SeatSelection } from "@/components/SeatMap";
+import { Button, Modal } from "@/components/ui-kit";
 import { convertToSeatId } from "@/lib/tickets/seat";
 import type { Ticket } from "./types";
 
@@ -12,54 +13,31 @@ type SeatAssignmentModalProps = {
 };
 
 export function SeatAssignmentModal({ ticket, selectedSeat, saving, onSelectSeat, onCancel, onConfirm }: SeatAssignmentModalProps) {
-  if (!ticket) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onClick={() => { if (!saving) onCancel(); }} />
-
-      <div className="relative w-full max-w-4xl glass bg-cream dark:bg-black/90 p-6 shadow-2xl z-10 max-h-[90vh] overflow-y-auto flex flex-col justify-between rounded-3xl border border-line">
-        <div className="mb-4 flex items-start justify-between border-b border-line pb-3">
-          <div>
-            <h3 className="font-display text-2xl font-semibold text-ink dark:text-white">Assign Seat: {ticket.tier} Tier</h3>
-            <p className="mt-1 text-xs text-ink/65 dark:text-gold-soft/65">Select any available seat inside your highlighted <b>{ticket.tier}</b> zone.</p>
+    <Modal
+      open={Boolean(ticket)}
+      onClose={onCancel}
+      title={ticket ? `Choose a ${ticket.tier} seat` : "Choose a seat"}
+      description="Select any available seat inside the highlighted ticket zone."
+      preventClose={saving}
+      className="sm:max-w-5xl"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onCancel} disabled={saving}>Cancel</Button>
+          <Button onClick={onConfirm} disabled={saving || !selectedSeat}>{saving ? "Assigning seat…" : "Confirm seat"}</Button>
+        </>
+      }
+    >
+      {ticket && (
+        <div className="space-y-4">
+          <div className="overflow-hidden rounded-2xl border border-gold/20 bg-[#1a1f35]">
+            <SeatMap tierFilter={ticket.tier as any} initialSelectedSeatId={convertToSeatId(ticket.seat, ticket.tier)} onSelect={onSelectSeat} />
           </div>
-          <button
-            onClick={onCancel}
-            disabled={saving}
-            className="rounded-full p-1.5 text-ink/50 dark:text-gold-soft/50 hover:bg-gold/15 dark:hover:bg-gold/10 hover:text-ink dark:hover:text-white transition"
-            aria-label="Close seat assignment"
-          >
-            ✕
-          </button>
-        </div>
-
-        <div className="my-2 border border-line rounded-2xl overflow-hidden bg-[#1a1f35]">
-          <SeatMap
-            tierFilter={ticket.tier as any}
-            initialSelectedSeatId={convertToSeatId(ticket.seat, ticket.tier)}
-            onSelect={onSelectSeat}
-          />
-        </div>
-
-        <div className="mt-4 flex items-center justify-between border-t border-line pt-3">
-          <div className="text-sm">
-            {selectedSeat ? (
-              <span className="text-emerald dark:text-emerald-ink font-semibold">Selected: Row {selectedSeat.row} · Seat {selectedSeat.col}</span>
-            ) : (
-              <span className="text-ink/60 dark:text-gold-soft/60">Please tap a seat to select.</span>
-            )}
-          </div>
-          <div className="flex items-center gap-3">
-            <button onClick={onCancel} disabled={saving} className="btn-ghost !px-4 !py-2 text-xs">
-              Cancel
-            </button>
-            <button onClick={onConfirm} disabled={saving || !selectedSeat} className="btn-gold !px-5 !py-2 text-xs">
-              {saving ? "Assigning Seat…" : "Confirm Seat Choice"}
-            </button>
+          <div className="rounded-2xl border border-line bg-black/25 px-4 py-3 text-sm text-gold-soft/55">
+            {selectedSeat ? <span className="font-semibold text-emerald">Selected: row {selectedSeat.row}, seat {selectedSeat.col}</span> : "Tap an available seat to continue."}
           </div>
         </div>
-      </div>
-    </div>
+      )}
+    </Modal>
   );
 }
