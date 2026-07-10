@@ -86,9 +86,10 @@ function VotePageContent() {
         fanId: fan.id,
         contestantId: picked,
       });
-      const error = data?.error;
+      const payload = data as { error?: string; voteId?: string };
+      const error = payload.error;
       if (ok) {
-        setVoteId(data?.voteId ?? "recorded");
+        setVoteId(payload.voteId ?? "recorded");
         setConfirming(false);
         flash("Vote recorded. You can verify it after the round closes.", "ok");
       } else if (error === "duplicate_vote" || error === "quota_reached") {
