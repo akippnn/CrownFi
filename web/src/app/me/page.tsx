@@ -1,77 +1,195 @@
 "use client";
-import Link from "next/link";
+
 import { useEffect, useState } from "react";
+import { Gem, LoaderCircle, Sparkles, Ticket, Vote, Wallet } from "lucide-react";
 import { useSession } from "@/session/SessionProvider";
 import { short } from "@/lib/format";
 import { getJson } from "@/lib/api";
+import {
+  Badge,
+  Button,
+  ButtonLink,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  EmptyState,
+  SectionHeader,
+} from "@/components/ui-kit";
+
+type DashboardRow = { main: string; sub: string; tag?: string };
 
 export default function MePage() {
-  const { fan, ready } = useSession();
+  const { fan, address, ready, connecting, connect } = useSession();
   const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!fan) return;
-    getJson(`/api/dashboard?fanId=${fan.id}`, null).then(setData);
+    if (!fan) {
+      setData(null);
+      return;
+    }
+    setLoading(true);
+    getJson(`/api/dashboard?fanId=${fan.id}`, null).then((result) => {
+      setData(result);
+      setLoading(false);
+    });
   }, [fan]);
 
-  if (ready && !fan) return <div className="glass p-8 text-center text-[#5f6172]">Connect your Freighter wallet to see your dashboard.</div>;
+  if (!ready) {
+    return (
+      <div className="flex min-h-72 items-center justify-center text-gold-soft/50">
+        <LoaderCircle className="mr-2 animate-spin" size={20} /> Loading your CrownFi profile…
+      </div>
+    );
+  }
+
+  if (!fan) {
+    return (
+      <EmptyState
+        className="mx-auto max-w-2xl py-14"
+        title="Connect your wallet to open your CrownFi profile"
+        description="Your votes, tickets, collectibles, loyalty points, and verification receipts are grouped here by wallet."
+        action={<Button onClick={connect} disabled={connecting}><Wallet size={17} />{connecting ? "Connecting…" : "Connect Freighter"}</Button>}
+      />
+    );
+  }
+
+  const votes: DashboardRow[] = (data?.votes ?? []).map((vote: any) => ({ main: vote.contestant, sub: vote.round, tag: vote.status }));
+  const tickets: DashboardRow[] = (data?.tickets ?? []).map((ticket: any) => ({
+    main: `${ticket.tier} · ${ticket.seat === "Unassigned" ? "seat pending" : `seat ${ticket.seat}`}`,
+    sub: ticket.eventName,
+    tag: ticket.tokenId ? `Token ${short(ticket.tokenId, 5)}` : ticket.status,
+  }));
+  const collectibles: DashboardRow[] = (data?.collectibles ?? []).map((collectible: any) => ({
+    main: collectible.title,
+    sub: `${collectible.priceUsdc} USDC`,
+    tag: collectible.tokenId ? `Token ${short(collectible.tokenId, 5)}` : "Collected",
+  }));
 
   return (
-    <div>
-      <div className="mb-8">
-        <div className="eyebrow mb-2">Your account</div>
-        <h1 className="font-display text-4xl font-semibold text-[#23252f]">{fan?.handle}</h1>
+    <div className="space-y-8">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <SectionHeader
+          className="mb-0"
+          eyebrow="Your CrownFi account"
+          title={fan.handle || "My profile"}
+          description="Review everything connected to this Stellar wallet across CrownFi's voting, ticketing, and collectible experiences."
+        />
+        <Badge tone="success">Wallet connected</Badge>
       </div>
 
-      {/* Identity + points */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <div className="glass p-5">
-          <div className="text-xs uppercase tracking-wider text-[#7a7768]">Loyalty points</div>
-          <div className="mt-1 font-display text-4xl font-semibold text-[#b8912f]">{fan?.points ?? 0}</div>
-          <div className="mt-1 text-xs text-[#8a8779]">Earn more by voting and collecting</div>
-        </div>
-        <div className="glass p-5 sm:col-span-2">
-          <div className="text-xs uppercase tracking-wider text-[#7a7768]">Stellar wallet</div>
-          <div className="mono mt-2 break-all text-sm text-[#2a2d3a]">{fan?.walletAddress ?? "Created on your first purchase"}</div>
-          <div className="mt-2 text-xs text-[#8a8779]">Managed for you. No seed phrase, no XLM needed.</div>
-        </div>
+      <div className="grid gap-4 md:grid-cols-[0.65fr_1.35fr]">
+        <Card className="border-gold/25 bg-gold/5">
+          <CardContent className="pt-5">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gold-soft/40">Loyalty points</div>
+              <Sparkles className="text-gold" size={19} />
+            </div>
+            <div className="mt-3 font-display text-5xl font-semibold text-gold">{fan.points ?? 0}</div>
+            <p className="mt-2 text-sm text-gold-soft/45">Earn points by participating in supported CrownFi experiences.</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2"><Wallet className="text-gold" size={19} /><CardTitle>Connected Stellar wallet</CardTitle></div>
+            <CardDescription>This public address identifies your CrownFi account. CrownFi never asks for your seed phrase.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="mono break-all rounded-2xl border border-line bg-black/25 px-4 py-3 text-sm text-gold-soft">{address}</div>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Collections */}
-      <div className="mt-8 grid gap-6 lg:grid-cols-3">
-        <Panel title="Votes" empty="You have not voted yet." href="/vote" cta="Vote now" rows={(data?.votes ?? []).map((v: any) => ({ main: v.contestant, sub: v.round, tag: v.status }))} />
-        <Panel title="Tickets" empty="No tickets yet." href="/tickets" cta="Buy a ticket" rows={(data?.tickets ?? []).map((t: any) => ({ main: `${t.tier} · seat ${t.seat}`, sub: t.eventName, tag: t.tokenId ? `NFT ${short(t.tokenId, 5)}` : "" }))} />
-        <Panel title="Collectibles" empty="No collectibles yet." href="/contestants" cta="Collect" rows={(data?.collectibles ?? []).map((c: any) => ({ main: c.title, sub: `${c.priceUsdc} USDC`, tag: c.tokenId ? `NFT ${short(c.tokenId, 5)}` : "" }))} />
-      </div>
+      {loading ? (
+        <div className="flex min-h-40 items-center justify-center rounded-2xl border border-line bg-black/20 text-gold-soft/45">
+          <LoaderCircle className="mr-2 animate-spin" size={18} /> Loading participation history…
+        </div>
+      ) : (
+        <div className="grid gap-6 lg:grid-cols-3">
+          <ActivityPanel
+            icon={<Vote size={19} />}
+            title="Votes and receipts"
+            rows={votes}
+            empty="You have not voted yet."
+            description="Votes cast by this wallet appear here with their round status."
+            href="/vote"
+            cta="Vote now"
+          />
+          <ActivityPanel
+            icon={<Ticket size={19} />}
+            title="Tickets"
+            rows={tickets}
+            empty="You do not own any tickets."
+            description="Minted event passes and seat assignments appear here."
+            href="/tickets"
+            cta="Browse tickets"
+          />
+          <ActivityPanel
+            icon={<Gem size={19} />}
+            title="Collectibles"
+            rows={collectibles}
+            empty="You have not collected a portrait."
+            description="Official contestant collectibles purchased by this wallet appear here."
+            href="/contestants"
+            cta="Browse collectibles"
+          />
+        </div>
+      )}
     </div>
   );
 }
 
-function Panel({ title, rows, empty, href, cta }: { title: string; rows: { main: string; sub: string; tag: string }[]; empty: string; href: string; cta: string }) {
+function ActivityPanel({
+  icon,
+  title,
+  rows,
+  empty,
+  description,
+  href,
+  cta,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  rows: DashboardRow[];
+  empty: string;
+  description: string;
+  href: string;
+  cta: string;
+}) {
   return (
-    <div className="glass p-5">
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="font-display text-xl text-[#23252f]">{title}</h2>
-        <span className="chip">{rows.length}</span>
-      </div>
-      {rows.length === 0 ? (
-        <div className="py-6 text-center">
-          <p className="text-sm text-[#7a7768]">{empty}</p>
-          <Link href={href} className="btn-ghost mt-3">{cta}</Link>
+    <Card className="h-full">
+      <CardHeader>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-gold">{icon}<CardTitle className="text-white">{title}</CardTitle></div>
+          <Badge tone="neutral">{rows.length}</Badge>
         </div>
-      ) : (
-        <div className="space-y-2">
-          {rows.map((r, i) => (
-            <div key={i} className="rounded-xl bg-[#faf7ef] px-3 py-2">
-              <div className="flex items-center justify-between gap-2">
-                <span className="truncate text-sm text-[#23252f]">{r.main}</span>
-                {r.tag && <span className="mono shrink-0 text-[11px] text-emerald">{r.tag}</span>}
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {rows.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-line bg-black/20 px-4 py-7 text-center">
+            <p className="text-sm text-gold-soft/45">{empty}</p>
+            <ButtonLink href={href} size="sm" variant="secondary" className="mt-4">{cta}</ButtonLink>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {rows.map((row, index) => (
+              <div key={`${row.main}-${index}`} className="rounded-2xl border border-line bg-black/25 px-4 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-white">{row.main}</div>
+                    <div className="mt-1 truncate text-xs text-gold-soft/40">{row.sub}</div>
+                  </div>
+                  {row.tag && <Badge tone="info" className="shrink-0">{row.tag}</Badge>}
+                </div>
               </div>
-              <div className="truncate text-xs text-[#8a8779]">{r.sub}</div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
