@@ -146,7 +146,7 @@ function CollectPageInner() {
       if (message === "balance_insufficient") {
         flash(paymentMethod === "usdc" ? "Not enough test USDC — use the faucet first." : "Not enough XLM — fund your wallet first.", "err");
       } else {
-        flash(message.includes("balance") || message.includes("trustline") ? "Not enough test USDC — use the faucet first." : `Could not collect: ${message}`, "err");
+        flash(message.includes("balance") || message.includes("trustline") || message.includes("Contract, #100") ? "Not enough test USDC — use the faucet first." : `Could not collect: ${message}`, "err");
       }
     } finally {
       setBusy("");

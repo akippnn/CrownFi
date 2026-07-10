@@ -176,7 +176,7 @@ function TicketsPageInner() {
       if (m === "balance_insufficient") {
         flash(paymentMethod === "usdc" ? "Not enough test USDC — click ‘Get test USDC’ first." : "Not enough XLM — fund your wallet first.", "err");
       } else {
-        flash(m.includes("balance") || m.includes("trustline") ? "Not enough test USDC — click ‘Get test USDC’ first." : `Could not buy: ${m}`, "err");
+        flash(m.includes("balance") || m.includes("trustline") || m.includes("Contract, #100") ? "Not enough test USDC — click ‘Get test USDC’ first." : `Could not buy: ${m}`, "err");
       }
     } finally {
       setBusy(false);
