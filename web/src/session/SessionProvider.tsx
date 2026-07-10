@@ -8,6 +8,7 @@ type Ctx = {
   fan: Fan | null;
   address: string | null;
   isAdmin: boolean;
+  adminAllowlistConfigured: boolean;
   ready: boolean;
   connecting: boolean;
   error: string;
@@ -97,9 +98,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   function clearError() { setError(""); setNeedsInstall(false); }
 
   const isAdmin = !!address && ADMIN.includes(address);
+  const adminAllowlistConfigured = ADMIN.length > 0;
 
   return (
-    <C.Provider value={{ fan, address, isAdmin, ready, connecting, error, needsInstall, connect, disconnect, refresh, clearError }}>
+    <C.Provider value={{ fan, address, isAdmin, adminAllowlistConfigured, ready, connecting, error, needsInstall, connect, disconnect, refresh, clearError }}>
       {children}
     </C.Provider>
   );

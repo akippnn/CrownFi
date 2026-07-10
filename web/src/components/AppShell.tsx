@@ -81,7 +81,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     {fan && <div className="mt-1 text-xs text-gold">{fan.points} loyalty points</div>}
                     {isAdmin && <div className="mt-1 inline-block rounded-full bg-gold/20 px-2 py-0.5 text-[11px] font-semibold text-gold-soft">Admin wallet</div>}
                   </div>
-                  <button onClick={() => { disconnect(); setMenu(false); }} className="w-full rounded-lg px-3 py-1.5 text-left text-gold-soft hover:bg-gold/10 hover:text-white">Disconnect</button>
+                  <Link
+                    href="/admin"
+                    onClick={() => setMenu(false)}
+                    className="mb-1 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-gold-soft hover:bg-gold/10 hover:text-white"
+                  >
+                    <Icons.Lock size={15} strokeWidth={1.8} />
+                    Administration
+                    {!isAdmin && <span className="ml-auto text-[10px] uppercase tracking-wider text-gold-soft/35">restricted</span>}
+                  </Link>
+                  <button onClick={() => { disconnect(); setMenu(false); }} className="w-full rounded-lg px-3 py-2 text-left text-gold-soft hover:bg-gold/10 hover:text-white">Disconnect</button>
                 </div>
               </>
             )}
