@@ -1,90 +1,106 @@
 # CrownFi
 
-CrownFi is a blockchain-assisted voting, ticketing, and fan-engagement MVP for pageants. It combines a fast off-chain web app with Stellar/Soroban primitives for audit proofs, payments, ticket ownership, and digital collectibles.
+CrownFi is a hackathon/testnet MVP for pageant voting, ticketing, fan rewards, contestant support, and digital collectibles. The current mainline app is a **Next.js full-stack demo**: the UI and API routes live in `web/`, data is handled through Prisma/Postgres, and Stellar/Soroban is used for audit proofs and asset/payment primitives where configured.
 
-> **Status:** hackathon/testnet MVP. This repository is suitable for demos, review, and iteration. It is **not** production-ready voting or real-money infrastructure yet.
+> **Status:** hackathon MVP. This repository is suitable for demos, review, and iteration. It is **not** production-ready voting infrastructure, mainnet financial infrastructure, or a replacement for legal tabulation/compliance systems.
 
-## What CrownFi does
+## Mainline architecture
 
-CrownFi is built around three user groups:
-
-- **Fans** vote, buy tickets, collect contestant memorabilia, and view receipts/rewards.
-- **Organizers/admins** create contestants, open/close voting rounds, anchor results, and manage organizer requests.
-- **Contestants** can receive support through collectible sales and payout splits.
-
-The important design choice is that CrownFi does **not** try to put every vote on-chain. Voting intake stays off-chain for speed and privacy; Stellar is used as the trust/value layer.
+The current mainline branch is intentionally simple so the team can demo it quickly:
 
 ```mermaid
 flowchart LR
-  Fan[Fan wallet / web session] --> Web[Next.js app + API routes]
-  Web --> DB[(Postgres / Supabase)]
-  Web --> Merkle[Merkle tally + receipt proof]
-  Merkle --> Anchor[Soroban audit-anchor contract]
-  Web --> Tickets[Soroban ticket contract]
-  Web --> Collectibles[Soroban collectible contract]
-  Web --> Splitter[Soroban sale-splitter contract]
-  Splitter --> USDC[Test USDC / Stellar asset flow]
+  Fan[Fan / Freighter wallet] --> Web[Next.js app]
+  Web --> Routes[Next.js API routes]
+  Routes --> DB[(Prisma + Postgres / Supabase)]
+  Routes --> Proofs[Merkle tally + receipt proof]
+  Proofs --> Anchor[Soroban audit-anchor contract]
+  Routes --> Ticket[Ticket / collectible / sale-splitter contract helpers]
 ```
+
+Important framing:
+
+- Voting is **backend-first/off-chain** for speed and privacy.
+- Stellar is used for **tamper-evident audit commitments, payments, ticket/collectible primitives, and proof records**.
+- CrownFi does **not** put every raw vote on-chain.
+- Fan support, ticket purchases, and collectibles do **not** multiply vote power.
+- Ticketing can reduce counterfeits and improve verifiable ownership, but it does **not** fully eliminate off-platform scalping.
 
 ## Repository layout
 
 ```text
 .
-├── web/                    # Next.js 15 app: UI, API routes, Prisma, wallet flows
-├── contracts/              # Soroban Rust workspace: voting anchor, tickets, collectibles, sale splitter, test USDC
-├── docs/                   # Architecture, design notes, and security audit notes
-├── USER_FLOW.md            # Demo walkthrough for fan and admin flows
-├── SUPABASE.md             # Supabase/Postgres setup
-├── WORKFLOW.md             # End-to-end system workflow
-├── SECURITY.md             # Security policy and reporting notes
-└── DEPLOY.md               # Deployment pointers
+├── web/                    # Active Next.js 15 app: UI, API routes, Prisma, wallet flows
+├── contracts/              # Soroban Rust workspace: audit anchor, tickets, collectibles, sale splitter, test USDC
+├── docs/                   # Structured project documentation
+│   ├── overview/           # Product overview and hackathon pitch
+│   ├── architecture/       # Current platform, component boundaries, future refactor plan
+│   ├── features/           # Voting, ticketing, verification, admin, collectibles
+│   ├── blockchain/         # Stellar/Soroban and transaction verification notes
+│   ├── setup/              # Supabase, local setup, deployment notes
+│   ├── security/           # Security audit notes
+│   └── planning/           # Refactor TODOs
+├── SECURITY.md             # Root security policy and reporting notes
+├── SUPABASE.md             # Compatibility pointer to Supabase setup docs
+├── USER_FLOW.md            # Compatibility pointer to demo walkthrough
+├── WORKFLOW.md             # Compatibility pointer to workflow docs
+└── DEPLOY.md               # Compatibility pointer to deployment docs
 ```
 
-## Stack
+> The Rust/Axum API and Docker Compose platform split are **future/refactor work**, not the active mainline runtime. See `docs/architecture/platform-refactor-plan.md` for that plan.
 
-| Area | Technology |
+## Stack in mainline
+
+| Area | Current implementation |
 |---|---|
 | Web app | Next.js 15 App Router, React 19, TypeScript, Tailwind CSS |
-| API/backend | Next.js route handlers |
-| Database | Prisma + Supabase Postgres |
-| Wallet | Freighter for Stellar wallet connection/signing |
-| Blockchain | Stellar Testnet + Soroban Rust contracts |
+| API/backend | Next.js route handlers under `web/src/app/api` |
+| Database | Prisma + Postgres; Supabase is the team-supported hosted Postgres path |
+| Wallet | Freighter for Stellar wallet connection/signing; mock/demo session paths still exist |
+| Blockchain | Stellar Testnet + Soroban Rust contracts where `STELLAR_MODE=live` is configured |
 | Contracts | `audit-anchor`, `ticket`, `collectible`, `sale-splitter`, `usdc-test` |
-| CI/security | GitHub Actions, npm audit, TypeScript, Merkle tests, Rust format/tests/audit, secret smoke test, best-effort CodeQL |
+| CI/security | npm audit, TypeScript, Merkle tests, Rust format/tests/audit, secret smoke test, best-effort CodeQL |
 
-## Architecture summary
+## What the app currently does
 
-### Voting
+### Fan flows
 
-Votes are stored in Postgres and constrained at the database/application layer. When a voting round closes, CrownFi computes a tally hash and Merkle root. The Merkle root is anchored through the `audit-anchor` Soroban contract so published results can be checked later without exposing voter identity on-chain.
+- Browse the pageant demo experience.
+- Connect or create a fan session.
+- Vote for a contestant in an open round.
+- View receipt/proof information after a round is closed.
+- Buy or mint demo tickets.
+- View ticket voucher/check-in flows.
+- Collect contestant memorabilia in demo/testnet mode.
 
-### Tickets
+### Admin flows
 
-Tickets are represented by the `ticket` Soroban contract. The contract includes owner-gated minting, max supply support, pause support, and a resale-open flag intended for anti-scalping flows.
+- Sign in through wallet-signed admin challenge flow.
+- Create/manage contestants and rounds.
+- Close rounds and generate tally snapshots.
+- Anchor voting proofs in mock mode or Stellar/Soroban live mode when contract IDs are configured.
+- Review organizer/admin-facing dashboard data.
 
-### Collectibles
+### Voting/proof flow
 
-Contestant portraits/memorabilia are represented by the `collectible` Soroban contract. The contract supports capped supply, owner-gated minting, pause support, and royalty-style metadata hooks.
+1. A fan submits a vote through the web app.
+2. The API route validates the round and duplicate-vote rules.
+3. Prisma writes the vote to Postgres.
+4. The database/application layer prevents duplicate votes per fan/round.
+5. On close, the app computes a tally hash and Merkle root.
+6. The proof is stored locally and can be anchored to Soroban when live mode is configured.
+7. The verification page displays proof metadata without putting voter personal data on-chain.
 
-### Sales and payout splits
-
-The `sale-splitter` contract stores listing prices and contestant payout addresses. Buyers authorize payment, and the contract computes the platform/contestant split from stored listing data instead of trusting caller-supplied price or recipient values.
-
-### Test USDC
-
-The `usdc-test` contract is a mintable demo token for testnet/demo flows. It is not real USDC and must not be presented as production settlement infrastructure.
-
-## Quick start: web app in mock mode
-
-The app runs in mock mode by default. You only need Supabase/Postgres to exercise most of the MVP locally.
+## Quick start
 
 ### Requirements
 
-- Node.js 22+ recommended, or Node 24 to match CI
-- npm
-- Supabase project with Postgres connection strings
+- Node.js 22+ recommended, or the version used by CI.
+- npm.
+- A Postgres database. Supabase is supported because the current team setup uses it.
+- Rust toolchain only if running Soroban contract checks.
 
-### Setup
+### Web app setup
 
 ```bash
 cd web
@@ -101,27 +117,14 @@ Open:
 http://localhost:3000
 ```
 
-Add your Supabase connection strings in `web/.env`:
+For Supabase/Postgres, configure `web/.env`:
 
 ```env
 DATABASE_URL="postgresql://...pooler.supabase.com:6543/postgres?pgbouncer=true"
 DIRECT_URL="postgresql://...pooler.supabase.com:5432/postgres"
 ```
 
-For a full walkthrough, use [`SUPABASE.md`](SUPABASE.md) and [`USER_FLOW.md`](USER_FLOW.md).
-
-## Demo flow
-
-A minimal reviewer/demo path:
-
-1. Start the app.
-2. Connect/create a fan account.
-3. Vote for a contestant.
-4. Sign in as admin using an allowlisted Stellar wallet.
-5. Create or close a voting round.
-6. Anchor the round result.
-7. Verify a vote receipt against the Merkle root.
-8. Try ticket and collectible purchase flows in mock mode or testnet mode.
+Use [`docs/setup/supabase.md`](docs/setup/supabase.md) for the team’s Supabase path. A self-hosted Postgres instance can also work as long as the Prisma connection strings are set correctly.
 
 ## Environment variables
 
@@ -131,18 +134,18 @@ The main environment file is `web/.env`. Start from `web/.env.example`.
 
 | Variable | Purpose |
 |---|---|
-| `DATABASE_URL` | Pooled Supabase/Postgres connection for app runtime |
+| `DATABASE_URL` | Pooled/runtime Postgres connection for the app |
 | `DIRECT_URL` | Direct Postgres connection for Prisma migrations |
 
 ### App/wallet mode
 
 | Variable | Purpose |
 |---|---|
-| `WALLET_PROVIDER` | `mock` by default; `privy` stub exists for future embedded wallets |
-| `STELLAR_MODE` | `mock` by default; use `live` after contracts are deployed/configured |
+| `WALLET_PROVIDER` | `mock` by default; future embedded-wallet adapters may be added later |
+| `STELLAR_MODE` | `mock` by default; use `live` only after contract deployment/configuration |
 | `STELLAR_NETWORK` | Usually `testnet` during the hackathon/demo phase |
 | `STELLAR_RPC_URL` | Soroban RPC endpoint |
-| `NEXT_PUBLIC_STELLAR_NETWORK` | Client-visible Freighter network label |
+| `NEXT_PUBLIC_STELLAR_NETWORK` | Client-visible Stellar network label |
 | `NEXT_PUBLIC_STELLAR_NETWORK_PASSPHRASE` | Client-visible Stellar network passphrase |
 
 ### Admin authentication
@@ -162,14 +165,14 @@ openssl rand -base64 32
 
 ### Stellar contract IDs
 
-When using `STELLAR_MODE=live`, set the deployed Soroban contract IDs:
+When using `STELLAR_MODE=live`, set deployed Soroban contract IDs:
 
 | Variable | Purpose |
 |---|---|
 | `AUDIT_ANCHOR_CONTRACT_ID` | Round Merkle/tally anchor contract |
-| `TICKET_CONTRACT_ID` | Ticket NFT contract |
-| `COLLECTIBLE_CONTRACT_ID` | Collectible NFT contract |
-| `SALE_SPLITTER_CONTRACT_ID` | Listing and USDC split contract |
+| `TICKET_CONTRACT_ID` | Ticket contract |
+| `COLLECTIBLE_CONTRACT_ID` | Collectible contract |
+| `SALE_SPLITTER_CONTRACT_ID` | Listing/payment split contract |
 | `USDC_TEST_CONTRACT_ID` | Demo/test USDC contract |
 | `STELLAR_PLATFORM_SECRET` | Server-only platform signing key for platform-authorized operations |
 | `DEMO_CONTESTANT_PAYOUT` | Demo payout wallet used by listing registration scripts |
@@ -182,10 +185,10 @@ Contracts live in [`contracts/`](contracts/).
 
 ```text
 contracts/
-├── audit-anchor/    # write-once voting round checkpoints
-├── ticket/          # ticket NFT with resale/pausing/supply policy
-├── collectible/     # contestant collectible NFT with royalty-style hooks
-├── sale-splitter/   # listing-based USDC split contract
+├── audit-anchor/    # voting round checkpoints / Merkle roots
+├── ticket/          # ticket asset primitive
+├── collectible/     # contestant collectible primitive
+├── sale-splitter/   # listing-based payment split primitive
 └── usdc-test/       # mintable test token for demos
 ```
 
@@ -198,7 +201,7 @@ cargo test --workspace --locked
 cargo audit
 ```
 
-`cargo audit --deny warnings` currently reports advisory warnings from transitive Soroban/Arkworks dependencies. These are documented in [`docs/SECURITY_AUDIT.md`](docs/SECURITY_AUDIT.md) and are kept visible but non-blocking in CI.
+`cargo audit --deny warnings` may report advisory warnings from transitive Soroban/Arkworks dependencies. These are documented in [`docs/security/security-audit.md`](docs/security/security-audit.md) and are kept visible but non-blocking in CI.
 
 ### Testnet deployment
 
@@ -224,49 +227,48 @@ stellar contract build
 
 Use [`contracts/DEPLOY_GUIDE.md`](contracts/DEPLOY_GUIDE.md) for the full deployment runbook and contract wiring steps.
 
+## Demo flow
+
+A minimal reviewer/demo path:
+
+1. Start the app.
+2. Connect/create a fan account.
+3. Vote for a contestant.
+4. Sign in as admin using an allowlisted Stellar wallet.
+5. Create or close a voting round.
+6. Anchor the round result in mock mode or live testnet mode.
+7. Verify a vote receipt against the Merkle root.
+8. Try ticket and collectible flows in mock/testnet mode.
+
+See [`docs/demo/user-flow.md`](docs/demo/user-flow.md) for the longer walkthrough.
+
 ## Security posture
 
-The mainline includes an initial MVP security hardening pass.
+The mainline includes an MVP security hardening pass that is appropriate for a hackathon/testnet demo, not production use.
 
-Fixed/improved areas include:
+Current hardening includes:
 
-- server-side wallet-signed admin sessions using Freighter message signing;
+- server-side wallet-signed admin sessions;
 - httpOnly admin session cookies;
-- server-side protection on sensitive admin routes;
+- server-side checks on sensitive admin routes;
 - short-lived transaction intents for signed XDR confirmation;
 - live-mode rejection for direct mock mint endpoints;
 - faucet rate/amount limits;
-- npm dependency audit cleanup;
-- secret smoke tests in CI;
+- dependency audit cleanup;
+- committed-secret smoke tests;
 - removal of local/generated artifacts from version control.
 
-Current known limitations:
+Known limitations:
 
-- Fan/user wallet sessions are not yet cryptographically enforced server-side across all flows.
-- Payment and mint are not fully atomic yet.
-- In-memory challenges, sessions, rate limits, and transaction intents are demo/server-singleton only.
-- Contract deployment IDs and live-mode configuration need final testnet validation before demo day.
-- A deeper external contract/security review is required before any mainnet or real-money use.
+- fan/user wallet sessions are not yet cryptographically enforced server-side across all flows;
+- payment and mint are not fully atomic yet;
+- in-memory challenges, sessions, rate limits, and transaction intents are demo/server-singleton only;
+- contract IDs and live-mode configuration need final testnet validation before presenting live Stellar flows;
+- a deeper external review is required before any mainnet, real-money, or real voter-data usage.
 
-See [`SECURITY.md`](SECURITY.md) and [`docs/SECURITY_AUDIT.md`](docs/SECURITY_AUDIT.md) for details.
+See [`SECURITY.md`](SECURITY.md) and [`docs/security/security-audit.md`](docs/security/security-audit.md).
 
-## CI checks
-
-GitHub Actions are configured to run checks that do not require special repository permissions:
-
-- `npm audit --audit-level=moderate`
-- TypeScript check through `prisma generate && tsc --noEmit`
-- Merkle proof tests
-- Rust formatting
-- Rust contract tests
-- blocking `cargo audit` vulnerability check
-- non-blocking `cargo audit --deny warnings` advisory report
-- committed-secret smoke test
-- best-effort CodeQL scan without result upload
-
-CodeQL is intentionally best-effort because this repository may not have GitHub Code Scanning/GitHub Advanced Security enabled. Dependency Review/Dependabot-style checks are not required by this workflow because the current repository permissions may not support them.
-
-## Local validation commands
+## CI and local validation
 
 Run these before pushing or asking for review:
 
@@ -293,24 +295,28 @@ cd contracts
 cargo audit --deny warnings
 ```
 
+GitHub Actions run checks that avoid requiring special repository permissions. CodeQL is best-effort because this repository may not have GitHub Code Scanning/GitHub Advanced Security enabled.
+
 ## Useful docs
 
 | Document | Purpose |
 |---|---|
-| [`USER_FLOW.md`](USER_FLOW.md) | Step-by-step fan/admin demo walkthrough |
-| [`SUPABASE.md`](SUPABASE.md) | Supabase/Postgres setup |
-| [`WORKFLOW.md`](WORKFLOW.md) | End-to-end workflow and system behavior |
-| [`DEPLOY.md`](DEPLOY.md) | Deployment entry point |
-| [`contracts/README.md`](contracts/README.md) | Contract overview and security layers |
-| [`contracts/DEPLOY_GUIDE.md`](contracts/DEPLOY_GUIDE.md) | Soroban deployment guide |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Architecture notes |
-| [`docs/SECURITY_AUDIT.md`](docs/SECURITY_AUDIT.md) | Security audit notes and remaining risks |
+| [`docs/README.md`](docs/README.md) | Documentation map |
+| [`docs/overview/hackathon-pitch.md`](docs/overview/hackathon-pitch.md) | Hackathon/project narrative |
+| [`docs/architecture/current-platform.md`](docs/architecture/current-platform.md) | Current mainline architecture |
+| [`docs/features/voting.md`](docs/features/voting.md) | Voting flow and constraints |
+| [`docs/features/ticketing.md`](docs/features/ticketing.md) | Ticketing flow and anti-scalping framing |
+| [`docs/features/verification.md`](docs/features/verification.md) | Audit/proof verification flow |
+| [`docs/blockchain/stellar-soroban.md`](docs/blockchain/stellar-soroban.md) | Stellar/Soroban integration notes |
+| [`docs/blockchain/transaction-verification.md`](docs/blockchain/transaction-verification.md) | How transaction/proof verification should be presented |
+| [`docs/setup/supabase.md`](docs/setup/supabase.md) | Supabase/Postgres setup |
+| [`docs/security/security-audit.md`](docs/security/security-audit.md) | Security audit notes and remaining risks |
 
 ## MVP boundaries
 
 CrownFi should be presented as:
 
-> A scalable off-chain voting MVP with Stellar-anchored audit proofs, Stellar/Soroban ticket and collectible primitives, and testnet payment-split flows.
+> A scalable off-chain voting MVP with Stellar-anchored audit proofs, Stellar/Soroban ticket and collectible primitives, and testnet/mock payment flows.
 
 CrownFi should **not** be presented as:
 
