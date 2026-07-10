@@ -227,6 +227,50 @@ stellar contract build
 
 Use [`contracts/DEPLOY_GUIDE.md`](contracts/DEPLOY_GUIDE.md) for the full deployment runbook and contract wiring steps.
 
+## Freighter, Stellar Testnet, and live transaction receipts
+
+Freighter is the non-custodial wallet boundary in CrownFi. CrownFi asks Freighter for a public
+`G...` address and gives it an unsigned transaction XDR to review and sign. CrownFi never receives
+the wallet's recovery phrase or private key.
+
+In live mode, the flow is:
+
+1. The fan connects a **Testnet** Freighter account. The account needs Testnet XLM for Stellar fees.
+2. CrownFi prepares a Soroban payment transaction using that account as the source.
+3. Freighter displays the transaction for approval and returns signed XDR to CrownFi.
+4. CrownFi verifies the short-lived transaction intent, submits the signed XDR to Soroban RPC, and
+   waits for Testnet confirmation.
+5. CrownFi mints the ticket or collectible in a separate platform-authorized transaction, then
+   stores both resulting hashes with the app record.
+
+The same pattern is used for a voting checkpoint, except the allowlisted admin signs the
+`audit-anchor.publish` transaction and no fan payment is involved. Vote intake and tallying remain
+off-chain; the closed-round Merkle root and tally hash are what get anchored.
+
+### Use Freighter on desktop or mobile
+
+- **Desktop:** install the Freighter browser extension, select Testnet, unlock the intended account,
+  then choose **Connect Freighter** in CrownFi.
+- **Mobile:** Freighter has iOS and Android apps. Open CrownFi in Freighter's in-app Discover browser
+  so its wallet API is available to the site. A regular mobile browser does not inject the Freighter
+  extension API, so it cannot complete CrownFi's connect-and-sign flow.
+
+### See a transaction live
+
+Only a 64-character transaction hash returned while `STELLAR_MODE=live` is a Testnet receipt.
+Open it in Stellar Expert:
+
+```text
+https://stellar.expert/explorer/testnet/tx/<transaction-hash>
+```
+
+Ticket and collectible purchases produce two links: the **buyer-signed payment/split** and the
+**platform-authorized mint**. Closing a round produces the **admin-signed anchor** link. A hash from
+`STELLAR_MODE=mock` is simulated and will not exist on the explorer.
+
+For an end-to-end test checklist, see [`docs/demo/user-flow.md`](docs/demo/user-flow.md); for
+deployment prerequisites, see [`contracts/DEPLOY_GUIDE.md`](contracts/DEPLOY_GUIDE.md).
+
 ## Demo flow
 
 A minimal reviewer/demo path:
