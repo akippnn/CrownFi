@@ -2,48 +2,97 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getWallet } from "@/wallet";
 import { mintTicket } from "@/lib/stellar";
-import { readJson } from "@/lib/http";
+import { mockTicketsStore } from "@/lib/mockStore";
+import { TICKET_TIERS, type TierName } from "@/lib/tiers";
 
 const LIVE = (process.env.STELLAR_MODE ?? "mock") === "live";
+const DEMO_EVENT_NAME = "Coronation Night 2026";
 
-export async function GET() {
-  return readJson(() =>
-    db.ticket.findMany({
-      orderBy: { createdAt: "desc" },
-      include: { fan: true },
-    })
-  );
+function isTierName(tier: string): tier is TierName {
+  return Object.prototype.hasOwnProperty.call(TICKET_TIERS, tier);
 }
 
-// Purchase a ticket: resolve the fan's wallet, mint the NFT (mock or live), persist.
+export async function GET() {
+  try {
+    const tickets = await db.ticket.findMany({
+      orderBy: { createdAt: "desc" },
+      include: { fan: true },
+    });
+    return NextResponse.json(tickets);
+  } catch {
+    console.warn("[api/tickets] database unavailable, returning in-memory mock tickets.");
+    return NextResponse.json(mockTicketsStore);
+  }
+}
+
+// Mock/dev purchase path only. Live purchases must use prepare-buy -> Freighter -> confirm-buy.
 export async function POST(req: NextRequest) {
   if (LIVE) return NextResponse.json({ error: "use_prepare_confirm_flow" }, { status: 409 });
 
   const body = await req.json().catch(() => null);
-  if (!body?.fanId || !body?.eventName || !body?.tier)
-    return NextResponse.json({ error: "missing_fields" }, { status: 400 });
+  const fanId = String(body?.fanId ?? "").trim();
+  const tier = String(body?.tier ?? "").trim();
+  const seat = body?.seat ? String(body.seat) : "Unassigned";
 
-  const fan = await db.fan.findUnique({ where: { id: body.fanId } });
-  if (!fan) return NextResponse.json({ error: "fan_not_found" }, { status: 404 });
+  if (!fanId || !tier) return NextResponse.json({ error: "missing_fields" }, { status: 400 });
+  if (!isTierName(tier)) return NextResponse.json({ error: "invalid_tier" }, { status: 400 });
+
+  const tierConfig = TICKET_TIERS[tier];
+
+  let fan: { id: string; handle: string; walletAddress?: string | null } | null = null;
+  try {
+    fan = await db.fan.findUnique({ where: { id: fanId } });
+    if (!fan) return NextResponse.json({ error: "fan_not_found" }, { status: 404 });
+  } catch {
+    // Offline demo fallback only for mock fans created by /api/fans/connect when DB is unavailable.
+    if (!fanId.startsWith("mock-fan-")) return NextResponse.json({ error: "database_unavailable" }, { status: 503 });
+    fan = { id: fanId, handle: `fan_${fanId.slice(-6)}`, walletAddress: `G${"A".repeat(55)}` };
+  }
 
   const address = fan.walletAddress ?? (await getWallet().ensureAddress(fan.handle));
-  if (!fan.walletAddress)
-    await db.fan.update({ where: { id: fan.id }, data: { walletAddress: address } });
+  let tokenId = `mock-token-id-${Math.floor(Math.random() * 100000)}`;
+  let mintTx = `mock-tx-hash-${Math.floor(Math.random() * 1000000)}`;
 
-  const seat = body.seat ?? `GA-${Math.floor(Math.random() * 900 + 100)}`;
-  const mint = await mintTicket({ toAddress: address, eventName: body.eventName, tier: body.tier, seat });
+  try {
+    const mint = await mintTicket({ toAddress: address, eventName: DEMO_EVENT_NAME, tier, seat });
+    tokenId = mint.tokenId || tokenId;
+    mintTx = mint.txHash || mintTx;
+  } catch {
+    // Ignore blockchain mint failure in offline mock testing.
+  }
 
-  const ticket = await db.ticket.create({
-    data: {
-      fanId: fan.id,
-      eventName: body.eventName,
-      tier: body.tier,
-      seat,
-      priceUsdc: Number(body.priceUsdc ?? 50),
-      tokenId: mint.tokenId,
-      mintTx: mint.txHash,
-    },
-  });
+  const ticketData = {
+    id: `mock-ticket-${Math.floor(Math.random() * 1000000)}`,
+    fanId: fan.id,
+    eventName: DEMO_EVENT_NAME,
+    tier,
+    seat,
+    priceUsdc: tierConfig.priceUsdc,
+    tokenId,
+    mintTx,
+    status: "minted",
+    createdAt: new Date().toISOString(),
+    fan: { handle: fan.handle, walletAddress: address },
+  };
 
-  return NextResponse.json({ ok: true, ticket, mintMode: mint.mode });
+  try {
+    const ticket = await db.ticket.create({
+      data: {
+        fanId: fan.id,
+        eventName: DEMO_EVENT_NAME,
+        tier,
+        seat,
+        priceUsdc: tierConfig.priceUsdc,
+        tokenId,
+        mintTx,
+      },
+      include: { fan: true },
+    });
+    mockTicketsStore.unshift(ticket);
+    return NextResponse.json({ ok: true, ticket });
+  } catch {
+    console.warn("[api/tickets] database unavailable, saving mock ticket to in-memory store.");
+    mockTicketsStore.unshift(ticketData);
+    return NextResponse.json({ ok: true, ticket: ticketData });
+  }
 }
