@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { mockTicketsStore } from "@/lib/mockStore";
 import { requireAdmin } from "@/lib/adminAuth";
 
-const SEAT_RE = /^(Diamond|Platinum|Gold|Silver)?\s*([A-Z]+-\d{1,3}|Row\s+\d{1,3}\s+Seat\s+\d{1,3}|Unassigned)$/i;
+const SEAT_RE = /^(Diamond|Platinum|Gold|Silver)?\s*([A-Z]+-\d{1,3}|Row\s+\d{1,3}\s*[\u00b7·\s-]?\s*Seat\s+\d{1,3}|Unassigned)$/i;
 
 function isAuthorizedOwnerOrAdmin(req: NextRequest, ticketFanId: string, bodyFanId: string): boolean {
   const admin = requireAdmin(req);
