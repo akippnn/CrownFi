@@ -1,117 +1,328 @@
 # CrownFi
 
-Blockchain-powered voting, ticketing, and fan-experience platform for pageants, built on Stellar.
+CrownFi is a hackathon/testnet MVP for pageant voting, ticketing, fan rewards, contestant support, and digital collectibles. The current mainline app is a **Next.js full-stack demo**: the UI and API routes live in `web/`, data is handled through Prisma/Postgres, and Stellar/Soroban is used for audit proofs and asset/payment primitives where configured.
 
-A runnable MVP across three layers, with a full user side and admin side:
+> **Status:** hackathon MVP. This repository is suitable for demos, review, and iteration. It is **not** production-ready voting infrastructure, mainnet financial infrastructure, or a replacement for legal tabulation/compliance systems.
 
-- **Frontend + Backend** (`web/`) - Next.js 15 (App Router), TypeScript, Tailwind. Dark "stage" design, mobile responsive, with a spotlight contestant carousel, animated stats, a bottom tab bar on mobile, and a slide-over drawer.
-- **Blockchain** (`contracts/`) - Soroban (Rust), 5 contracts: audit anchor, NFT ticket, NFT collectible with royalties, primary-sale USDC splitter, and a mintable test-USDC token. Ticket and collectible purchases pay real USDC (buyer-signed in Freighter), split on-chain to the contestant/treasury and platform.
+## Mainline architecture
 
-## Core idea
+The current mainline branch is intentionally simple so the team can demo it quickly:
 
-Voting runs off-chain for speed. Stellar carries proof and value. When a round closes, the tally is
-sealed into a Merkle root and anchored on-chain; fans verify their vote with an inclusion proof.
-No voter identity ever touches the chain.
+```mermaid
+flowchart LR
+  Fan[Fan / Freighter wallet] --> Web[Next.js app]
+  Web --> Routes[Next.js API routes]
+  Routes --> DB[(Prisma + Postgres / Supabase)]
+  Routes --> Proofs[Merkle tally + receipt proof]
+  Proofs --> Anchor[Soroban audit-anchor contract]
+  Routes --> Ticket[Ticket / collectible / sale-splitter contract helpers]
+```
 
-## Features
+Important framing:
 
-User side
-- Sign in as a fan (identity persists), or create a new fan account.
-- Vote via the spotlight carousel; duplicate votes blocked at the database layer.
-- Verify a vote with a Merkle receipt against the anchored root.
-- Buy tiered NFT tickets (Silver / Gold / Diamond).
-- Collect contestant portrait NFTs that fund the contestant.
-- Personal dashboard: your votes, tickets, collectibles, wallet, and loyalty points.
+- Voting is **backend-first/off-chain** for speed and privacy.
+- Stellar is used for **tamper-evident audit commitments, payments, ticket/collectible primitives, and proof records**.
+- CrownFi does **not** put every raw vote on-chain.
+- Fan support, ticket purchases, and collectibles do **not** multiply vote power.
+- Ticketing can reduce counterfeits and improve verifiable ownership, but it does **not** fully eliminate off-platform scalping.
 
-Admin side (toggle "Admin mode" in the account menu)
-- Overview: live totals, GMV, and a vote leaderboard.
-- Rounds: create a round, close and anchor it (tally + Merkle root + Stellar anchor).
-- Contestants: add contestants (auto-creates a collectible edition).
+## Repository layout
+
+```text
+.
+├── web/                    # Active Next.js 15 app: UI, API routes, Prisma, wallet flows
+├── contracts/              # Soroban Rust workspace: audit anchor, tickets, collectibles, sale splitter, test USDC
+├── docs/                   # Structured project documentation
+│   ├── overview/           # Product overview and hackathon pitch
+│   ├── architecture/       # Current platform, component boundaries, future refactor plan
+│   ├── features/           # Voting, ticketing, verification, admin, collectibles
+│   ├── blockchain/         # Stellar/Soroban and transaction verification notes
+│   ├── setup/              # Supabase, local setup, deployment notes
+│   ├── security/           # Security audit notes
+│   └── planning/           # Refactor TODOs
+├── SECURITY.md             # Root security policy and reporting notes
+├── SUPABASE.md             # Compatibility pointer to Supabase setup docs
+├── USER_FLOW.md            # Compatibility pointer to demo walkthrough
+├── WORKFLOW.md             # Compatibility pointer to workflow docs
+└── DEPLOY.md               # Compatibility pointer to deployment docs
+```
+
+> The Rust/Axum API and Docker Compose platform split are **future/refactor work**, not the active mainline runtime. See `docs/architecture/platform-refactor-plan.md` for that plan.
+
+## Stack in mainline
+
+| Area | Current implementation |
+|---|---|
+| Web app | Next.js 15 App Router, React 19, TypeScript, Tailwind CSS |
+| API/backend | Next.js route handlers under `web/src/app/api` |
+| Database | Prisma + Postgres; Supabase is the team-supported hosted Postgres path |
+| Wallet | Freighter for Stellar wallet connection/signing; mock/demo session paths still exist |
+| Blockchain | Stellar Testnet + Soroban Rust contracts where `STELLAR_MODE=live` is configured |
+| Contracts | `audit-anchor`, `ticket`, `collectible`, `sale-splitter`, `usdc-test` |
+| CI/security | npm audit, TypeScript, Merkle tests, Rust format/tests/audit, secret smoke test, best-effort CodeQL |
+
+## What the app currently does
+
+### Fan flows
+
+- Browse the pageant demo experience.
+- Connect or create a fan session.
+- Vote for a contestant in an open round.
+- View receipt/proof information after a round is closed.
+- Buy or mint demo tickets.
+- View ticket voucher/check-in flows.
+- Collect contestant memorabilia in demo/testnet mode.
+
+### Admin flows
+
+- Sign in through wallet-signed admin challenge flow.
+- Create/manage contestants and rounds.
+- Close rounds and generate tally snapshots.
+- Anchor voting proofs in mock mode or Stellar/Soroban live mode when contract IDs are configured.
+- Review organizer/admin-facing dashboard data.
+
+### Voting/proof flow
+
+1. A fan submits a vote through the web app.
+2. The API route validates the round and duplicate-vote rules.
+3. Prisma writes the vote to Postgres.
+4. The database/application layer prevents duplicate votes per fan/round.
+5. On close, the app computes a tally hash and Merkle root.
+6. The proof is stored locally and can be anchored to Soroban when live mode is configured.
+7. The verification page displays proof metadata without putting voter personal data on-chain.
 
 ## Quick start
 
-The database is **Supabase Postgres** (free tier). Stellar and the wallet run in **mock mode**, so
-no blockchain keys are needed to run locally — you only set up the database.
+### Requirements
 
-1. Create a Supabase project and grab its two connection strings — full walkthrough in
-   [`SUPABASE.md`](SUPABASE.md).
-2. Then:
+- Node.js 22+ recommended, or the version used by CI.
+- npm.
+- A Postgres database. Supabase is supported because the current team setup uses it.
+- Rust toolchain only if running Soroban contract checks.
+
+### Web app setup
 
 ```bash
 cd web
-cp .env.example .env            # paste your Supabase DATABASE_URL + DIRECT_URL
-npm install
+cp .env.example .env
+npm ci
 npx prisma migrate dev --name init
 npm run seed
 npm run dev
 ```
 
-Open http://localhost:3000
+Open:
 
-Note: the UI loads its fonts (Fraunces + Manrope) via next/font on first build, so the initial
-build needs network access (same as npm install).
+```text
+http://localhost:3000
+```
 
-### Hero flow
-Vote (pick a fan in the top-right menu first) -> Admin -> Rounds -> Close + anchor -> Verify.
+For Supabase/Postgres, configure `web/.env`:
 
-## Where do the smart contracts go, and where do I deploy them?
+```env
+DATABASE_URL="postgresql://...pooler.supabase.com:6543/postgres?pgbouncer=true"
+DIRECT_URL="postgresql://...pooler.supabase.com:5432/postgres"
+```
 
-They live in `contracts/` (a Cargo workspace) and deploy to the **Stellar network**, not to your
-own server. The flow:
+Use [`docs/setup/supabase.md`](docs/setup/supabase.md) for the team’s Supabase path. A self-hosted Postgres instance can also work as long as the Prisma connection strings are set correctly.
 
-1. Install the toolchain:
-   ```bash
-   rustup target add wasm32v1-none          # Rust 1.84+
-   cargo install --locked stellar-cli
-   ```
-2. Create and fund a testnet identity (Friendbot funds it for free):
-   ```bash
-   stellar keys generate alice --network testnet --fund
-   ```
-3. Build and deploy each contract (from `contracts/`):
-   ```bash
-   stellar contract build
-   stellar contract deploy \
-     --wasm target/wasm32v1-none/release/audit_anchor.wasm \
-     --source alice --network testnet --alias audit_anchor \
-     -- --admin $(stellar keys address alice)
-   ```
-   Each deploy prints a **contract id starting with C**. `contracts/scripts/deploy.sh` wraps all four.
-4. Copy those contract ids into `web/.env` (`AUDIT_ANCHOR_CONTRACT_ID`, `TICKET_CONTRACT_ID`, etc.)
-   and set `STELLAR_MODE=live` to move the backend off mock mode.
+## Environment variables
 
-Deploy order: **testnet first** (free, for building and demos), then **mainnet** for production once
-audited. Recommendation: keep everything on testnet through the hackathon, and only touch mainnet
-after a security pass.
+The main environment file is `web/.env`. Start from `web/.env.example`.
 
-## Going live (checklist)
-- `DATABASE_URL` + `DIRECT_URL`: point at Supabase Postgres — see [SUPABASE.md](SUPABASE.md).
-- `STELLAR_MODE=live` + `STELLAR_PLATFORM_SECRET` + the contract ids. The live Soroban calls are
-  **implemented** in `web/src/lib/stellar.ts`: round anchoring (platform-signed), and ticket +
-  collectible purchases (buyer-signed USDC split via the sale-splitter, then NFT mint). Deploy the
-  contracts and flip the env — see [contracts/DEPLOY_GUIDE.md](contracts/DEPLOY_GUIDE.md).
-- Admin: list admin `G...` addresses in `NEXT_PUBLIC_ADMIN_WALLETS`. For mainnet, add a server-side
-  wallet-signature check (the client allowlist is not a security boundary).
-- `RATELIMIT_MODE=upstash` for production rate limiting.
-- Optional: `WALLET_PROVIDER=privy` with Privy keys for seedless embedded wallets (adapter stub in
-  `web/src/wallet/index.ts`).
+### Database
 
-## Docs
-
-| Doc | What it covers |
+| Variable | Purpose |
 |---|---|
-| [USER_FLOW.md](USER_FLOW.md) | **Start here to try the app** — run it, then walk through every fan & admin flow |
-| [SUPABASE.md](SUPABASE.md) | Database setup (Supabase Postgres) |
-| [contracts/DEPLOY_GUIDE.md](contracts/DEPLOY_GUIDE.md) | Deploy the smart contracts to Testnet + go live |
-| [WORKFLOW.md](WORKFLOW.md) | Full system / integration reference |
+| `DATABASE_URL` | Pooled/runtime Postgres connection for the app |
+| `DIRECT_URL` | Direct Postgres connection for Prisma migrations |
 
-## Layout
+### App/wallet mode
 
+| Variable | Purpose |
+|---|---|
+| `WALLET_PROVIDER` | `mock` by default; future embedded-wallet adapters may be added later |
+| `STELLAR_MODE` | `mock` by default; use `live` only after contract deployment/configuration |
+| `STELLAR_NETWORK` | Usually `testnet` during the hackathon/demo phase |
+| `STELLAR_RPC_URL` | Soroban RPC endpoint |
+| `NEXT_PUBLIC_STELLAR_NETWORK` | Client-visible Stellar network label |
+| `NEXT_PUBLIC_STELLAR_NETWORK_PASSPHRASE` | Client-visible Stellar network passphrase |
+
+### Admin authentication
+
+| Variable | Purpose |
+|---|---|
+| `ADMIN_WALLETS` | Server-side comma-separated allowlist of admin `G...` addresses |
+| `NEXT_PUBLIC_ADMIN_WALLETS` | Client UI hint only; not a security boundary |
+| `ADMIN_SESSION_SECRET` | HMAC secret for httpOnly admin session cookies |
+| `NEXT_PUBLIC_APP_ORIGIN` | Optional app origin used in challenge text |
+
+Generate a strong admin session secret with:
+
+```bash
+openssl rand -base64 32
 ```
-crownfi/
-  web/         Next.js 15 app (frontend + backend + admin)
-  contracts/   Soroban Rust workspace (5 contracts)
-  docs/        Architecture decision log
+
+### Stellar contract IDs
+
+When using `STELLAR_MODE=live`, set deployed Soroban contract IDs:
+
+| Variable | Purpose |
+|---|---|
+| `AUDIT_ANCHOR_CONTRACT_ID` | Round Merkle/tally anchor contract |
+| `TICKET_CONTRACT_ID` | Ticket contract |
+| `COLLECTIBLE_CONTRACT_ID` | Collectible contract |
+| `SALE_SPLITTER_CONTRACT_ID` | Listing/payment split contract |
+| `USDC_TEST_CONTRACT_ID` | Demo/test USDC contract |
+| `STELLAR_PLATFORM_SECRET` | Server-only platform signing key for platform-authorized operations |
+| `DEMO_CONTESTANT_PAYOUT` | Demo payout wallet used by listing registration scripts |
+
+Do not commit `.env`, private keys, seed phrases, database passwords, Supabase service-role keys, or Stellar secret keys.
+
+## Smart contracts
+
+Contracts live in [`contracts/`](contracts/).
+
+```text
+contracts/
+├── audit-anchor/    # voting round checkpoints / Merkle roots
+├── ticket/          # ticket asset primitive
+├── collectible/     # contestant collectible primitive
+├── sale-splitter/   # listing-based payment split primitive
+└── usdc-test/       # mintable test token for demos
 ```
 
-This is an MVP scaffold for local testing and iteration, not a production deployment.
+### Contract checks
+
+```bash
+cd contracts
+cargo fmt --all -- --check
+cargo test --workspace --locked
+cargo audit
+```
+
+`cargo audit --deny warnings` may report advisory warnings from transitive Soroban/Arkworks dependencies. These are documented in [`docs/security/security-audit.md`](docs/security/security-audit.md) and are kept visible but non-blocking in CI.
+
+### Testnet deployment
+
+Install the toolchain:
+
+```bash
+rustup target add wasm32v1-none
+cargo install --locked stellar-cli
+```
+
+Generate and fund a testnet identity:
+
+```bash
+stellar keys generate alice --network testnet --fund
+```
+
+Build contracts:
+
+```bash
+cd contracts
+stellar contract build
+```
+
+Use [`contracts/DEPLOY_GUIDE.md`](contracts/DEPLOY_GUIDE.md) for the full deployment runbook and contract wiring steps.
+
+## Demo flow
+
+A minimal reviewer/demo path:
+
+1. Start the app.
+2. Connect/create a fan account.
+3. Vote for a contestant.
+4. Sign in as admin using an allowlisted Stellar wallet.
+5. Create or close a voting round.
+6. Anchor the round result in mock mode or live testnet mode.
+7. Verify a vote receipt against the Merkle root.
+8. Try ticket and collectible flows in mock/testnet mode.
+
+See [`docs/demo/user-flow.md`](docs/demo/user-flow.md) for the longer walkthrough.
+
+## Security posture
+
+The mainline includes an MVP security hardening pass that is appropriate for a hackathon/testnet demo, not production use.
+
+Current hardening includes:
+
+- server-side wallet-signed admin sessions;
+- httpOnly admin session cookies;
+- server-side checks on sensitive admin routes;
+- short-lived transaction intents for signed XDR confirmation;
+- live-mode rejection for direct mock mint endpoints;
+- faucet rate/amount limits;
+- dependency audit cleanup;
+- committed-secret smoke tests;
+- removal of local/generated artifacts from version control.
+
+Known limitations:
+
+- fan/user wallet sessions are not yet cryptographically enforced server-side across all flows;
+- payment and mint are not fully atomic yet;
+- in-memory challenges, sessions, rate limits, and transaction intents are demo/server-singleton only;
+- contract IDs and live-mode configuration need final testnet validation before presenting live Stellar flows;
+- a deeper external review is required before any mainnet, real-money, or real voter-data usage.
+
+See [`SECURITY.md`](SECURITY.md) and [`docs/security/security-audit.md`](docs/security/security-audit.md).
+
+## CI and local validation
+
+Run these before pushing or asking for review:
+
+```bash
+cd web
+npm ci
+npm audit --audit-level=moderate
+npm audit --audit-level=moderate --omit=dev
+npm run typecheck
+npm run test:merkle
+```
+
+```bash
+cd contracts
+cargo fmt --all -- --check
+cargo test --workspace --locked
+cargo audit
+```
+
+Optional advisory visibility check:
+
+```bash
+cd contracts
+cargo audit --deny warnings
+```
+
+GitHub Actions run checks that avoid requiring special repository permissions. CodeQL is best-effort because this repository may not have GitHub Code Scanning/GitHub Advanced Security enabled.
+
+## Useful docs
+
+| Document | Purpose |
+|---|---|
+| [`docs/README.md`](docs/README.md) | Documentation map |
+| [`docs/overview/hackathon-pitch.md`](docs/overview/hackathon-pitch.md) | Hackathon/project narrative |
+| [`docs/architecture/current-platform.md`](docs/architecture/current-platform.md) | Current mainline architecture |
+| [`docs/features/voting.md`](docs/features/voting.md) | Voting flow and constraints |
+| [`docs/features/ticketing.md`](docs/features/ticketing.md) | Ticketing flow and anti-scalping framing |
+| [`docs/features/verification.md`](docs/features/verification.md) | Audit/proof verification flow |
+| [`docs/blockchain/stellar-soroban.md`](docs/blockchain/stellar-soroban.md) | Stellar/Soroban integration notes |
+| [`docs/blockchain/transaction-verification.md`](docs/blockchain/transaction-verification.md) | How transaction/proof verification should be presented |
+| [`docs/setup/supabase.md`](docs/setup/supabase.md) | Supabase/Postgres setup |
+| [`docs/security/security-audit.md`](docs/security/security-audit.md) | Security audit notes and remaining risks |
+
+## MVP boundaries
+
+CrownFi should be presented as:
+
+> A scalable off-chain voting MVP with Stellar-anchored audit proofs, Stellar/Soroban ticket and collectible primitives, and testnet/mock payment flows.
+
+CrownFi should **not** be presented as:
+
+- a production voting authority;
+- a mainnet-ready financial application;
+- a system where Stellar directly processes every vote;
+- a complete replacement for legal tabulation, identity verification, or event ticketing compliance.
+
+Keep demos on testnet/mock mode until the remaining production risks are addressed.
