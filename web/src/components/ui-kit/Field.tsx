@@ -43,7 +43,7 @@ export function TextField({ id, label, helper, error, className, ...props }: Tex
         aria-describedby={hintId}
         aria-invalid={Boolean(error)}
         className={cn(
-          "w-full rounded-2xl border bg-black/60 px-4 py-2.5 text-sm text-white placeholder:text-gold-soft/30 outline-none transition-all duration-300 ease-in-out focus:rounded-xl focus:border-gold focus:ring-2 focus:ring-gold/20",
+          "w-full rounded-2xl border bg-white/60 dark:bg-black/60 px-4 py-2.5 text-sm text-ink dark:text-white placeholder:text-ink/40 dark:placeholder:text-gold-soft/30 outline-none transition-all duration-300 ease-in-out focus:rounded-xl focus:border-gold focus:ring-2 focus:ring-gold/20",
           error ? "border-ruby" : "border-gold/20",
           className,
         )}
@@ -70,7 +70,7 @@ export function SelectField({ id, label, helper, error, className, children, ...
           aria-describedby={hintId}
           aria-invalid={Boolean(error)}
           className={cn(
-            "w-full appearance-none rounded-2xl border bg-black/60 pl-4 pr-10 py-2.5 text-sm text-white outline-none transition-all duration-300 ease-in-out focus:rounded-xl focus:border-gold focus:ring-2 focus:ring-gold/20",
+            "w-full appearance-none rounded-2xl border bg-white/60 dark:bg-black/60 pl-4 pr-10 py-2.5 text-sm text-ink dark:text-white outline-none transition-all duration-300 ease-in-out focus:rounded-xl focus:border-gold focus:ring-2 focus:ring-gold/20",
             error ? "border-ruby" : "border-gold/20",
             className,
           )}
