@@ -17,7 +17,7 @@ export function FeatureCard({ title, description, iconName, className }: Feature
   return (
     <div
       className={cn(
-        "group rounded-2xl border border-gold/15 bg-black/40 p-6 shadow-[0_10px_30px_rgba(0,0,0,0.6)] backdrop-blur-xl transition-all duration-300 hover:border-gold/45 hover:shadow-[0_15px_40px_rgba(212,175,55,0.12)] hover:-translate-y-0.5",
+        "group rounded-2xl border border-gold/15 bg-white/60 dark:bg-black/40 p-6 shadow-xl shadow-black/5 dark:shadow-black/60 backdrop-blur-xl transition-all duration-300 hover:border-gold/45 hover:shadow-2xl hover:shadow-gold/10 dark:hover:shadow-gold/10 hover:-translate-y-0.5",
         className
       )}
     >
@@ -28,10 +28,10 @@ export function FeatureCard({ title, description, iconName, className }: Feature
           <span className="text-gold">✦</span>
         )}
       </div>
-      <h3 className="font-display text-lg font-semibold text-white group-hover:text-gold-soft transition-colors duration-300">
+      <h3 className="font-display text-lg font-semibold text-ink dark:text-white group-hover:text-gold-soft transition-colors duration-300">
         {title}
       </h3>
-      <p className="mt-2 text-xs leading-5 text-gold-soft/50 group-hover:text-gold-soft/75 transition-colors duration-300">
+      <p className="mt-2 text-xs leading-5 text-ink/60 dark:text-gold-soft/50 group-hover:text-ink/80 dark:group-hover:text-gold-soft/75 transition-colors duration-300">
         {description}
       </p>
     </div>

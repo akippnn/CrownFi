@@ -13,8 +13,8 @@ export function SectionHeader({ eyebrow, title, description, className }: { eyeb
   return (
     <div className={cn("mb-6", className)}>
       {eyebrow && <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-gold">{eyebrow}</div>}
-      <h2 className="font-display text-3xl font-semibold text-white sm:text-4xl">{title}</h2>
-      {description && <p className="mt-2 max-w-2xl text-sm leading-6 text-gold-soft/60">{description}</p>}
+      <h2 className="font-display text-3xl font-semibold text-ink dark:text-white sm:text-4xl">{title}</h2>
+      {description && <p className={cn("mt-2 max-w-2xl text-sm leading-6 text-ink/60 dark:text-gold-soft/60", className?.includes("text-center") && "mx-auto")}>{description}</p>}
     </div>
   );
 }
@@ -22,8 +22,8 @@ export function SectionHeader({ eyebrow, title, description, className }: { eyeb
 export function EmptyState({ title, description, action, className }: { title: string; description?: string; action?: ReactNode; className?: string }) {
   return (
     <div className={cn("rounded-2xl border border-dashed border-line bg-black/40 px-5 py-8 text-center", className)}>
-      <h3 className="font-display text-xl font-semibold text-white">{title}</h3>
-      {description && <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-gold-soft/50">{description}</p>}
+      <h3 className="font-display text-xl font-semibold text-ink dark:text-white">{title}</h3>
+      {description && <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-ink/50 dark:text-gold-soft/50">{description}</p>}
       {action && <div className="mt-5 flex justify-center">{action}</div>}
     </div>
   );

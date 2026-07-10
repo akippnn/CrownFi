@@ -25,7 +25,7 @@ export function CardHeader({ children, className, ...props }: HTMLAttributes<HTM
 
 export function CardTitle({ children, className, ...props }: HTMLAttributes<HTMLHeadingElement> & { children: ReactNode }) {
   return (
-    <h3 className={cn("font-display text-xl font-semibold text-white", className)} {...props}>
+    <h3 className={cn("font-display text-xl font-semibold text-ink dark:text-white", className)} {...props}>
       {children}
     </h3>
   );
@@ -33,7 +33,7 @@ export function CardTitle({ children, className, ...props }: HTMLAttributes<HTML
 
 export function CardDescription({ children, className, ...props }: HTMLAttributes<HTMLParagraphElement> & { children: ReactNode }) {
   return (
-    <p className={cn("text-sm leading-6 text-gold-soft/50", className)} {...props}>
+    <p className={cn("text-sm leading-6 text-ink/60 dark:text-gold-soft/50", className)} {...props}>
       {children}
     </p>
   );

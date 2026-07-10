@@ -27,7 +27,7 @@ export function OrnatePortrait({
   return (
     <div
       className={cn(
-        "group relative flex flex-col justify-between rounded-xl border border-gold/20 bg-[#0c0c0e]/90 p-3 text-center transition-all duration-300 hover:border-gold hover:shadow-[0_8px_30px_rgba(212,175,55,0.18)] hover:-translate-y-1",
+        "group relative flex flex-col justify-between rounded-xl border border-gold/45 dark:border-gold/20 bg-white dark:bg-[#0c0c0e] p-3 text-center shadow-lg shadow-black/5 dark:shadow-none transition-all duration-300 hover:border-gold hover:shadow-[0_8px_30px_rgba(212,175,55,0.18)]",
         className
       )}
     >
@@ -78,12 +78,12 @@ export function OrnatePortrait({
       {/* Profile Details Container */}
       <div className="mt-3.5 px-1 pb-1">
         {/* Name in elegant display font */}
-        <h4 className="truncate font-display text-base font-semibold text-white group-hover:text-gold-soft transition-colors duration-300 leading-tight">
+        <h4 className="truncate font-display text-base font-semibold text-ink dark:text-white group-hover:text-gold transition-colors duration-300 leading-tight">
           {name}
         </h4>
         
         {/* Country text */}
-        <p className="text-[11px] uppercase tracking-wider text-gold-soft/50 font-medium mt-1 mb-3.5">
+        <p className="text-[11px] uppercase tracking-wider text-ink/50 dark:text-gold-soft/50 font-medium mt-1 mb-3.5">
           {country}
         </p>
 
@@ -91,7 +91,7 @@ export function OrnatePortrait({
         <Button
           onClick={onVote}
           variant="secondary"
-          className="w-full min-h-9 !py-1 text-xs font-semibold tracking-widest uppercase border border-gold/25 text-gold-soft hover:bg-gold hover:text-black hover:border-gold active:scale-95 transition-all duration-200"
+          className="w-full"
         >
           Vote
         </Button>
