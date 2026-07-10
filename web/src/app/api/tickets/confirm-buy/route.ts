@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   if (!fan.walletAddress) return NextResponse.json({ error: "no_wallet" }, { status: 400 });
 
   const priceUsdc = (TICKET_TIERS as any)[tier].priceUsdc as number;
-  const seat = `GA-${Math.floor(Math.random() * 900 + 100)}`;
+  const seat = body?.seat ? String(body.seat) : "Unassigned";
 
   try {
     const intent = consumeTxIntent(intentId);
