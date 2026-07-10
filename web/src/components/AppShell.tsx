@@ -41,7 +41,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Icons.Menu size={18} strokeWidth={1.75} />
             </button>
             <Link href="/" className="flex items-center gap-2">
-              <img src="/assets/brand/crownfi_log_crown-chain_gold_transparency-fixed.png" alt="CrownFi Logo" className="h-6 w-6 object-contain" />
+              <img src="/assets/brand/crownfi_log_crown-chain_gold_transparency-fixed.webp" alt="CrownFi Logo" className="h-6 w-6 object-contain" />
               <span className="font-display text-xl font-semibold tracking-wide text-gold">CrownFi</span>
             </Link>
           </div>
@@ -126,7 +126,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="absolute inset-0 bg-black/60" onClick={() => setDrawer(false)} />
           <div className="absolute left-0 top-0 h-full w-72 border-r border-line bg-black/95 p-5">
             <div className="mb-6 flex items-center gap-2">
-              <img src="/assets/brand/crownfi_log_crown-chain_gold_transparency-fixed.png" alt="CrownFi Logo" className="h-6 w-6 object-contain" />
+              <img src="/assets/brand/crownfi_log_crown-chain_gold_transparency-fixed.webp" alt="CrownFi Logo" className="h-6 w-6 object-contain" />
               <span className="font-display text-xl font-semibold text-gold">CrownFi</span>
             </div>
             <nav className="grid gap-1">
