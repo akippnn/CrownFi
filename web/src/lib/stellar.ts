@@ -304,8 +304,7 @@ export async function buildXlmBuyTx(params: {
     .setTimeout(180)
     .build();
 
-  const prepared = await srv.prepareTransaction(tx);
-  return { xdr: prepared.toXDR(), txHash: Buffer.from(prepared.hash()).toString("hex") };
+  return { xdr: tx.toXDR(), txHash: Buffer.from(tx.hash()).toString("hex") };
 }
 
 // STEP 1 of a purchase: build an UNSIGNED transaction for the buyer to approve in Freighter.
