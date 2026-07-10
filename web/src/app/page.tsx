@@ -152,8 +152,8 @@ export default function Home() {
               <div>
                 <div className="text-[10px] text-ink/55 dark:text-gold-soft/50 uppercase tracking-widest">Network</div>
                 <div className="text-xs font-semibold text-ink dark:text-white mt-0.5 flex items-center gap-1">
-                  <span className={`w-1.5 h-1.5 rounded-full ${activeDelegate?.sash.toUpperCase() === 'PH' ? 'bg-emerald' : 'bg-blue-400'}`}></span>
-                  {activeDelegate?.sash.toUpperCase() === 'PH' ? 'Stellar Public' : 'Stellar Testnet'}
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+                  {process.env.NEXT_PUBLIC_STELLAR_NETWORK && (process.env.NEXT_PUBLIC_STELLAR_NETWORK.toLowerCase() === 'public' || process.env.NEXT_PUBLIC_STELLAR_NETWORK.toLowerCase() === 'mainnet') ? 'Stellar Public' : 'Stellar Testnet'}
                 </div>
               </div>
               <div>
