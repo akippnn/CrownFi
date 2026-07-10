@@ -55,3 +55,17 @@ cargo test
 ```
 
 Then copy the printed contract ids into `web/.env` and set `STELLAR_MODE=live`.
+
+### Guided Testnet setup
+
+For a first-time Testnet deployment, use the interactive setup script from the repository root:
+
+```bash
+./contracts/scripts/setup-testnet-freighter.sh
+```
+
+It creates/funds Testnet-only identities, deploys all five CrownFi contracts (including the demo
+USDC token), registers ticket listings, and writes the Stellar contract IDs and platform secret to
+`web/.env` without displaying that secret. It then offers to bootstrap the database and collectible
+listings when `DATABASE_URL` has been configured. See the script's on-screen instructions before
+importing the Testnet admin key into Freighter.
