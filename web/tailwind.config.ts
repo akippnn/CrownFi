@@ -6,16 +6,28 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Ink (primary text) and navy for headings.
-        ink: "#23252f",
-        navy: { DEFAULT: "#1a1f35", 2: "#2a2f52" },
-        // Gold accent. Use `gold` for fills, `gold-ink` for gold TEXT on white (contrast-safe).
-        gold: { DEFAULT: "#d4af37", soft: "#e6cf8f", deep: "#b8912f", ink: "#a97f16" },
-        // Warm off-white surfaces + borders.
-        cream: "#faf7ef",
-        line: "#e7e2d3",
-        emerald: { DEFAULT: "#10b981", ink: "#0f6e56", soft: "#e1f5ee" },
-        ruby: { DEFAULT: "#e11d48", soft: "#fbe9ef" },
+        ink: "rgba(var(--text-ink), <alpha-value>)",
+        navy: {
+          DEFAULT: "var(--bg-navy)",
+          2: "var(--bg-navy-2)",
+        },
+        gold: {
+          DEFAULT: "#d4af37",
+          soft: "rgba(var(--color-gold-soft), <alpha-value>)",
+          deep: "#b8912f",
+          ink: "var(--color-gold-ink)",
+        },
+        cream: "rgba(var(--bg-cream), <alpha-value>)",
+        line: "var(--color-line)",
+        emerald: {
+          DEFAULT: "#10b981",
+          ink: "var(--color-emerald-ink)",
+          soft: "var(--color-emerald-soft)",
+        },
+        ruby: {
+          DEFAULT: "var(--color-ruby)",
+          soft: "var(--color-ruby-soft)",
+        },
       },
       fontFamily: {
         display: ["var(--font-display)", "Georgia", "serif"],

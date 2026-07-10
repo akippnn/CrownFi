@@ -3,8 +3,11 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useSession } from "@/session/SessionProvider";
 import { Toast } from "@/components/ui";
+import { Badge, ConfirmModal } from "@/components/ui-kit";
+import { short } from "@/lib/format";
 import { getJson, postJson } from "@/lib/api";
 import { signWithFreighter } from "@/wallet/freighter";
+import { testnetTransactionUrl } from "@/lib/stellarExplorer";
 import { TIER_LIST } from "@/lib/tiers";
 import { TicketHero } from "@/components/tickets/TicketHero";
 import { TicketTierSelector } from "@/components/tickets/TicketTierSelector";
@@ -28,6 +31,8 @@ function TicketsPageInner() {
   const [balance, setBalance] = useState<number | null>(null);
   const [toast, setToast] = useState({ msg: "", tone: "ok" as "ok" | "err" });
   const [lastTicketId, setLastTicketId] = useState<string | null>(null);
+  const [lastTransaction, setLastTransaction] = useState<{ paymentTx: string; mintTx: string } | null>(null);
+  const [reviewingPurchase, setReviewingPurchase] = useState(false);
 
   const [assigningTicket, setAssigningTicket] = useState<Ticket | null>(null);
   const [chosenSeat, setChosenSeat] = useState<SeatSelection | null>(null);
@@ -120,6 +125,7 @@ function TicketsPageInner() {
           setAssigningTicket(newTicket);
         }
         flash("Ticket minted! Please choose your seat.", "ok");
+        setReviewingPurchase(false);
         return;
       }
 
@@ -139,7 +145,9 @@ function TicketsPageInner() {
         setLastTicketId(newTicket.id);
         setAssigningTicket(newTicket);
       }
+      setLastTransaction({ paymentTx: (conf.data as any).paymentTx, mintTx: (conf.data as any).mintTx });
       flash(`Paid ${(prep.data as any).priceUsdc} USDC on-chain — ticket minted! Please choose your seat.`, "ok");
+      setReviewingPurchase(false);
     } catch (e: any) {
       const m = String(e?.message ?? "");
       flash(m.includes("balance") || m.includes("trustline") ? "Not enough test USDC — click ‘Get test USDC’ first." : `Could not buy: ${m}`, "err");
@@ -151,15 +159,59 @@ function TicketsPageInner() {
   }
 
   const mine = tickets.filter((t) => t.fan.handle === fan?.handle);
+  const selectedTier = TIERS.find((item) => item.name === tier)!;
 
   return (
     <div>
       <TicketHero hasAddress={Boolean(address)} balance={balance} busy={busy} onGetTestUsdc={getTestUsdc} />
       <TicketTierSelector tiers={TIERS} selectedTier={tier} onSelectTier={handleTierChange} />
-      <TicketCheckoutPanel busy={busy} fanConnected={Boolean(fan)} tier={tier} onBuy={buy} />
+      <TicketCheckoutPanel busy={busy} fanConnected={Boolean(fan)} tier={tier} price={selectedTier.price} onBuy={() => setReviewingPurchase(true)} />
       <TicketSuccessBanner ticketId={lastTicketId} onDismiss={() => setLastTicketId(null)} />
+      {lastTransaction && (
+        <div className="mb-6 rounded-2xl border border-emerald/30 bg-emerald/10 p-4 text-sm text-gold-soft">
+          <div className="font-semibold text-white">Confirmed on Stellar Testnet</div>
+          <p className="mt-1 text-gold-soft/65">Your payment and CrownFi ticket mint are separate on-chain transactions.</p>
+          <div className="mt-3 flex flex-wrap gap-3">
+            {testnetTransactionUrl(lastTransaction.paymentTx) && <a className="font-semibold text-gold underline underline-offset-2" href={testnetTransactionUrl(lastTransaction.paymentTx)!} target="_blank" rel="noopener noreferrer">View payment</a>}
+            {testnetTransactionUrl(lastTransaction.mintTx) && <a className="font-semibold text-gold underline underline-offset-2" href={testnetTransactionUrl(lastTransaction.mintTx)!} target="_blank" rel="noopener noreferrer">View ticket mint</a>}
+          </div>
+        </div>
+      )}
       <TicketList tickets={mine} onChooseSeat={(ticket) => { setAssigningTicket(ticket); setChosenSeat(null); }} />
       <TicketDemoLinks />
+      <ConfirmModal
+        open={reviewingPurchase}
+        onClose={() => setReviewingPurchase(false)}
+        onConfirm={buy}
+        title={`Buy a ${tier} ticket`}
+        description="Review the event pass before Freighter opens for payment."
+        confirmLabel={`Pay ${selectedTier.price} USDC`}
+        pendingLabel="Confirm in wallet…"
+        pending={busy}
+      >
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-gold/25 bg-gold/10 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <Badge tone="gold">{tier} tier</Badge>
+                <h3 className="mt-3 font-display text-2xl font-semibold text-white">Coronation Night 2026</h3>
+                <p className="mt-1 text-sm text-gold-soft/50">{selectedTier.perks}</p>
+              </div>
+              <div className="text-right">
+                <div className="text-[11px] uppercase tracking-[0.16em] text-gold-soft/40">Total</div>
+                <div className="mt-1 font-display text-3xl font-semibold text-gold">{selectedTier.price} USDC</div>
+              </div>
+            </div>
+          </div>
+          <dl className="space-y-2 rounded-2xl border border-line bg-black/25 p-4 text-sm">
+            <div className="flex justify-between gap-4"><dt className="text-gold-soft/45">Wallet</dt><dd className="mono text-xs text-gold-soft">{address ? short(address, 8) : "Not connected"}</dd></div>
+            <div className="flex justify-between gap-4"><dt className="text-gold-soft/45">Seat</dt><dd className="text-gold-soft">Selected after purchase</dd></div>
+            <div className="flex justify-between gap-4"><dt className="text-gold-soft/45">Network</dt><dd className="text-gold-soft">Stellar testnet or local demo</dd></div>
+          </dl>
+          {balance != null && balance < selectedTier.price && <p className="rounded-2xl border border-ruby/30 bg-ruby/10 px-4 py-3 text-sm text-ruby">Your test USDC balance may be too low for this tier.</p>}
+        </div>
+      </ConfirmModal>
+
       <SeatAssignmentModal
         ticket={assigningTicket}
         selectedSeat={chosenSeat}
