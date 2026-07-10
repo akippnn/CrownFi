@@ -33,7 +33,7 @@ export function SpotlightCarousel({
     return () => clearInterval(t);
   }, [slides.length]);
 
-  if (!slides.length) return <div className="glass p-8 text-center text-[#7a7768]">No contestants yet.</div>;
+  if (!slides.length) return <div className="glass p-8 text-center text-ink/60 dark:text-gold-soft/60">No contestants yet.</div>;
 
   const go = (d: number) => setActive((a) => (a + d + slides.length) % slides.length);
 
@@ -65,8 +65,8 @@ export function SpotlightCarousel({
               <div className={`glass overflow-hidden p-2 ${isCenter ? "shadow-spot" : ""} ${selectedId === s.id ? "ring-2 ring-gold" : ""}`}>
                 <Portrait id={s.id} name={s.name} sash={s.sash} />
                 <div className="px-1 pb-1 pt-3 text-center">
-                  <div className="truncate font-display text-lg font-semibold text-[#23252f]">{s.name}</div>
-                  <div className="text-xs text-[#6f6c5f]">{flag(s.sash)} {s.country}</div>
+                  <div className="truncate font-display text-lg font-semibold text-ink dark:text-white">{s.name}</div>
+                  <div className="text-xs text-ink/65 dark:text-gold-soft/65">{flag(s.sash)} {s.country}</div>
                   {isCenter && (
                     <span className="mt-2 inline-block rounded-full bg-gradient-to-b from-gold to-gold-deep px-3 py-1 text-xs font-semibold text-ink">
                       {selectedId === s.id ? "Selected" : cta}
@@ -87,7 +87,7 @@ export function SpotlightCarousel({
               key={i}
               onClick={() => setActive(i)}
               aria-label={`Go to ${i + 1}`}
-              className={`h-1.5 rounded-full transition-all ${i === active ? "w-6 bg-gold" : "w-1.5 bg-white/25"}`}
+              className={`h-1.5 rounded-full transition-all ${i === active ? "w-6 bg-gold" : "w-1.5 bg-gold/25 dark:bg-white/25"}`}
             />
           ))}
         </div>
