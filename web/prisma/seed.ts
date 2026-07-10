@@ -2,6 +2,12 @@ import { PrismaClient } from "@prisma/client";
 const db = new PrismaClient();
 
 async function main() {
+  const count = await db.contestant.count();
+  if (count > 0) {
+    console.log("Database already seeded. Skipping seed.");
+    return;
+  }
+
   await db.collectible.deleteMany();
   await db.contestant.deleteMany();
   await db.votingRound.deleteMany();
