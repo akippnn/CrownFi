@@ -1,3 +1,5 @@
+import { WalletCards } from "lucide-react";
+import { Button, Card, CardContent, SectionHeader } from "@/components/ui-kit";
 import { TICKETING_COPY } from "@/lib/tickets/ticketCopy";
 
 type TicketHeroProps = {
@@ -10,21 +12,25 @@ type TicketHeroProps = {
 export function TicketHero({ hasAddress, balance, busy, onGetTestUsdc }: TicketHeroProps) {
   return (
     <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
-      <div>
-        <div className="eyebrow mb-2">{TICKETING_COPY.heroEyebrow}</div>
-        <h1 className="font-display text-4xl font-semibold text-ink dark:text-white">{TICKETING_COPY.heroTitle}</h1>
-        <p className="mt-2 text-sm text-ink/75 dark:text-gold-soft/75">
-          Pay in <b>USDC</b>, and each ticket is a verifiable digital pass with a tier and seat. Programmable controls can reduce counterfeits and resale abuse, but they do not fully eliminate off-platform scalping. <span className="tag-on ml-1">{TICKETING_COPY.onChainTag}</span>
-        </p>
-      </div>
+      <SectionHeader
+        className="mb-0"
+        eyebrow={TICKETING_COPY.heroEyebrow}
+        title={TICKETING_COPY.heroTitle}
+        description="Choose a ticket tier, pay with test USDC, and receive a verifiable digital pass with a seat. Programmable controls reduce counterfeit and resale abuse, but cannot eliminate off-platform scalping."
+      />
       {hasAddress && (
-        <div className="glass px-4 py-3 text-right">
-          <div className="text-xs uppercase tracking-wider text-ink/55 dark:text-gold-soft/50">{TICKETING_COPY.testUsdcLabel}</div>
-          <div className="font-display text-2xl font-semibold text-[#b8912f]">{balance == null ? "…" : balance.toFixed(2)}</div>
-          <button className="btn-ghost mt-2 !px-3 !py-1.5 text-xs" disabled={busy} onClick={onGetTestUsdc}>
-            {TICKETING_COPY.testUsdcButton}
-          </button>
-        </div>
+        <Card className="min-w-52">
+          <CardContent className="flex items-center justify-between gap-4 pt-5">
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gold-soft/40">{TICKETING_COPY.testUsdcLabel}</div>
+              <div className="mt-1 font-display text-3xl font-semibold text-gold">{balance == null ? "…" : balance.toFixed(2)}</div>
+            </div>
+            <Button size="sm" variant="secondary" disabled={busy} onClick={onGetTestUsdc}>
+              <WalletCards size={15} />
+              {TICKETING_COPY.testUsdcButton}
+            </Button>
+          </CardContent>
+        </Card>
       )}
     </div>
   );

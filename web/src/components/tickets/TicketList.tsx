@@ -1,72 +1,55 @@
-import Link from "next/link";
+import { Armchair, QrCode } from "lucide-react";
+import { Badge, Button, ButtonLink, Card, CardContent, EmptyState } from "@/components/ui-kit";
 import { short } from "@/lib/format";
 import { ticketSeatLabel } from "@/lib/tickets/seat";
 import { TICKETING_COPY } from "@/lib/tickets/ticketCopy";
 import type { Ticket } from "./types";
-import { TicketStatusBadge } from "./TicketStatusBadge";
 
-type TicketListProps = {
-  tickets: Ticket[];
-  onChooseSeat: (ticket: Ticket) => void;
-};
+type TicketListProps = { tickets: Ticket[]; onChooseSeat: (ticket: Ticket) => void };
 
 export function TicketList({ tickets, onChooseSeat }: TicketListProps) {
-  if (tickets.length === 0) return null;
-
   return (
-    <div className="mt-10">
-      <h2 className="mb-3 font-display text-2xl text-ink dark:text-white">{TICKETING_COPY.ticketsHeading}</h2>
-      <div className="grid gap-3 sm:grid-cols-2">
-        {tickets.map((t) => (
-          <div key={t.id} className="glass overflow-hidden flex flex-col justify-between">
-            <div className="flex items-stretch h-full">
-              <div className="grid w-24 shrink-0 place-items-center bg-gradient-to-b from-[#d4af37] to-[#b8912f] text-black">
-                <div className="text-center px-1">
-                  <div className="font-display text-lg font-bold">{t.tier}</div>
-                  <div className="text-[10px] tracking-wider opacity-75">SEAT</div>
-                  <div className="text-xs font-semibold uppercase truncate">{ticketSeatLabel(t.seat)}</div>
+    <section className="mt-10" aria-labelledby="owned-tickets-heading">
+      <h2 id="owned-tickets-heading" className="mb-3 font-display text-2xl font-semibold text-white">{TICKETING_COPY.ticketsHeading}</h2>
+      {tickets.length === 0 ? (
+        <EmptyState title="You do not own any tickets yet" description="Choose a tier above to mint your first CrownFi event pass." />
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2">
+          {tickets.map((ticket) => (
+            <Card key={ticket.id} className="overflow-hidden">
+              <div className="grid min-h-56 grid-cols-[92px_1fr]">
+                <div className="flex flex-col items-center justify-center bg-gradient-to-b from-[#f3e5ab] via-gold to-gold-deep px-2 text-center text-black">
+                  <div className="font-display text-lg font-bold">{ticket.tier}</div>
+                  <div className="mt-4 text-[10px] font-semibold uppercase tracking-[0.18em] opacity-60">Seat</div>
+                  <div className="mt-1 text-sm font-bold uppercase">{ticketSeatLabel(ticket.seat)}</div>
                 </div>
-              </div>
-              <div className="flex-1 p-4 flex flex-col justify-between">
-                <div>
-                  <div className="font-medium text-ink dark:text-white">{t.eventName}</div>
-                  <div className="text-xs text-ink/60 dark:text-gold-soft/60">{t.priceUsdc} USDC</div>
-                  <div className="mt-2 text-xs font-semibold">
-                    {t.seat === "Unassigned" ? (
-                      <span className="text-amber-600 dark:text-amber-500">Seat: Not selected yet</span>
-                    ) : (
-                      <span className="text-emerald dark:text-emerald-ink">Seat: {t.seat}</span>
-                    )}
+                <CardContent className="flex flex-col justify-between pt-5">
+                  <div>
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <h3 className="font-display text-xl font-semibold text-white">{ticket.eventName}</h3>
+                        <p className="mt-1 text-sm text-gold-soft/45">{ticket.priceUsdc} USDC</p>
+                      </div>
+                      <Badge tone={ticket.status === "redeemed" ? "danger" : "success"}>{ticket.status || "minted"}</Badge>
+                    </div>
+                    <div className="mt-4 flex items-center gap-2 text-sm text-gold-soft/60">
+                      <Armchair size={16} className="text-gold" />
+                      {ticket.seat === "Unassigned" ? "Seat not selected" : `Seat ${ticket.seat}`}
+                    </div>
+                    {ticket.tokenId && <div className="mono mt-3 text-[11px] text-emerald">Token {short(ticket.tokenId, 7)}</div>}
                   </div>
-                  {t.tokenId && <div className="mono mt-2 text-[11px] text-emerald font-semibold">NFT {short(t.tokenId, 6)}</div>}
-                </div>
-                <div className="mt-4 flex flex-wrap items-center justify-between border-t border-line pt-3 gap-2">
-                  <TicketStatusBadge status={t.status} />
-                  <div className="flex items-center gap-2">
-                    {t.seat === "Unassigned" ? (
-                      <button onClick={() => onChooseSeat(t)} className="btn-gold !px-3 !py-1 text-xs font-semibold">
-                        Choose Seat
-                      </button>
-                    ) : (
-                      <>
-                        <button
-                          onClick={() => onChooseSeat(t)}
-                          className="text-xs text-[#b8912f] underline hover:text-[#a97f16] font-semibold"
-                        >
-                          Change Seat
-                        </button>
-                        <Link href={`/tickets/${t.id}`} className="btn-ghost !px-3 !py-1 text-xs font-semibold !rounded-full">
-                          Claim Voucher
-                        </Link>
-                      </>
-                    )}
+                  <div className="mt-5 flex flex-wrap gap-2 border-t border-line pt-4">
+                    <Button size="sm" variant={ticket.seat === "Unassigned" ? "primary" : "secondary"} onClick={() => onChooseSeat(ticket)}>
+                      <Armchair size={15} /> {ticket.seat === "Unassigned" ? "Choose seat" : "Change seat"}
+                    </Button>
+                    {ticket.seat !== "Unassigned" && <ButtonLink href={`/tickets/${ticket.id}`} size="sm" variant="ghost"><QrCode size={15} /> Claim voucher</ButtonLink>}
                   </div>
-                </div>
+                </CardContent>
               </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
+            </Card>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
