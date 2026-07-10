@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid_address" }, { status: 400 });
 
   const amountUsdc = Number(body?.amountUsdc ?? 50);
-  if (!Number.isFinite(amountUsdc) || amountUsdc <= 0 || amountUsdc > 100)
+  if (!Number.isFinite(amountUsdc) || amountUsdc <= 0 || amountUsdc > 500)
     return NextResponse.json({ error: "invalid_amount" }, { status: 400 });
   try {
     const res = await mintTestUsdc({ toAddress: walletAddress, amountUsdc });
