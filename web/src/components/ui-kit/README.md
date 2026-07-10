@@ -14,8 +14,9 @@ This folder is the starting point for the upcoming UI/UX remake. It intentionall
 - `Button` / `ButtonLink`
 - `Badge` / `StatusBadge`
 - `Card` + card subcomponents
-- `TextField` / `SelectField`
+- `TextField` / `SelectField` / `TextareaField`
 - `PageSection`, `SectionHeader`, `EmptyState`
+- `Modal` / `ConfirmModal`
 
 ## Rules
 
