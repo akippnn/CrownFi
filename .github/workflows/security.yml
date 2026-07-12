@@ -101,25 +101,4 @@ jobs:
         with:
           persist-credentials: false
       - name: Look for high-risk committed secrets
-        run: |
-          set -euo pipefail
-          STELLAR_SECRET_RE='(^|[^A-Z2-7])S[A-Z2-7]{55}([^A-Z2-7]|$)'
-          DB_URL_RE='postgresql://[^[:space:]]+:[^<][^@[:space:]]+@'
-
-          if git grep -n -I -E "$STELLAR_SECRET_RE" -- \
-            . \
-            ':!contracts/DEPLOY_GUIDE.md' \
-            ':!web/.env.example' \
-            ':!.github/workflows/*'; then
-            echo "Potential Stellar secret key committed." >&2
-            exit 1
-          fi
-
-          if git grep -n -I -E "$DB_URL_RE" -- \
-            . \
-            ':!SUPABASE.md' \
-            ':!web/.env.example' \
-            ':!.github/workflows/*'; then
-            echo "Potential database URL with real password committed." >&2
-            exit 1
-          fi
+        run: python3 scripts/secret-smoke-test.py
