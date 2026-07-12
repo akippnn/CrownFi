@@ -27,6 +27,9 @@ export async function GET() {
 
 // Mock/dev purchase path only. Live purchases must use prepare-buy -> Freighter -> confirm-buy.
 export async function POST(req: NextRequest) {
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json({ error: "mock_disabled_in_production" }, { status: 403 });
+  }
   if (LIVE) return NextResponse.json({ error: "use_prepare_confirm_flow" }, { status: 409 });
 
   const body = await req.json().catch(() => null);

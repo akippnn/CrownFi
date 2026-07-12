@@ -15,7 +15,12 @@ export async function POST(req: NextRequest) {
   const listingId = tierListingId(tier);
   if (listingId == null) return NextResponse.json({ error: "unknown_tier" }, { status: 400 });
 
-  if (!LIVE) return NextResponse.json({ mock: true });
+  if (!LIVE) {
+    if (process.env.NODE_ENV === "production") {
+      return NextResponse.json({ error: "mock_disabled_in_production" }, { status: 403 });
+    }
+    return NextResponse.json({ mock: true });
+  }
   if (!buyerAddress.startsWith("G")) return NextResponse.json({ error: "connect_wallet" }, { status: 400 });
 
   try {
