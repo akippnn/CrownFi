@@ -15,7 +15,12 @@ export async function POST(req: NextRequest) {
   const collectible = await db.collectible.findUnique({ where: { id: collectibleId } });
   if (!collectible) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-  if (!LIVE) return NextResponse.json({ mock: true });
+  if (!LIVE) {
+    if (process.env.NODE_ENV === "production") {
+      return NextResponse.json({ error: "mock_disabled_in_production" }, { status: 403 });
+    }
+    return NextResponse.json({ mock: true });
+  }
 
   if (collectible.listingId == null)
     return NextResponse.json({ error: "not_listed" }, { status: 409 });
