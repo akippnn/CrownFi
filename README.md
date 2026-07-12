@@ -59,7 +59,7 @@ Important framing:
 | Wallet | Freighter for Stellar wallet connection/signing; mock/demo session paths still exist |
 | Blockchain | Stellar Testnet + Soroban Rust contracts where `STELLAR_MODE=live` is configured |
 | Contracts | `audit-anchor`, `ticket`, `collectible`, `sale-splitter`, `usdc-test` |
-| CI/security | npm audit, TypeScript, Merkle tests, Rust format/tests/audit, secret smoke test, best-effort CodeQL |
+| CI/security | CodeQL code scanning for JavaScript/TypeScript, Rust, and GitHub Actions; npm audit; TypeScript and Merkle tests; Rust format/tests/audit; secret smoke test |
 
 ## What the app currently does
 
@@ -339,7 +339,7 @@ cd contracts
 cargo audit --deny warnings
 ```
 
-GitHub Actions run checks that avoid requiring special repository permissions. CodeQL is best-effort because this repository may not have GitHub Code Scanning/GitHub Advanced Security enabled.
+The advanced CodeQL workflow runs on pull requests targeting `main`, pushes to `main`, a weekly schedule, and manual dispatch. It analyzes JavaScript/TypeScript, Rust, and GitHub Actions workflows in parallel with the `security-extended` and `security-and-quality` query suites, then uploads results to the repository Security tab. The separate security workflow continues to run dependency, type, test, contract, and committed-secret checks.
 
 ## Useful docs
 
