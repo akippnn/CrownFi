@@ -1,15 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readUsdcBalance } from "@/lib/stellar";
+import { readUsdcBalance, readXlmBalance } from "@/lib/stellar";
 
-// Read a wallet's test-USDC balance (read-only). Returns 0 in mock mode.
+// Read a wallet's test-USDC and native XLM balances (read-only).
 export async function GET(req: NextRequest) {
   const address = (req.nextUrl.searchParams.get("address") ?? "").trim();
-  if (!address.startsWith("G")) return NextResponse.json({ balanceUsdc: 0 });
+  if (!address.startsWith("G")) return NextResponse.json({ balanceUsdc: 0, balanceXlm: 0 });
   try {
-    const balanceUsdc = await readUsdcBalance(address);
-    return NextResponse.json({ balanceUsdc });
+    const [balanceUsdc, balanceXlm] = await Promise.all([
+      readUsdcBalance(address),
+      readXlmBalance(address)
+    ]);
+    return NextResponse.json({ balanceUsdc, balanceXlm });
   } catch (e) {
     console.error("[api/usdc-balance] read failed:", e);
-    return NextResponse.json({ balanceUsdc: 0 });
+    return NextResponse.json({ balanceUsdc: 0, balanceXlm: 0 });
   }
 }

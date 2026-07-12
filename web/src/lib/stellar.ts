@@ -38,9 +38,19 @@ function roundIdToU32(roundId: string): number {
 // Live invocation helper
 // ---------------------------------------------------------------------------
 
+const FALLBACKS: Record<string, string> = {
+  AUDIT_ANCHOR_CONTRACT_ID: "CAC7AX3PFJ5NC43BB5TRWY4QTKLSPBVK3DT5GTLH5N6Y3TIYK5GLOVNV",
+  TICKET_CONTRACT_ID: "CA7M6UH55Z4UBQKBZNZBFFU3PWI3XI3BH46LMHSUINWJHTRG7CYDLH6N",
+  COLLECTIBLE_CONTRACT_ID: "CAZOOO3AUNGKDE6XTQNHETSBJGU33I2OCNREZ63GTUTDRPYBUS2R4LZX",
+  SALE_SPLITTER_CONTRACT_ID: "CATCOIVWAVVXBNLPOXBVN3WQ26UNAVLUVSRYBNQWIII75I5QK4YV2KU3",
+  USDC_TEST_CONTRACT_ID: "CAE2GXXU4BPLRX5DHLFJKUR7AP5ETPIERGTFNCY7PEFCEL5H3G3RG6LW",
+  DEMO_CONTESTANT_PAYOUT: "GCK4VGS6VXHJCUZV3U4ACMKS77NYRWXITTFE6PW5P2DRJV6B7GN34S2J",
+  EVENT_TREASURY_PAYOUT: "GC3PXGAWQWHHV6M6AKR3LSZZ7RNYZXASGNJM7BSU3EMWI5KG2R5QSIY3",
+};
+
 function requireEnv(name: string): string {
-  const v = process.env[name];
-  if (!v) throw new Error(`${name} is required for STELLAR_MODE=live. Set it in web/.env (see DEPLOY.md).`);
+  const v = process.env[name] || FALLBACKS[name];
+  if (!v) throw new Error(`${name} is required. Set it in web/.env (see DEPLOY.md).`);
   return v;
 }
 
@@ -215,21 +225,86 @@ export async function setListing(params: { listingId: number; priceUsdc: number;
 
 // Read a wallet's test-USDC balance (read-only simulation, no signing/fee).
 export async function readUsdcBalance(address: string): Promise<number> {
-  if (MODE !== "live") return 0;
-  const { sdk, srv } = await server();
-  const contractId = requireEnv("USDC_TEST_CONTRACT_ID");
-  // Any existing account works as the simulation source; use the platform account.
-  const platform = sdk.Keypair.fromSecret(requireEnv("STELLAR_PLATFORM_SECRET"));
-  const src = await srv.getAccount(platform.publicKey());
-  const contract = new sdk.Contract(contractId);
-  const tx = new sdk.TransactionBuilder(src, { fee: sdk.BASE_FEE, networkPassphrase: networkPassphrase(sdk.Networks) })
-    .addOperation(contract.call("balance", new sdk.Address(address).toScVal()))
-    .setTimeout(30)
+  if (!address || !address.startsWith("G")) return 0;
+  try {
+    const { sdk, srv } = await server();
+    const contractId = requireEnv("USDC_TEST_CONTRACT_ID");
+    const secret = process.env.STELLAR_PLATFORM_SECRET;
+    let sourcePub: string;
+    if (secret) {
+      sourcePub = sdk.Keypair.fromSecret(secret).publicKey();
+    } else {
+      sourcePub = address;
+    }
+    const src = await srv.getAccount(sourcePub).catch(() => {
+      return new sdk.Account(sourcePub, "0");
+    });
+    const contract = new sdk.Contract(contractId);
+    const tx = new sdk.TransactionBuilder(src, { fee: sdk.BASE_FEE, networkPassphrase: networkPassphrase(sdk.Networks) })
+      .addOperation(contract.call("balance", new sdk.Address(address).toScVal()))
+      .setTimeout(30)
+      .build();
+    const sim = await srv.simulateTransaction(tx);
+    if (sdk.rpc.Api.isSimulationError(sim) || !sim.result) return 0;
+    const raw = sdk.scValToNative(sim.result.retval) as bigint | number;
+    return Number(raw) / 10 ** USDC_DECIMALS;
+  } catch (e) {
+    console.error("[readUsdcBalance] read failed:", e);
+    return 0;
+  }
+}
+
+// Read a wallet's native XLM balance (read-only from Horizon).
+export async function readXlmBalance(address: string): Promise<number> {
+  if (!address || !address.startsWith("G")) return 0;
+  try {
+    const horizonUrl = "https://horizon-testnet.stellar.org";
+    const res = await fetch(`${horizonUrl}/accounts/${address}`);
+    if (res.ok) {
+      const data = await res.json();
+      const nativeBalance = data.balances.find((b: any) => b.asset_type === "native")?.balance;
+      return Number(nativeBalance ?? 0);
+    }
+  } catch (e) {
+    console.error("[readXlmBalance] read failed:", e);
+  }
+  return 0;
+}
+
+// Build an UNSIGNED transaction for the buyer to pay with XLM.
+// Splits the payment 95/5 directly on-chain between the payee and platform treasury.
+export async function buildXlmBuyTx(params: {
+  buyerAddress: string;
+  priceXlm: number;
+  payeeAddress: string;
+}): Promise<{ xdr: string; txHash: string }> {
+  const { sdk, srv, passphrase } = await server();
+  const source = await srv.getAccount(params.buyerAddress);
+  
+  const platformAddress = requireEnv("DEMO_CONTESTANT_PAYOUT");
+  const feeBps = 500; // 5% fee (platform cut)
+  const feeAmount = (params.priceXlm * feeBps) / 10000;
+  const toPayee = params.priceXlm - feeAmount;
+
+  const tx = new sdk.TransactionBuilder(source, { fee: sdk.BASE_FEE, networkPassphrase: passphrase })
+    .addOperation(
+      sdk.Operation.payment({
+        destination: params.payeeAddress,
+        asset: sdk.Asset.native(),
+        amount: toPayee.toFixed(7),
+      })
+    )
+    .addOperation(
+      sdk.Operation.payment({
+        destination: platformAddress,
+        asset: sdk.Asset.native(),
+        amount: feeAmount.toFixed(7),
+      })
+    )
+    .setTimeout(180)
     .build();
-  const sim = await srv.simulateTransaction(tx);
-  if (sdk.rpc.Api.isSimulationError(sim) || !sim.result) return 0;
-  const raw = sdk.scValToNative(sim.result.retval) as bigint | number;
-  return Number(raw) / 10 ** USDC_DECIMALS;
+
+  return { xdr: tx.toXDR(), txHash: Buffer.from(tx.hash()).toString("hex") };
 }
 
 // STEP 1 of a purchase: build an UNSIGNED transaction for the buyer to approve in Freighter.
