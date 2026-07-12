@@ -41,6 +41,7 @@ services:
       sh -c "npm ci &&
       npx prisma generate &&
       npx prisma db push &&
+      npm run seed &&
       npm run dev -- --hostname 0.0.0.0"
     ports:
       - "3001:3000"
