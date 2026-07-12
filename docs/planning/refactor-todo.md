@@ -100,7 +100,7 @@ This document tracks tasks for refactoring CrownFi following the audit of the ti
 - [ ] **CI improvements**
     - Keep GitHub Actions workflows for `npm audit`, TypeScript checks, Merkle tests, Rust format and tests, and `cargo audit` for vulnerabilities.
     - Continue to run `cargo audit --deny warnings` in non-blocking mode to surface transitive advisories.
-    - Keep CodeQL as a best-effort local scan; upgrade to full code scanning when repository permissions allow.
+    - [x] Enable full CodeQL code scanning with uploaded results for JavaScript/TypeScript, Rust, and GitHub Actions.
     - Ensure the dependency hygiene check uses `npm ci --ignore-scripts --no-audit --no-fund` instead of lockfile diffs, to avoid metadata rewriting issues.
 
 - [ ] **Future tasks / Gemini UI redesign**

@@ -14,7 +14,7 @@ Security checks are configured for `main` through GitHub Actions.
 - Short-lived transaction intents for live Stellar/Soroban confirmation flows.
 - Signed XDR source/body-hash validation before recording ticket, collectible, or audit-anchor outcomes.
 - Basic rate limiting for high-risk demo endpoints.
-- CI checks for npm audit, TypeScript, Merkle tests, Rust format/tests/audit, secret smoke tests, and best-effort CodeQL.
+- CI checks for npm audit, TypeScript, Merkle tests, Rust format/tests/audit, secret smoke tests, and active CodeQL code scanning for JavaScript/TypeScript, Rust, and GitHub Actions.
 - Clear testnet/demo framing in docs and README.
 - Docker Compose path for local and VPS-style deployment experiments.
 
