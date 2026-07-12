@@ -1,7 +1,6 @@
 # CrownFi security audit notes
 
 Audit date: 2026-07-06  
-CodeQL enablement update: 2026-07-12
 Scope: `web/` Next.js API routes, wallet/session flow, package supply chain, GitHub Actions security checks, and a source-level review of `contracts/` Soroban contracts.
 
 ## Executive summary
@@ -15,7 +14,7 @@ This pass fixed several high-signal issues that a judge or reviewer could quickl
 - direct mock mint endpoints are blocked in live mode;
 - organizer request review, fan listing, contestant creation, round creation, and round closing are no longer protected only by client UI;
 - npm audit is clean after overriding the vulnerable transitive PostCSS copy;
-- scheduled GitHub Actions run npm audit, TypeScript/Merkle checks, Rust format/test, blocking Rust vulnerability audit, non-blocking Rust advisory reporting, and a secret smoke test; CodeQL advanced setup now uploads JavaScript/TypeScript, Rust, and GitHub Actions findings to GitHub code scanning.
+- scheduled GitHub Actions now run no-GHAS-required security checks: npm audit, TypeScript/Merkle checks, Rust format/test, blocking Rust vulnerability audit, non-blocking Rust advisory reporting, a secret smoke test, and a local CodeQL scan that does not upload to GitHub code scanning.
 
 
 ## Hackathon/VPS deployment posture
@@ -30,7 +29,7 @@ For judging and demos, the intended posture is:
 - server-side admin checks for organizer/tabulator actions;
 - transaction-intent validation for signed XDR confirmation flows;
 - clear mock/testnet labels when flows are not live;
-- baseline CI checks that do not depend on CodeQL, plus uploaded CodeQL code-scanning results now that repository access is enabled.
+- CI checks that work without GitHub Advanced Security.
 
 For a VPS-hosted demo, the minimum expectation is HTTPS in front of the app/API, private Postgres/Redis networking, strong secrets, a dedicated testnet platform wallet, and no real customer data. This remains a testnet MVP and not production voting or real-money infrastructure.
 
@@ -45,7 +44,7 @@ For a VPS-hosted demo, the minimum expectation is HTTPS in front of the app/API,
 | Live-mode direct mint bypass | Fixed | Legacy `POST /api/tickets` and `POST /api/collectibles` now reject in live mode and require prepare/confirm flow. |
 | Faucet abuse | Improved | Added IP rate limiting and capped per-request mint amount. |
 | Local artifacts | Fixed | Removed tracked `.claude/settings.local.json` and `web/tsconfig.tsbuildinfo`; ignored them going forward. |
-| CI/security automation | Updated | Retained scheduled + PR/push dependency, TypeScript/Merkle, Rust, and secret checks; enabled full CodeQL advanced setup with uploaded JavaScript/TypeScript, Rust, and GitHub Actions results. |
+| CI/security automation | Adjusted | Added scheduled + PR/push workflows that work without GitHub Advanced Security: npm audit, TypeScript/Merkle checks, Rust format/test, blocking cargo-audit vulnerability checks, non-blocking Rust advisory reports, secret smoke tests, and local CodeQL with upload disabled. |
 
 ## Verification performed
 
@@ -329,7 +328,7 @@ Future UI redesign work should modify shared components rather than cloning page
 
 ### `.github/workflows/security.yml`
 
-Runs on PR, push to `main`, weekly schedule, and manual dispatch. These baseline dependency, test, contract, and secret checks remain independent of CodeQL so they continue to provide useful failures even if code scanning is temporarily unavailable.
+Runs on PR, push to `main`, weekly schedule, and manual dispatch. It intentionally avoids GitHub Advanced Security-only checks because the current repository does not have Dependency Review / code scanning enabled.
 
 - `npm ci`;
 - `npm audit --audit-level=moderate`;
@@ -343,13 +342,14 @@ Runs on PR, push to `main`, weekly schedule, and manual dispatch. These baseline
 
 ### `.github/workflows/codeql.yml`
 
-Runs CodeQL advanced setup for JavaScript/TypeScript, Rust, and GitHub Actions workflows using parallel matrix jobs and `build-mode: none`. The workflow grants the required `security-events: write` permission, uses the `security-extended` and `security-and-quality` query suites, and uploads findings to the repository Security tab.
+Runs CodeQL for JavaScript/TypeScript with `security-extended` and `security-and-quality` queries using `upload: false`. This keeps the scan runnable in CI without requiring GitHub code scanning to be enabled. Results are visible in the Actions log, not the repository Security tab.
 
-### Repository-security follow-up
+### Deferred repository-security features
 
-CodeQL upload is now enabled. Confirm and configure these supply-chain features separately because CodeQL access does not automatically prove that they are enabled:
+Enable these later when someone with repository settings permission can do it:
 
 - Dependency graph / Dependency Review;
+- GitHub code scanning upload;
 - Dependabot alerts and version/security update PRs.
 
 ## Recommended presentation wording
