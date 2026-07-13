@@ -1,5 +1,6 @@
 use std::{collections::HashMap, time::Duration};
 
+use aws_config::BehaviorVersion;
 use aws_sdk_s3::{
     config::{Credentials, Region},
     presigning::PresigningConfig,
@@ -40,7 +41,7 @@ impl MediaStore {
         let secret_access_key = config.r2_secret_access_key.as_deref()?;
         let bucket = config.r2_bucket.clone()?;
 
-        let shared_config = aws_config::from_env()
+        let shared_config = aws_config::defaults(BehaviorVersion::latest())
             .endpoint_url(endpoint)
             .credentials_provider(Credentials::new(
                 access_key_id,
@@ -62,8 +63,7 @@ impl MediaStore {
             public_base_url: config
                 .r2_public_base_url
                 .as_deref()
-                .map(str::trim_end_matches)
-                .map(ToOwned::to_owned),
+                .map(|base| base.trim_end_matches('/').to_string()),
             upload_ttl: Duration::from_secs(config.r2_upload_ttl_seconds),
             max_object_bytes: config.r2_max_image_bytes,
         })
