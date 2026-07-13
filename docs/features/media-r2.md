@@ -30,9 +30,11 @@ KYC identity documents, selfies, proof-of-address images, and other regulated id
 4. The API returns a short-lived presigned R2 `PUT` request and its required headers.
 5. The client uploads directly to R2; application servers do not proxy normal image bytes.
 6. The client calls the completion endpoint.
-7. The API performs `HeadObject` and compares the stored length, content type, and `sha256` metadata with PostgreSQL.
+7. The API performs `HeadObject` to compare length, content type, and metadata, then streams the stored object through the server to calculate the actual SHA-256 before marking it ready.
 8. Matching objects become `ready`; mismatches become `failed` and are removed when possible.
 9. A ready asset can be attached to a contestant as a portrait, banner, gallery item, or section image.
+
+The completion-time download is intentionally bounded by `R2_MAX_IMAGE_BYTES`. It avoids trusting a client-supplied hash or metadata value as proof of the actual uploaded bytes. A later worker can move this verification out of the request path while preserving the same lifecycle states.
 
 ## Supported input formats
 
@@ -64,7 +66,7 @@ Use a restricted R2 API token for the selected bucket. Do not expose R2 credenti
 
 The ordinary clean-clone path may leave R2 variables blank. Media write endpoints must then return a visible `r2_not_configured` service-unavailable error rather than silently storing local files or pretending the upload succeeded.
 
-An explicit media integration test may use MinIO as an S3-compatible test adapter. This tests request signing, direct upload, object inspection, completion, database metadata, and contestant attachment without claiming that MinIO is the production storage provider.
+An explicit media integration test uses MinIO as an S3-compatible test adapter. This tests request signing, direct upload, byte-level SHA-256 verification, completion, database metadata, cross-organization denial, private-media denial, restart persistence, and contestant attachment without claiming that MinIO is the production storage provider.
 
 ## API surface
 
