@@ -94,7 +94,7 @@ jobs:
         env:
           POSTGRES_DB: crownfi
           POSTGRES_USER: crownfi
-          POSTGRES_PASSWORD: crownfi-ci
+          POSTGRES_PASSWORD: crownfi-test-only
         ports:
           - 5432:5432
         options: >-
@@ -103,7 +103,7 @@ jobs:
           --health-timeout 5s
           --health-retries 20
     env:
-      DATABASE_URL: postgresql://crownfi:crownfi-ci@127.0.0.1:5432/crownfi
+      DATABASE_URL: postgresql://crownfi:crownfi-test-only@127.0.0.1:5432/crownfi
       CROWNFI_DATABASE_REQUIRED: "true"
     defaults:
       run:
