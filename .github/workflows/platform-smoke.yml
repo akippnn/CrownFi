@@ -2,7 +2,7 @@ name: Platform clean-clone smoke
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, integration/platform-v1]
     paths:
       - "infra/**"
       - "services/api/**"
