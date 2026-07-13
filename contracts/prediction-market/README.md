@@ -13,6 +13,17 @@ This Soroban contract is a testnet-only implementation target for CrownFi pagean
 - Cancellation enables full, one-time refunds.
 - Persistent market, pool, position, and claim records renew their Soroban TTL when accessed.
 
+## Reproducible checks
+
+Run the standalone contract checks with:
+
+```bash
+cargo fmt --manifest-path contracts/prediction-market/Cargo.toml -- --check
+cargo test --manifest-path contracts/prediction-market/Cargo.toml --locked
+```
+
+The standalone lockfile intentionally keeps the Soroban 22 test dependency graph compatible with its test utilities. This avoids changing the existing workspace lockfile before the contract is approved for workspace integration.
+
 ## Boundary
 
 The contract does not determine whether a market is lawful in a jurisdiction and does not provide an oracle. CrownFi must keep the feature disabled outside explicit testnet/demo environments until eligibility, KYC, age, geofencing, market moderation, and resolution governance are defined.
