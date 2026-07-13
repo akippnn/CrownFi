@@ -26,7 +26,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = Config::from_env();
     let addr: SocketAddr = config.bind_addr.parse()?;
     let state = AppState::new(config);
-    let app = router(state);
+    let app = router(state.clone()).merge(markets::router().with_state(state));
 
     tracing::info!(%addr, "starting CrownFi API");
     let listener = TcpListener::bind(addr).await?;
