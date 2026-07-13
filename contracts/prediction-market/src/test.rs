@@ -96,9 +96,7 @@ fn resolution_requires_review_delay() {
 
     fixture.e.ledger().set_timestamp(2_000);
     let hash = result_hash(&fixture.e, 4);
-    fixture
-        .client
-        .propose_resolution(&market_id, &0, &hash);
+    fixture.client.propose_resolution(&market_id, &0, &hash);
     assert!(fixture.client.try_finalize_resolution(&market_id).is_err());
 
     fixture.e.ledger().set_timestamp(2_060);
@@ -193,10 +191,7 @@ fn no_stake_or_unstake_after_close_time() {
         .client
         .try_stake(&alice, &market_id, &0, &10)
         .is_err());
-    assert!(fixture
-        .client
-        .try_unstake(&alice, &market_id, &0)
-        .is_err());
+    assert!(fixture.client.try_unstake(&alice, &market_id, &0).is_err());
 }
 
 #[test]

@@ -80,11 +80,9 @@ fn bump_instance(e: &Env) {
 }
 
 fn bump_persistent(e: &Env, key: &DataKey) {
-    e.storage().persistent().extend_ttl(
-        key,
-        PERSISTENT_TTL_THRESHOLD,
-        PERSISTENT_TTL_EXTEND_TO,
-    );
+    e.storage()
+        .persistent()
+        .extend_ttl(key, PERSISTENT_TTL_THRESHOLD, PERSISTENT_TTL_EXTEND_TO);
 }
 
 fn read_admin(e: &Env) -> Address {
@@ -285,11 +283,7 @@ impl PredictionMarket {
         token_client(&e).transfer(&from, &e.current_contract_address(), &amount);
 
         let option_pool = checked_add(&e, read_pool(&e, market_id, option), amount);
-        let position = checked_add(
-            &e,
-            read_position(&e, market_id, &from, option),
-            amount,
-        );
+        let position = checked_add(&e, read_position(&e, market_id, &from, option), amount);
         market.total_pool = checked_add(&e, market.total_pool, amount);
 
         write_pool(&e, market_id, option, option_pool);
@@ -438,10 +432,8 @@ impl PredictionMarket {
         }
         token.transfer(&e.current_contract_address(), &from, &net);
         bump_instance(&e);
-        e.events().publish(
-            (symbol_short!("claim"), market_id, from),
-            (gross, fee, net),
-        );
+        e.events()
+            .publish((symbol_short!("claim"), market_id, from), (gross, fee, net));
         net
     }
 
@@ -457,11 +449,7 @@ impl PredictionMarket {
 
         let mut total = 0i128;
         for option in 0..market.num_options {
-            total = checked_add(
-                &e,
-                total,
-                read_position(&e, market_id, &from, option),
-            );
+            total = checked_add(&e, total, read_position(&e, market_id, &from, option));
         }
         if total <= 0 {
             panic_with_error!(&e, Error::NothingToClaim);
