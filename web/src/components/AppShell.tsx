@@ -8,6 +8,7 @@ import { short } from "@/lib/format";
 
 const USER_LINKS = [
   { href: "/", label: "Home" },
+  { href: "/platform", label: "Pageants" },
   { href: "/vote", label: "Vote" },
   { href: "/verify", label: "Verify" },
   { href: "/tickets", label: "Tickets" },
@@ -23,6 +24,10 @@ const TABS = [
   { href: "/contestants", label: "Collect", Icon: Icons.Collect },
   { href: "/me", label: "Me", Icon: Icons.Me },
 ];
+
+function isActivePath(path: string, href: string) {
+  return path === href || (href !== "/" && path.startsWith(`${href}/`));
+}
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
@@ -49,7 +54,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <nav className="hidden items-center gap-1 text-sm sm:flex">
             {links.map((l) => (
               <Link key={l.href} href={l.href}
-                className={`rounded-full px-3.5 py-1.5 transition ${path === l.href ? "bg-gradient-to-b from-[#f3e5ab] via-gold to-[#b8912f] text-black font-semibold" : "text-gold-soft/75 hover:bg-gold/10 hover:text-white"}`}>
+                className={`rounded-full px-3.5 py-1.5 transition ${isActivePath(path, l.href) ? "bg-gradient-to-b from-[#f3e5ab] via-gold to-[#b8912f] text-black font-semibold" : "text-gold-soft/75 hover:bg-gold/10 hover:text-white"}`}>
                 {l.label}
               </Link>
             ))}
@@ -132,7 +137,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <nav className="grid gap-1">
               {links.map((l) => (
                 <Link key={l.href} href={l.href} onClick={() => setDrawer(false)}
-                  className={`rounded-xl px-3 py-2.5 text-sm ${path === l.href ? "bg-gradient-to-b from-[#f3e5ab] via-gold to-[#b8912f] text-black font-semibold" : "text-gold-soft/80 hover:bg-gold/10 hover:text-white"}`}>
+                  className={`rounded-xl px-3 py-2.5 text-sm ${isActivePath(path, l.href) ? "bg-gradient-to-b from-[#f3e5ab] via-gold to-[#b8912f] text-black font-semibold" : "text-gold-soft/80 hover:bg-gold/10 hover:text-white"}`}>
                   {l.label}
                 </Link>
               ))}
@@ -146,7 +151,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-black/90 backdrop-blur-xl sm:hidden">
         <div className="mx-auto flex max-w-md items-stretch justify-between px-2">
           {TABS.map(({ href, label, Icon }) => {
-            const active = path === href;
+            const active = isActivePath(path, href);
             return (
               <Link key={href} href={href}
                 className={`flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[11px] ${active ? "text-gold" : "text-gold-soft/50"}`}>
