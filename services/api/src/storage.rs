@@ -115,19 +115,22 @@ impl MediaStore {
             .send()
             .await
             .map_err(|error| format!("failed to inspect R2 object: {error}"))?;
+        let metadata_sha256 = output
+            .metadata()
+            .and_then(|metadata| metadata.get("sha256"))
+            .cloned();
+        let actual_sha256 = self.object_sha256(object_key).await?;
+        let verified_sha256 = metadata_sha256.filter(|declared| declared == &actual_sha256);
 
         Ok(StoredObject {
             content_length: output.content_length().unwrap_or_default(),
             content_type: output.content_type().map(ToOwned::to_owned),
-            sha256_metadata: output
-                .metadata()
-                .and_then(|metadata| metadata.get("sha256"))
-                .cloned(),
+            sha256_metadata: verified_sha256,
             e_tag: output.e_tag().map(ToOwned::to_owned),
         })
     }
 
-    pub async fn object_sha256(&self, object_key: &str) -> Result<String, String> {
+    async fn object_sha256(&self, object_key: &str) -> Result<String, String> {
         let output = self
             .client
             .get_object()
