@@ -5,6 +5,7 @@ use aws_sdk_s3::{
     presigning::PresigningConfig,
     Client,
 };
+use sha2::{Digest, Sha256};
 
 use crate::config::Config;
 
@@ -124,6 +125,24 @@ impl MediaStore {
                 .cloned(),
             e_tag: output.e_tag().map(ToOwned::to_owned),
         })
+    }
+
+    pub async fn object_sha256(&self, object_key: &str) -> Result<String, String> {
+        let output = self
+            .client
+            .get_object()
+            .bucket(&self.bucket)
+            .key(object_key)
+            .send()
+            .await
+            .map_err(|error| format!("failed to read R2 object: {error}"))?;
+        let bytes = output
+            .body
+            .collect()
+            .await
+            .map_err(|error| format!("failed to collect R2 object body: {error}"))?
+            .into_bytes();
+        Ok(hex::encode(Sha256::digest(bytes)))
     }
 
     pub async fn delete_object(&self, object_key: &str) -> Result<(), String> {
