@@ -15,7 +15,10 @@ use crate::{app::require_admin, error::ApiError, state::AppState};
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/platform/organizations", get(list_organizations))
-        .route("/platform/organizations/:organization_id", get(get_organization))
+        .route(
+            "/platform/organizations/:organization_id",
+            get(get_organization),
+        )
         .route(
             "/platform/organizations/:organization_id/pageants",
             get(list_pageants),
@@ -198,7 +201,8 @@ async fn bootstrap_platform(
     require_admin(&state, &headers)?;
     let pool = database_pool(&state)?;
     let display_name = required_text(body.display_name, 160, "invalid_display_name")?;
-    let organization_name = required_text(body.organization_name, 200, "invalid_organization_name")?;
+    let organization_name =
+        required_text(body.organization_name, 200, "invalid_organization_name")?;
     let organization_slug = required_slug(body.organization_slug)?;
     let email = optional_text(body.email, 320, "invalid_email")?;
 
@@ -726,11 +730,7 @@ async fn write_audit(
     Ok(())
 }
 
-fn required_text(
-    value: String,
-    max_len: usize,
-    error: &'static str,
-) -> Result<String, ApiError> {
+fn required_text(value: String, max_len: usize, error: &'static str) -> Result<String, ApiError> {
     let value = value.trim().to_string();
     if value.is_empty() || value.chars().count() > max_len {
         Err(ApiError::InvalidRequest(error))
@@ -753,9 +753,12 @@ fn required_slug(value: String) -> Result<String, ApiError> {
     let value = value.trim().to_ascii_lowercase();
     let valid = !value.is_empty()
         && value.len() <= 120
-        && value
-            .split('-')
-            .all(|part| !part.is_empty() && part.chars().all(|character| character.is_ascii_lowercase() || character.is_ascii_digit()));
+        && value.split('-').all(|part| {
+            !part.is_empty()
+                && part
+                    .chars()
+                    .all(|character| character.is_ascii_lowercase() || character.is_ascii_digit())
+        });
     if valid {
         Ok(value)
     } else {
@@ -768,7 +771,10 @@ fn optional_timestamp(
     error: &'static str,
 ) -> Result<Option<OffsetDateTime>, ApiError> {
     value
-        .map(|value| OffsetDateTime::parse(value.trim(), &Rfc3339).map_err(|_| ApiError::InvalidRequest(error)))
+        .map(|value| {
+            OffsetDateTime::parse(value.trim(), &Rfc3339)
+                .map_err(|_| ApiError::InvalidRequest(error))
+        })
         .transpose()
 }
 
@@ -776,7 +782,11 @@ fn optional_country_code(value: Option<String>) -> Result<Option<String>, ApiErr
     value
         .map(|value| {
             let value = value.trim().to_ascii_uppercase();
-            if value.len() == 2 && value.chars().all(|character| character.is_ascii_uppercase()) {
+            if value.len() == 2
+                && value
+                    .chars()
+                    .all(|character| character.is_ascii_uppercase())
+            {
                 Ok(value)
             } else {
                 Err(ApiError::InvalidRequest("invalid_country_code"))
