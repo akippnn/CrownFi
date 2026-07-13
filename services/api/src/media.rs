@@ -12,12 +12,7 @@ use sqlx::{FromRow, PgPool, Postgres, Transaction};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::{
-    app::require_admin,
-    error::ApiError,
-    state::AppState,
-    storage::MediaStore,
-};
+use crate::{app::require_admin, error::ApiError, state::AppState, storage::MediaStore};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -245,9 +240,8 @@ async fn create_upload_intent(
     let alt_text = optional_text(body.alt_text, 500, "invalid_media_alt_text")?;
     let media_asset_id = Uuid::new_v4();
     let extension = extension_for_content_type(&content_type);
-    let object_key = format!(
-        "organizations/{organization_id}/media/{media_asset_id}/original.{extension}"
-    );
+    let object_key =
+        format!("organizations/{organization_id}/media/{media_asset_id}/original.{extension}");
 
     let authorization = store
         .presign_upload(&object_key, &content_type, &sha256)
@@ -326,10 +320,13 @@ async fn complete_upload(
         return Err(ApiError::Conflict("media_asset_not_pending"));
     }
 
-    let stored = store.head_object(&pending.object_key).await.map_err(|error| {
-        tracing::warn!(%error, media_asset_id = %pending.id, "R2 media object is not ready");
-        ApiError::Storage("uploaded_object_not_found")
-    })?;
+    let stored = store
+        .head_object(&pending.object_key)
+        .await
+        .map_err(|error| {
+            tracing::warn!(%error, media_asset_id = %pending.id, "R2 media object is not ready");
+            ApiError::Storage("uploaded_object_not_found")
+        })?;
 
     let object_matches = stored.content_length == pending.byte_size
         && stored.content_type.as_deref() == Some(pending.content_type.as_str())
@@ -626,7 +623,10 @@ fn validate_visibility(value: Option<String>) -> Result<String, ApiError> {
 
 fn validate_media_role(value: String) -> Result<String, ApiError> {
     let value = value.trim().to_ascii_lowercase();
-    if matches!(value.as_str(), "portrait" | "banner" | "gallery" | "section") {
+    if matches!(
+        value.as_str(),
+        "portrait" | "banner" | "gallery" | "section"
+    ) {
         Ok(value)
     } else {
         Err(ApiError::InvalidRequest("invalid_contestant_media_role"))
@@ -679,9 +679,7 @@ fn map_database_error(error: sqlx::Error) -> ApiError {
         return match code.as_deref() {
             Some("23505") => ApiError::Conflict("resource_already_exists"),
             Some("23503") => ApiError::InvalidRequest("related_resource_not_found"),
-            Some("23514") | Some("22P02") => {
-                ApiError::InvalidRequest("database_constraint_failed")
-            }
+            Some("23514") | Some("22P02") => ApiError::InvalidRequest("database_constraint_failed"),
             _ => {
                 tracing::error!(error = %error, "media database operation failed");
                 ApiError::Database
