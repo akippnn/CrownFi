@@ -11,6 +11,7 @@ use crate::{
     models::{
         Category, Contestant, Event, MarketTransactionIntent, PredictionMarketProjection, Snapshot,
     },
+    storage::MediaStore,
 };
 
 pub type VoteKey = (String, String, String);
@@ -20,6 +21,7 @@ pub type TallyKey = (String, String);
 pub struct AppState {
     pub config: Config,
     pub database: Option<PgPool>,
+    pub media_store: Option<Arc<MediaStore>>,
     pub events: Arc<HashMap<String, Event>>,
     pub categories: Arc<HashMap<String, Category>>,
     pub contestants: Arc<HashMap<String, Contestant>>,
@@ -34,6 +36,7 @@ pub struct AppState {
 impl AppState {
     pub async fn new(config: Config) -> Result<Self, DatabaseInitError> {
         let database = database::connect(&config).await?;
+        let media_store = MediaStore::from_config(&config).await.map(Arc::new);
         let event = Event {
             id: "coronation-night-2026".to_string(),
             name: "Coronation Night 2026".to_string(),
@@ -95,6 +98,7 @@ impl AppState {
         Ok(Self {
             config,
             database,
+            media_store,
             events: Arc::new(HashMap::from([(event.id.clone(), event)])),
             categories: Arc::new(HashMap::from([(category.id.clone(), category)])),
             contestants: Arc::new(
