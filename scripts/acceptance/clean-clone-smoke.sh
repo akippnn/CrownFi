@@ -80,7 +80,7 @@ wait_for_url "Next.js health" "http://127.0.0.1:3000/api/health" "$evidence_dir/
 "${compose[@]}" exec -T redis redis-cli ping \
   | tee "$evidence_dir/redis-health.txt"
 
-db_init_id=$("${compose[@]}" ps -q db-init)
+db_init_id=$("${compose[@]}" ps --all --quiet db-init)
 if [[ -z "$db_init_id" ]]; then
   echo "db-init container was not created" >&2
   exit 1
