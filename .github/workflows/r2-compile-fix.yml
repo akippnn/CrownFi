@@ -26,11 +26,8 @@ jobs:
 
           path = Path('services/api/src/media.rs')
           text = path.read_text(encoding='utf-8')
-          old = '''                .as_deref()
-                  .map(str::trim_end_matches)
-                  .map(|base| format!("{base}/{object_key}"))'''
-          new = '''                .as_deref()
-                  .map(|base| format!("{}/{object_key}", base.trim_end_matches('/')))'''
+          old = '.map(str::trim_end_matches)\n                .map(|base| format!("{base}/{object_key}"))'
+          new = '.map(|base| format!("{}/{object_key}", base.trim_end_matches(\'/\')))'
           if old not in text:
               raise SystemExit('expected media delivery URL pattern not found')
           path.write_text(text.replace(old, new, 1), encoding='utf-8')
