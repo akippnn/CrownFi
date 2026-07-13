@@ -19,6 +19,8 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 thiserror = "1"
 sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "tls-rustls-ring", "postgres", "uuid", "time", "json", "macros", "migrate"] }
+aws-config = "1"
+aws-sdk-s3 = "1"
 
 [dev-dependencies]
 http-body-util = "0.1"

@@ -95,6 +95,22 @@ owner_id=$(json_field "$evidence_dir/bootstrap-owner.json" user.id)
 organization_id=$(json_field "$evidence_dir/bootstrap-owner.json" organization.id)
 actor_header=(--header "x-crownfi-user-id: $owner_id")
 
+if [[ -z "${R2_ENDPOINT:-}" ]]; then
+  r2_unconfigured_status=$(curl --silent --show-error \
+    --output "$evidence_dir/r2-unconfigured.json" \
+    --write-out '%{http_code}' \
+    --request POST "http://127.0.0.1:8080/admin/platform/organizations/$organization_id/media/upload-intents" \
+    --header 'content-type: application/json' \
+    --header "x-admin-demo-token: $admin_token" \
+    --header "x-crownfi-user-id: $owner_id" \
+    --data '{"original_filename":"unconfigured.png","content_type":"image/png","byte_size":1,"sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","visibility":"private"}')
+  if [[ "$r2_unconfigured_status" != "503" ]]; then
+    echo "Expected unconfigured R2 upload intent to return 503, got $r2_unconfigured_status" >&2
+    exit 1
+  fi
+  printf '%s\n' "$r2_unconfigured_status" >"$evidence_dir/r2-unconfigured-status.txt"
+fi
+
 post_json \
   "http://127.0.0.1:8080/admin/platform/organizations/$organization_id/pageants" \
   "$evidence_dir/pageant.json" \
