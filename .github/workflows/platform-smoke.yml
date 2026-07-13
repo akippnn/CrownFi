@@ -39,5 +39,6 @@ jobs:
         with:
           name: crownfi-clean-clone-smoke
           path: .artifacts/acceptance/clean-clone
+          include-hidden-files: true
           if-no-files-found: warn
           retention-days: 7
