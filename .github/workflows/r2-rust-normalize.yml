@@ -1,0 +1,45 @@
+name: Normalize R2 Rust sources
+
+on:
+  push:
+    branches: [slice/r2-media]
+    paths:
+      - services/api/Cargo.toml
+      - services/api/src/**
+      - .github/workflows/r2-rust-normalize.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  normalize:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v5
+        with:
+          ref: slice/r2-media
+      - name: Setup Rust stable
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt
+          rustup default stable
+      - name: Generate lockfile and format
+        working-directory: services/api
+        run: |
+          cargo generate-lockfile
+          cargo fmt
+      - name: Commit normalized API files
+        run: |
+          if git diff --quiet -- services/api/Cargo.lock services/api/src; then
+            echo "R2 Rust sources are already normalized."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add services/api/Cargo.lock services/api/src
+            git commit -m "chore(media): normalize R2 API sources"
+            git push origin HEAD:slice/r2-media
+          fi
+      - name: Check R2 API compilation
+        working-directory: services/api
+        run: cargo check --locked
