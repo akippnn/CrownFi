@@ -4,6 +4,7 @@ mod database;
 mod error;
 mod markets;
 mod models;
+mod platform;
 mod state;
 
 use std::{io, net::SocketAddr};
@@ -45,7 +46,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let addr: SocketAddr = config.bind_addr.parse()?;
     let state = AppState::new(config).await?;
-    let app = router(state.clone()).merge(markets::router().with_state(state));
+    let app = router(state.clone())
+        .merge(markets::router().with_state(state.clone()))
+        .merge(platform::router().with_state(state));
 
     tracing::info!(%addr, "starting CrownFi API");
     let listener = TcpListener::bind(addr).await?;
