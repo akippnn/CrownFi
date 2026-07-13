@@ -211,9 +211,7 @@ async fn bootstrap_platform(
     let mut tx = pool.begin().await.map_err(map_database_error)?;
 
     let user = sqlx::query_as::<_, UserRecord>(
-        "INSERT INTO users (id, display_name, email)\
-         VALUES ($1, $2, $3)\
-         RETURNING id, display_name, email, status, created_at, updated_at",
+        "INSERT INTO users (id, display_name, email) VALUES ($1, $2, $3) RETURNING id, display_name, email, status, created_at, updated_at",
     )
     .bind(user_id)
     .bind(display_name)
@@ -223,9 +221,7 @@ async fn bootstrap_platform(
     .map_err(map_database_error)?;
 
     let organization = sqlx::query_as::<_, OrganizationRecord>(
-        "INSERT INTO organizations (id, name, slug, created_by_user_id)\
-         VALUES ($1, $2, $3, $4)\
-         RETURNING id, name, slug, status, created_by_user_id, created_at, updated_at",
+        "INSERT INTO organizations (id, name, slug, created_by_user_id) VALUES ($1, $2, $3, $4) RETURNING id, name, slug, status, created_by_user_id, created_at, updated_at",
     )
     .bind(organization_id)
     .bind(organization_name)
@@ -236,8 +232,7 @@ async fn bootstrap_platform(
     .map_err(map_database_error)?;
 
     sqlx::query(
-        "INSERT INTO organization_members (organization_id, user_id, role, status)\
-         VALUES ($1, $2, 'owner', 'active')",
+        "INSERT INTO organization_members (organization_id, user_id, role, status) VALUES ($1, $2, 'owner', 'active')",
     )
     .bind(organization_id)
     .bind(user_id)
@@ -272,11 +267,7 @@ async fn list_organizations(
 ) -> Result<Json<Vec<OrganizationRecord>>, ApiError> {
     let pool = database_pool(&state)?;
     let organizations = sqlx::query_as::<_, OrganizationRecord>(
-        "SELECT id, name, slug, status, created_by_user_id, created_at, updated_at\
-         FROM organizations\
-         WHERE status <> 'archived'\
-         ORDER BY created_at DESC\
-         LIMIT 100",
+        "SELECT id, name, slug, status, created_by_user_id, created_at, updated_at FROM organizations WHERE status <> 'archived' ORDER BY created_at DESC LIMIT 100",
     )
     .fetch_all(pool)
     .await
@@ -290,8 +281,7 @@ async fn get_organization(
 ) -> Result<Json<OrganizationRecord>, ApiError> {
     let pool = database_pool(&state)?;
     let organization = sqlx::query_as::<_, OrganizationRecord>(
-        "SELECT id, name, slug, status, created_by_user_id, created_at, updated_at\
-         FROM organizations WHERE id = $1",
+        "SELECT id, name, slug, status, created_by_user_id, created_at, updated_at FROM organizations WHERE id = $1",
     )
     .bind(organization_id)
     .fetch_optional(pool)
@@ -326,12 +316,7 @@ async fn create_pageant(
     let pageant_id = Uuid::new_v4();
     let mut tx = pool.begin().await.map_err(map_database_error)?;
     let pageant = sqlx::query_as::<_, PageantRecord>(
-        "INSERT INTO pageants (\
-             id, organization_id, name, slug, description, starts_at, ends_at, timezone,\
-             venue_name, created_by_user_id\
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)\
-         RETURNING id, organization_id, name, slug, description, status, starts_at, ends_at,\
-                   timezone, venue_name, created_by_user_id, created_at, updated_at",
+        "INSERT INTO pageants ( id, organization_id, name, slug, description, starts_at, ends_at, timezone, venue_name, created_by_user_id ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id, organization_id, name, slug, description, status, starts_at, ends_at, timezone, venue_name, created_by_user_id, created_at, updated_at",
     )
     .bind(pageant_id)
     .bind(organization_id)
@@ -367,11 +352,7 @@ async fn list_pageants(
 ) -> Result<Json<Vec<PageantRecord>>, ApiError> {
     let pool = database_pool(&state)?;
     let pageants = sqlx::query_as::<_, PageantRecord>(
-        "SELECT id, organization_id, name, slug, description, status, starts_at, ends_at,\
-                timezone, venue_name, created_by_user_id, created_at, updated_at\
-         FROM pageants\
-         WHERE organization_id = $1 AND status <> 'archived'\
-         ORDER BY created_at DESC",
+        "SELECT id, organization_id, name, slug, description, status, starts_at, ends_at, timezone, venue_name, created_by_user_id, created_at, updated_at FROM pageants WHERE organization_id = $1 AND status <> 'archived' ORDER BY created_at DESC",
     )
     .bind(organization_id)
     .fetch_all(pool)
@@ -399,9 +380,7 @@ async fn create_category(
     let mut tx = pool.begin().await.map_err(map_database_error)?;
 
     let category = sqlx::query_as::<_, CategoryRecord>(
-        "INSERT INTO categories (id, pageant_id, name, slug, description, sort_order)\
-         VALUES ($1, $2, $3, $4, $5, $6)\
-         RETURNING id, pageant_id, name, slug, description, status, sort_order, created_at, updated_at",
+        "INSERT INTO categories (id, pageant_id, name, slug, description, sort_order) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, pageant_id, name, slug, description, status, sort_order, created_at, updated_at",
     )
     .bind(category_id)
     .bind(pageant_id)
@@ -433,10 +412,7 @@ async fn list_categories(
 ) -> Result<Json<Vec<CategoryRecord>>, ApiError> {
     let pool = database_pool(&state)?;
     let categories = sqlx::query_as::<_, CategoryRecord>(
-        "SELECT id, pageant_id, name, slug, description, status, sort_order, created_at, updated_at\
-         FROM categories\
-         WHERE pageant_id = $1 AND status <> 'archived'\
-         ORDER BY sort_order, created_at",
+        "SELECT id, pageant_id, name, slug, description, status, sort_order, created_at, updated_at FROM categories WHERE pageant_id = $1 AND status <> 'archived' ORDER BY sort_order, created_at",
     )
     .bind(pageant_id)
     .fetch_all(pool)
@@ -475,9 +451,7 @@ async fn create_pageant_contestant(
     let pageant_contestant_id = Uuid::new_v4();
     let mut tx = pool.begin().await.map_err(map_database_error)?;
     sqlx::query(
-        "INSERT INTO contestants (\
-             id, legal_name, display_name, biography, country_code, created_by_user_id\
-         ) VALUES ($1, $2, $3, $4, $5, $6)",
+        "INSERT INTO contestants ( id, legal_name, display_name, biography, country_code, created_by_user_id ) VALUES ($1, $2, $3, $4, $5, $6)",
     )
     .bind(contestant_id)
     .bind(legal_name)
@@ -490,10 +464,7 @@ async fn create_pageant_contestant(
     .map_err(map_database_error)?;
 
     sqlx::query(
-        "INSERT INTO pageant_contestants (\
-             id, pageant_id, contestant_id, sash, contestant_number, country_representation,\
-             sort_order\
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        "INSERT INTO pageant_contestants ( id, pageant_id, contestant_id, sash, contestant_number, country_representation, sort_order ) VALUES ($1, $2, $3, $4, $5, $6, $7)",
     )
     .bind(pageant_contestant_id)
     .bind(pageant_id)
@@ -558,11 +529,7 @@ async fn create_contestant_section(
     let section_id = Uuid::new_v4();
     let mut tx = pool.begin().await.map_err(map_database_error)?;
     let section = sqlx::query_as::<_, ContestantSectionRecord>(
-        "INSERT INTO contestant_sections (\
-             id, pageant_contestant_id, kind, title, slug, sort_order, is_visible, settings_json\
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)\
-         RETURNING id, pageant_contestant_id, kind, title, slug, sort_order, is_visible,\
-                   settings_json, created_at, updated_at",
+        "INSERT INTO contestant_sections ( id, pageant_contestant_id, kind, title, slug, sort_order, is_visible, settings_json ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, pageant_contestant_id, kind, title, slug, sort_order, is_visible, settings_json, created_at, updated_at",
     )
     .bind(section_id)
     .bind(pageant_contestant_id)
@@ -596,11 +563,7 @@ async fn list_contestant_sections(
 ) -> Result<Json<Vec<ContestantSectionRecord>>, ApiError> {
     let pool = database_pool(&state)?;
     let sections = sqlx::query_as::<_, ContestantSectionRecord>(
-        "SELECT id, pageant_contestant_id, kind, title, slug, sort_order, is_visible,\
-                settings_json, created_at, updated_at\
-         FROM contestant_sections\
-         WHERE pageant_contestant_id = $1\
-         ORDER BY sort_order, created_at",
+        "SELECT id, pageant_contestant_id, kind, title, slug, sort_order, is_visible, settings_json, created_at, updated_at FROM contestant_sections WHERE pageant_contestant_id = $1 ORDER BY sort_order, created_at",
     )
     .bind(pageant_contestant_id)
     .fetch_all(pool)
@@ -610,25 +573,14 @@ async fn list_contestant_sections(
 }
 
 const PAGEANT_CONTESTANT_SELECT: &str =
-    "SELECT pc.id, pc.pageant_id, pc.contestant_id, c.display_name, c.legal_name,\
-            c.biography, c.country_code, pc.sash, pc.contestant_number,\
-            pc.country_representation, pc.status, pc.sort_order, pc.created_at, pc.updated_at\
-     FROM pageant_contestants pc\
-     JOIN contestants c ON c.id = pc.contestant_id\
-     WHERE pc.pageant_id = $1 AND pc.status <> 'archived'\
-     ORDER BY pc.sort_order, pc.created_at";
+    "SELECT pc.id, pc.pageant_id, pc.contestant_id, c.display_name, c.legal_name, c.biography, c.country_code, pc.sash, pc.contestant_number, pc.country_representation, pc.status, pc.sort_order, pc.created_at, pc.updated_at FROM pageant_contestants pc JOIN contestants c ON c.id = pc.contestant_id WHERE pc.pageant_id = $1 AND pc.status <> 'archived' ORDER BY pc.sort_order, pc.created_at";
 
 async fn fetch_pageant_contestant(
     tx: &mut Transaction<'_, Postgres>,
     pageant_contestant_id: Uuid,
 ) -> Result<PageantContestantRecord, ApiError> {
     sqlx::query_as::<_, PageantContestantRecord>(
-        "SELECT pc.id, pc.pageant_id, pc.contestant_id, c.display_name, c.legal_name,\
-                c.biography, c.country_code, pc.sash, pc.contestant_number,\
-                pc.country_representation, pc.status, pc.sort_order, pc.created_at, pc.updated_at\
-         FROM pageant_contestants pc\
-         JOIN contestants c ON c.id = pc.contestant_id\
-         WHERE pc.id = $1",
+        "SELECT pc.id, pc.pageant_id, pc.contestant_id, c.display_name, c.legal_name, c.biography, c.country_code, pc.sash, pc.contestant_number, pc.country_representation, pc.status, pc.sort_order, pc.created_at, pc.updated_at FROM pageant_contestants pc JOIN contestants c ON c.id = pc.contestant_id WHERE pc.id = $1",
     )
     .bind(pageant_contestant_id)
     .fetch_one(&mut **tx)
@@ -658,11 +610,7 @@ async fn require_organization_editor(
     user_id: Uuid,
 ) -> Result<(), ApiError> {
     let allowed = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS (\
-             SELECT 1 FROM organization_members\
-             WHERE organization_id = $1 AND user_id = $2 AND status = 'active'\
-               AND role IN ('owner', 'admin', 'editor')\
-         )",
+        "SELECT EXISTS ( SELECT 1 FROM organization_members WHERE organization_id = $1 AND user_id = $2 AND status = 'active' AND role IN ('owner', 'admin', 'editor') )",
     )
     .bind(organization_id)
     .bind(user_id)
@@ -691,10 +639,7 @@ async fn organization_for_pageant_contestant(
     pageant_contestant_id: Uuid,
 ) -> Result<Uuid, ApiError> {
     sqlx::query_scalar::<_, Uuid>(
-        "SELECT p.organization_id\
-         FROM pageant_contestants pc\
-         JOIN pageants p ON p.id = pc.pageant_id\
-         WHERE pc.id = $1",
+        "SELECT p.organization_id FROM pageant_contestants pc JOIN pageants p ON p.id = pc.pageant_id WHERE pc.id = $1",
     )
     .bind(pageant_contestant_id)
     .fetch_optional(pool)
@@ -713,9 +658,7 @@ async fn write_audit(
     metadata: Value,
 ) -> Result<(), ApiError> {
     sqlx::query(
-        "INSERT INTO audit_logs (\
-             id, organization_id, actor_user_id, action, entity_type, entity_id, metadata\
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        "INSERT INTO audit_logs ( id, organization_id, actor_user_id, action, entity_type, entity_id, metadata ) VALUES ($1, $2, $3, $4, $5, $6, $7)",
     )
     .bind(Uuid::new_v4())
     .bind(organization_id)
