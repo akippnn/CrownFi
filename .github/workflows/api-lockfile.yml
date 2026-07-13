@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   generate:
@@ -21,6 +21,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
       - name: Setup Rust stable
         run: |
           rustup toolchain install stable --profile minimal
@@ -35,3 +37,15 @@ jobs:
           path: services/api/Cargo.lock
           if-no-files-found: error
           retention-days: 1
+      - name: Commit generated lockfile on branch pushes
+        if: github.event_name == 'push'
+        run: |
+          if git diff --quiet -- services/api/Cargo.lock; then
+            echo "Cargo.lock is already current."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add services/api/Cargo.lock
+          git commit -m "chore(api): refresh SQLx lockfile"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
