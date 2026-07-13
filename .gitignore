@@ -10,6 +10,10 @@ target
 .DS_Store
 prisma/migrations/dev.db*
 
+# local acceptance evidence and generated smoke configuration
+.artifacts/
+infra/.env.smoke
+
 # local AI/editor/build artifacts
 .claude/settings.local.json
 web/tsconfig.tsbuildinfo
