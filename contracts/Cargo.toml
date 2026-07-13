@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
-members = ["audit-anchor", "ticket", "collectible", "sale-splitter", "prediction-market", "usdc-test"]
+members = ["audit-anchor", "ticket", "collectible", "sale-splitter", "usdc-test"]
+exclude = ["prediction-market"]
 
 [workspace.package]
 version = "0.1.0"
