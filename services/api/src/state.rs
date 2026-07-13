@@ -3,8 +3,11 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use sqlx::PgPool;
+
 use crate::{
     config::Config,
+    database::{self, DatabaseInitError},
     models::{
         Category, Contestant, Event, MarketTransactionIntent, PredictionMarketProjection, Snapshot,
     },
@@ -16,6 +19,7 @@ pub type TallyKey = (String, String);
 #[derive(Clone)]
 pub struct AppState {
     pub config: Config,
+    pub database: Option<PgPool>,
     pub events: Arc<HashMap<String, Event>>,
     pub categories: Arc<HashMap<String, Category>>,
     pub contestants: Arc<HashMap<String, Contestant>>,
@@ -28,7 +32,8 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn new(config: Config) -> Self {
+    pub async fn new(config: Config) -> Result<Self, DatabaseInitError> {
+        let database = database::connect(&config).await?;
         let event = Event {
             id: "coronation-night-2026".to_string(),
             name: "Coronation Night 2026".to_string(),
@@ -87,8 +92,9 @@ impl AppState {
             source: "seeded-testnet-projection".to_string(),
         };
 
-        Self {
+        Ok(Self {
             config,
+            database,
             events: Arc::new(HashMap::from([(event.id.clone(), event)])),
             categories: Arc::new(HashMap::from([(category.id.clone(), category)])),
             contestants: Arc::new(
@@ -103,6 +109,6 @@ impl AppState {
             markets: Arc::new(Mutex::new(HashMap::from([(market.id.clone(), market)]))),
             market_intents: Arc::new(Mutex::new(HashMap::new())),
             market_intent_keys: Arc::new(Mutex::new(HashMap::new())),
-        }
+        })
     }
 }

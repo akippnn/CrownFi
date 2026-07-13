@@ -13,7 +13,7 @@ services:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 5s
-      retries: 20
+      retries: 10
 
   redis:
     image: redis:7-alpine
@@ -21,7 +21,33 @@ services:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 5s
-      retries: 20
+      retries: 10
+
+  db-init:
+    build:
+      context: ..
+      dockerfile: services/api/Dockerfile
+    command: ["crownfi-api", "migrate"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      CROWNFI_DATABASE_REQUIRED: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  legacy-db-init:
+    build:
+      context: ..
+      dockerfile: web/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=legacy
+      DIRECT_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=legacy
+    command: ["sh", "-c", "npx prisma db push && npm run seed"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
 
   api:
     build:
@@ -30,6 +56,8 @@ services:
     environment:
       CROWNFI_API_BIND: 0.0.0.0:8080
       CROWNFI_API_MODE: ${CROWNFI_API_MODE:-local}
+      CROWNFI_DATABASE_REQUIRED: "true"
+      CROWNFI_DATABASE_MAX_CONNECTIONS: ${CROWNFI_DATABASE_MAX_CONNECTIONS:-10}
       STELLAR_MODE: ${STELLAR_MODE:-mock}
       STELLAR_PLATFORM_SECRET: ${STELLAR_PLATFORM_SECRET:-}
       AUDIT_ANCHOR_CONTRACT_ID: ${AUDIT_ANCHOR_CONTRACT_ID:-}
@@ -48,23 +76,13 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/health"]
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/ready"]
       interval: 5s
       timeout: 5s
       retries: 20
-
-  db-init:
-    build:
-      context: ..
-      dockerfile: web/Dockerfile
-    environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      DIRECT_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-    command: ["sh", "-c", "npx prisma db push && npm run seed"]
-    depends_on:
-      postgres:
-        condition: service_healthy
 
   web:
     build:
@@ -72,10 +90,9 @@ services:
       dockerfile: web/Dockerfile
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      DIRECT_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      CROWNFI_API_URL: http://api:8080
-      NEXT_PUBLIC_CROWNFI_API_URL: http://localhost:8080
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=legacy
+      DIRECT_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=legacy
+      NEXT_PUBLIC_API_BASE_URL: http://api:8080
       STELLAR_MODE: ${STELLAR_MODE:-mock}
       WALLET_PROVIDER: ${WALLET_PROVIDER:-mock}
       STELLAR_PLATFORM_SECRET: ${STELLAR_PLATFORM_SECRET:-}
@@ -96,16 +113,14 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      api:
-        condition: service_healthy
       db-init:
         condition: service_completed_successfully
+      legacy-db-init:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
     healthcheck:
-      test:
-        - CMD
-        - node
-        - -e
-        - "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 5s
       timeout: 5s
       retries: 20

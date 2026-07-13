@@ -1,11 +1,12 @@
 mod app;
 mod config;
+mod database;
 mod error;
 mod markets;
 mod models;
 mod state;
 
-use std::net::SocketAddr;
+use std::{io, net::SocketAddr};
 
 use app::router;
 use config::Config;
@@ -24,8 +25,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     let config = Config::from_env();
+    let command = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "serve".to_string());
+
+    if command == "migrate" {
+        database::migrate(&config).await?;
+        tracing::info!("SQLx migrations applied successfully");
+        return Ok(());
+    }
+
+    if command != "serve" {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("unknown crownfi-api command: {command}; expected serve or migrate"),
+        )
+        .into());
+    }
+
     let addr: SocketAddr = config.bind_addr.parse()?;
-    let state = AppState::new(config);
+    let state = AppState::new(config).await?;
     let app = router(state.clone()).merge(markets::router().with_state(state));
 
     tracing::info!(%addr, "starting CrownFi API");
