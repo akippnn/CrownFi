@@ -2,25 +2,32 @@ name: Explicit demo seed
 
 on:
   pull_request:
+    branches: [integration/platform-v1]
     paths:
-      - services/api/**
-      - docs/development/demo-seed.md
-      - .github/workflows/explicit-demo-seed.yml
+      - "services/api/**"
+      - "docs/development/demo-seed.md"
+      - "docs/setup/demo-seed.md"
+      - ".github/workflows/explicit-demo-seed.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: explicit-demo-seed-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   seed-smoke:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:16-alpine
         env:
           POSTGRES_DB: crownfi
           POSTGRES_USER: crownfi
-          POSTGRES_PASSWORD: crownfi-test
+          POSTGRES_PASSWORD: crownfi-seed-test-only
         ports:
           - 5432:5432
         options: >-
@@ -29,33 +36,74 @@ jobs:
           --health-timeout 5s
           --health-retries 20
     env:
-      DATABASE_URL: postgresql://crownfi:crownfi-test@127.0.0.1:5432/crownfi
+      DATABASE_URL: postgresql://crownfi:crownfi-seed-test-only@127.0.0.1:5432/crownfi
       CROWNFI_DATABASE_REQUIRED: "true"
       CROWNFI_API_MODE: local
-      CROWNFI_ALLOW_DEMO_SEED: "true"
     steps:
-      - uses: actions/checkout@v5
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - name: Setup Rust stable
         run: |
           rustup toolchain install stable --profile minimal --component rustfmt
           rustup default stable
-      - name: Format API
+      - name: Check Rust formatting
         run: cargo fmt --manifest-path services/api/Cargo.toml -- --check
-      - name: Apply demo seed twice
+      - name: Apply migrations
         run: |
-          cargo run --manifest-path services/api/Cargo.toml --locked -- seed demo
-          cargo run --manifest-path services/api/Cargo.toml --locked -- seed demo
+          set -o pipefail
+          cargo run --manifest-path services/api/Cargo.toml --locked -- migrate 2>&1 | tee seed-migrate.log
+      - name: Prove seed is disabled by default
+        run: |
+          set -o pipefail
+          if cargo run --manifest-path services/api/Cargo.toml --locked -- seed demo 2>&1 | tee seed-disabled.log; then
+            echo "Demo seed unexpectedly ran without CROWNFI_ALLOW_DEMO_SEED=true" >&2
+            exit 1
+          fi
+      - name: Apply explicit seed twice
+        env:
+          CROWNFI_ALLOW_DEMO_SEED: "true"
+        run: |
+          set -o pipefail
+          cargo run --manifest-path services/api/Cargo.toml --locked -- seed demo 2>&1 | tee seed-apply-first.log
+          cargo run --manifest-path services/api/Cargo.toml --locked -- seed demo 2>&1 | tee seed-apply-second.log
       - name: Verify deterministic records
         env:
-          PGPASSWORD: crownfi-test
+          PGPASSWORD: crownfi-seed-test-only
         run: |
-          test "$(psql -h 127.0.0.1 -U crownfi -d crownfi -Atc "SELECT count(*) FROM organizations WHERE slug = 'crownfi-demo';")" = "1"
-          test "$(psql -h 127.0.0.1 -U crownfi -d crownfi -Atc "SELECT count(*) FROM pageants WHERE slug = 'crownfi-international-2026';")" = "1"
-          test "$(psql -h 127.0.0.1 -U crownfi -d crownfi -Atc "SELECT count(*) FROM pageant_contestants pc JOIN pageants p ON p.id = pc.pageant_id WHERE p.slug = 'crownfi-international-2026';")" = "3"
-          test "$(psql -h 127.0.0.1 -U crownfi -d crownfi -Atc "SELECT count(*) FROM contestant_sections cs JOIN pageant_contestants pc ON pc.id = cs.pageant_contestant_id JOIN pageants p ON p.id = pc.pageant_id WHERE p.slug = 'crownfi-international-2026';")" = "12"
+          set -euo pipefail
+          psql -h 127.0.0.1 -U crownfi -d crownfi -Atc \
+            "SELECT count(*) FROM organizations WHERE slug = 'crownfi-demo';" | grep -qx 1
+          psql -h 127.0.0.1 -U crownfi -d crownfi -Atc \
+            "SELECT count(*) FROM pageants WHERE slug = 'crownfi-international-2026';" | grep -qx 1
+          psql -h 127.0.0.1 -U crownfi -d crownfi -Atc \
+            "SELECT count(*) FROM pageant_contestants pc JOIN pageants p ON p.id = pc.pageant_id WHERE p.slug = 'crownfi-international-2026';" | grep -qx 3
+          psql -h 127.0.0.1 -U crownfi -d crownfi -Atc \
+            "SELECT count(*) FROM contestant_sections cs JOIN pageant_contestants pc ON pc.id = cs.pageant_contestant_id JOIN pageants p ON p.id = pc.pageant_id WHERE p.slug = 'crownfi-international-2026';" | grep -qx 12
+          psql -h 127.0.0.1 -U crownfi -d crownfi -Atc \
+            "SELECT count(*) FROM organization_members om JOIN organizations o ON o.id = om.organization_id WHERE o.slug = 'crownfi-demo' AND om.role = 'owner' AND om.status = 'active';" | grep -qx 1
+          psql -h 127.0.0.1 -U crownfi -d crownfi -Atc \
+            "SELECT count(*) FROM audit_logs WHERE action = 'seed.demo.apply';" | grep -qx 1
+          psql -h 127.0.0.1 -U crownfi -d crownfi -Atc \
+            "SELECT count(*) FROM media_assets;" | grep -qx 0
+          psql -h 127.0.0.1 -U crownfi -d crownfi -Atc \
+            "SELECT count(*) FROM stellar_accounts;" | grep -qx 0
       - name: Prove production rejection
+        env:
+          CROWNFI_ALLOW_DEMO_SEED: "true"
+          CROWNFI_API_MODE: production
         run: |
-          if CROWNFI_API_MODE=production cargo run --manifest-path services/api/Cargo.toml --locked -- seed demo; then
+          set -o pipefail
+          if cargo run --manifest-path services/api/Cargo.toml --locked -- seed demo 2>&1 | tee seed-production-rejection.log; then
             echo "Production seed unexpectedly succeeded" >&2
             exit 1
           fi
+      - name: Upload seed diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crownfi-explicit-demo-seed-logs
+          path: seed-*.log
+          if-no-files-found: warn
+          retention-days: 7
