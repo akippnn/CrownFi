@@ -1,0 +1,84 @@
+name: Explicit demo seed smoke
+
+on:
+  pull_request:
+    branches: [slice/r2-media]
+    paths:
+      - "services/api/**"
+      - "docs/setup/demo-seed.md"
+      - ".github/workflows/explicit-seed.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: explicit-seed-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  seed-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: crownfi
+          POSTGRES_USER: crownfi
+          POSTGRES_PASSWORD: crownfi-seed-test-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U crownfi -d crownfi"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://crownfi:crownfi-seed-test-only@127.0.0.1:5432/crownfi
+      CROWNFI_DATABASE_REQUIRED: "true"
+      CROWNFI_API_MODE: local
+    defaults:
+      run:
+        working-directory: services/api
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Setup Rust stable
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt
+          rustup default stable
+      - name: Check Rust formatting
+        run: cargo fmt -- --check
+      - name: Apply migrations
+        run: cargo run --locked -- migrate
+      - name: Prove seed is disabled by default
+        run: |
+          if cargo run --locked -- seed demo; then
+            echo "Demo seed unexpectedly ran without CROWNFI_ALLOW_DEMO_SEED=true" >&2
+            exit 1
+          fi
+      - name: Apply explicit seed twice
+        env:
+          CROWNFI_ALLOW_DEMO_SEED: "true"
+        run: |
+          cargo run --locked -- seed demo
+          cargo run --locked -- seed demo
+      - name: Verify deterministic seed counts
+        working-directory: .
+        run: |
+          set -euo pipefail
+          container_id='${{ job.services.postgres.id }}'
+          test -n "$container_id"
+          docker exec "$container_id" psql -U crownfi -d crownfi -Atc \
+            "SELECT count(*) FROM organizations WHERE slug = 'crownfi-demo';" | grep -qx 1
+          docker exec "$container_id" psql -U crownfi -d crownfi -Atc \
+            "SELECT count(*) FROM pageants WHERE slug = 'crownfi-international-2026';" | grep -qx 1
+          docker exec "$container_id" psql -U crownfi -d crownfi -Atc \
+            "SELECT count(*) FROM pageant_contestants pc JOIN pageants p ON p.id = pc.pageant_id WHERE p.slug = 'crownfi-international-2026';" | grep -qx 3
+          docker exec "$container_id" psql -U crownfi -d crownfi -Atc \
+            "SELECT count(*) FROM contestant_sections cs JOIN pageant_contestants pc ON pc.id = cs.pageant_contestant_id JOIN pageants p ON p.id = pc.pageant_id WHERE p.slug = 'crownfi-international-2026';" | grep -qx 12
+          docker exec "$container_id" psql -U crownfi -d crownfi -Atc \
+            "SELECT count(*) FROM organization_members om JOIN organizations o ON o.id = om.organization_id WHERE o.slug = 'crownfi-demo' AND om.role = 'owner' AND om.status = 'active';" | grep -qx 1
