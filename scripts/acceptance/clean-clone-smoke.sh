@@ -68,6 +68,26 @@ wait_for_url() {
   done
 }
 
+assert_oneshot_succeeded() {
+  local service=$1
+  local container_id
+  local exit_code
+
+  container_id=$("${compose[@]}" ps -q "$service")
+  if [[ -z "$container_id" ]]; then
+    echo "$service container was not created" >&2
+    exit 1
+  fi
+
+  exit_code=$(docker inspect --format '{{.State.ExitCode}}' "$container_id")
+  if [[ "$exit_code" != "0" ]]; then
+    echo "$service exited with status $exit_code" >&2
+    exit 1
+  fi
+
+  printf '%s\n' "$exit_code" >"$evidence_dir/${service}-exit-code.txt"
+}
+
 echo "Building and starting the canonical CrownFi platform stack..."
 "${compose[@]}" up --build --detach
 
@@ -80,17 +100,12 @@ wait_for_url "Next.js health" "http://127.0.0.1:3000/api/health" "$evidence_dir/
 "${compose[@]}" exec -T redis redis-cli ping \
   | tee "$evidence_dir/redis-health.txt"
 
-db_init_id=$("${compose[@]}" ps --all --quiet db-init)
-if [[ -z "$db_init_id" ]]; then
-  echo "db-init container was not created" >&2
-  exit 1
-fi
+assert_oneshot_succeeded db-init
+assert_oneshot_succeeded legacy-db-init
 
-db_init_exit=$(docker inspect --format '{{.State.ExitCode}}' "$db_init_id")
-if [[ "$db_init_exit" != "0" ]]; then
-  echo "db-init exited with status $db_init_exit" >&2
-  exit 1
-fi
+"${compose[@]}" exec -T postgres psql -U "${POSTGRES_USER:-crownfi}" -d "${POSTGRES_DB:-crownfi}" -Atc \
+  "SELECT to_regclass('public.organizations') IS NOT NULL;" \
+  | tee "$evidence_dir/sqlx-organizations-table.txt"
 
 "${compose[@]}" ps -a | tee "$evidence_dir/compose-ps.txt"
 
@@ -108,6 +123,10 @@ if ! grep -q '"ok":true' "$evidence_dir/web-health.json"; then
 fi
 if ! grep -qx 'PONG' "$evidence_dir/redis-health.txt"; then
   echo "Redis did not return PONG" >&2
+  exit 1
+fi
+if ! grep -qx 't' "$evidence_dir/sqlx-organizations-table.txt"; then
+  echo "SQLx organizations table was not created" >&2
   exit 1
 fi
 
