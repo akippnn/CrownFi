@@ -1,6 +1,7 @@
 mod app;
 mod config;
 mod error;
+mod markets;
 mod models;
 mod state;
 
