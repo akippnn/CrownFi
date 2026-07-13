@@ -10,10 +10,10 @@ services:
     volumes:
       - crownfi_postgres:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U crownfi -d crownfi"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 20
 
   redis:
     image: redis:7-alpine
@@ -21,7 +21,7 @@ services:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 20
 
   api:
     build:
@@ -29,23 +29,30 @@ services:
       dockerfile: services/api/Dockerfile
     environment:
       CROWNFI_API_BIND: 0.0.0.0:8080
-      CROWNFI_API_MODE: ${CROWNFI_API_MODE:-testnet}
+      CROWNFI_API_MODE: ${CROWNFI_API_MODE:-local}
       STELLAR_MODE: ${STELLAR_MODE:-mock}
-      STELLAR_PLATFORM_SECRET: ${STELLAR_PLATFORM_SECRET}
-      AUDIT_ANCHOR_CONTRACT_ID: ${AUDIT_ANCHOR_CONTRACT_ID}
-      TICKET_CONTRACT_ID: ${TICKET_CONTRACT_ID}
-      COLLECTIBLE_CONTRACT_ID: ${COLLECTIBLE_CONTRACT_ID}
-      SALE_SPLITTER_CONTRACT_ID: ${SALE_SPLITTER_CONTRACT_ID}
-      USDC_TEST_CONTRACT_ID: ${USDC_TEST_CONTRACT_ID}
-      DEMO_CONTESTANT_PAYOUT: ${DEMO_CONTESTANT_PAYOUT}
-      EVENT_TREASURY_PAYOUT: ${EVENT_TREASURY_PAYOUT}
+      STELLAR_PLATFORM_SECRET: ${STELLAR_PLATFORM_SECRET:-}
+      AUDIT_ANCHOR_CONTRACT_ID: ${AUDIT_ANCHOR_CONTRACT_ID:-}
+      TICKET_CONTRACT_ID: ${TICKET_CONTRACT_ID:-}
+      COLLECTIBLE_CONTRACT_ID: ${COLLECTIBLE_CONTRACT_ID:-}
+      SALE_SPLITTER_CONTRACT_ID: ${SALE_SPLITTER_CONTRACT_ID:-}
+      USDC_TEST_CONTRACT_ID: ${USDC_TEST_CONTRACT_ID:-}
+      DEMO_CONTESTANT_PAYOUT: ${DEMO_CONTESTANT_PAYOUT:-}
+      EVENT_TREASURY_PAYOUT: ${EVENT_TREASURY_PAYOUT:-}
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       REDIS_URL: redis://redis:6379
+    ports:
+      - "127.0.0.1:8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
   db-init:
     build:
@@ -67,16 +74,18 @@ services:
       NODE_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       DIRECT_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      CROWNFI_API_URL: http://api:8080
+      NEXT_PUBLIC_CROWNFI_API_URL: http://localhost:8080
       STELLAR_MODE: ${STELLAR_MODE:-mock}
       WALLET_PROVIDER: ${WALLET_PROVIDER:-mock}
-      STELLAR_PLATFORM_SECRET: ${STELLAR_PLATFORM_SECRET}
-      AUDIT_ANCHOR_CONTRACT_ID: ${AUDIT_ANCHOR_CONTRACT_ID}
-      TICKET_CONTRACT_ID: ${TICKET_CONTRACT_ID}
-      COLLECTIBLE_CONTRACT_ID: ${COLLECTIBLE_CONTRACT_ID}
-      SALE_SPLITTER_CONTRACT_ID: ${SALE_SPLITTER_CONTRACT_ID}
-      USDC_TEST_CONTRACT_ID: ${USDC_TEST_CONTRACT_ID}
-      DEMO_CONTESTANT_PAYOUT: ${DEMO_CONTESTANT_PAYOUT}
-      EVENT_TREASURY_PAYOUT: ${EVENT_TREASURY_PAYOUT}
+      STELLAR_PLATFORM_SECRET: ${STELLAR_PLATFORM_SECRET:-}
+      AUDIT_ANCHOR_CONTRACT_ID: ${AUDIT_ANCHOR_CONTRACT_ID:-}
+      TICKET_CONTRACT_ID: ${TICKET_CONTRACT_ID:-}
+      COLLECTIBLE_CONTRACT_ID: ${COLLECTIBLE_CONTRACT_ID:-}
+      SALE_SPLITTER_CONTRACT_ID: ${SALE_SPLITTER_CONTRACT_ID:-}
+      USDC_TEST_CONTRACT_ID: ${USDC_TEST_CONTRACT_ID:-}
+      DEMO_CONTESTANT_PAYOUT: ${DEMO_CONTESTANT_PAYOUT:-}
+      EVENT_TREASURY_PAYOUT: ${EVENT_TREASURY_PAYOUT:-}
       NEXT_PUBLIC_STELLAR_NETWORK: testnet
       NEXT_PUBLIC_STELLAR_NETWORK_PASSPHRASE: Test SDF Network ; September 2015
       ADMIN_WALLETS: ""
@@ -88,9 +97,20 @@ services:
       postgres:
         condition: service_healthy
       api:
-        condition: service_started
+        condition: service_healthy
       db-init:
         condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
 volumes:
   crownfi_postgres:
