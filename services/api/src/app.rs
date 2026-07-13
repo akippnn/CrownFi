@@ -48,13 +48,23 @@ async fn health(State(state): State<AppState>) -> Json<serde_json::Value> {
     }))
 }
 
-async fn ready(State(state): State<AppState>) -> Json<serde_json::Value> {
-    Json(json!({
+async fn ready(State(state): State<AppState>) -> Result<Json<serde_json::Value>, ApiError> {
+    let database_ok = match state.database.as_ref() {
+        Some(pool) => crate::database::ping(pool).await.is_ok(),
+        None => false,
+    };
+
+    if state.config.database_required && !database_ok {
+        return Err(ApiError::ServiceUnavailable("database_unavailable"));
+    }
+
+    Ok(Json(json!({
         "ok": true,
         "database_configured": state.config.has_database(),
+        "database_reachable": database_ok,
         "redis_configured": state.config.has_redis(),
-        "note": "Phase 0 API uses in-memory state; DB/Redis are wired by env for the next phase.",
-    }))
+        "note": "Platform data uses PostgreSQL; voting and market proof-of-flow state remains in memory during migration.",
+    })))
 }
 
 async fn list_events(State(state): State<AppState>) -> Json<Vec<crate::models::Event>> {
@@ -298,7 +308,7 @@ fn build_tally(state: &AppState, event_id: &str, category_id: &str) -> TallyResp
     }
 }
 
-fn require_admin(state: &AppState, headers: &HeaderMap) -> Result<(), ApiError> {
+pub(crate) fn require_admin(state: &AppState, headers: &HeaderMap) -> Result<(), ApiError> {
     let provided = headers
         .get("x-admin-demo-token")
         .and_then(|value| value.to_str().ok())
