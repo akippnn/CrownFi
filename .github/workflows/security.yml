@@ -65,6 +65,26 @@ jobs:
       - name: Test Merkle receipts
         run: npm run test:merkle
 
+  api-security:
+    name: Rust API checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/api
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Setup Rust stable
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt
+          rustup default stable
+      - name: Format API
+        run: cargo fmt -- --check
+      - name: Test API
+        run: cargo test --locked
+
   contracts-security:
     name: Soroban contracts audit
     runs-on: ubuntu-latest
@@ -87,7 +107,7 @@ jobs:
       - name: Test workspace contracts
         run: cargo test --workspace --locked
       - name: Test prediction market contract
-        run: cargo test --manifest-path prediction-market/Cargo.toml
+        run: cargo test --manifest-path prediction-market/Cargo.toml --locked
       - name: Install cargo-audit
         run: cargo install cargo-audit --locked
       - name: Audit Rust dependencies for vulnerabilities
