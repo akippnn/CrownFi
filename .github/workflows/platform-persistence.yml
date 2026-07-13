@@ -2,7 +2,7 @@ name: Platform persistence smoke
 
 on:
   pull_request:
-    branches: [foundation/database-v1]
+    branches: [integration/platform-v1]
     paths:
       - "services/api/**"
       - "infra/**"
