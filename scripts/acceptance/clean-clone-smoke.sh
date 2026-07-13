@@ -34,8 +34,8 @@ show_failure_context() {
   if [[ $status -ne 0 ]]; then
     echo
     echo "Smoke test failed. Recent Compose state and logs follow." >&2
-    "${compose[@]}" ps -a || true
-    "${compose[@]}" logs --no-color --tail=200 || true
+    "${compose[@]}" ps --all | tee "$evidence_dir/failure-compose-ps.txt" || true
+    "${compose[@]}" logs --no-color --tail=300 | tee "$evidence_dir/failure-compose-logs.txt" || true
   fi
 
   if [[ "$cleanup" == "1" ]]; then
@@ -73,7 +73,7 @@ assert_oneshot_succeeded() {
   local container_id
   local exit_code
 
-  container_id=$("${compose[@]}" ps -q "$service")
+  container_id=$("${compose[@]}" ps --all --quiet "$service")
   if [[ -z "$container_id" ]]; then
     echo "$service container was not created" >&2
     exit 1
@@ -107,7 +107,7 @@ assert_oneshot_succeeded legacy-db-init
   "SELECT to_regclass('public.organizations') IS NOT NULL;" \
   | tee "$evidence_dir/sqlx-organizations-table.txt"
 
-"${compose[@]}" ps -a | tee "$evidence_dir/compose-ps.txt"
+"${compose[@]}" ps --all | tee "$evidence_dir/compose-ps.txt"
 
 if ! grep -q '"ok":true' "$evidence_dir/api-health.json"; then
   echo "Rust API health response did not report ok=true" >&2
