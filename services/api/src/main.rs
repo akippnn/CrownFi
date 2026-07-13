@@ -6,6 +6,7 @@ mod markets;
 mod media;
 mod models;
 mod platform;
+mod seed;
 mod state;
 mod storage;
 
@@ -28,22 +29,46 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     let config = Config::from_env();
-    let command = std::env::args()
-        .nth(1)
-        .unwrap_or_else(|| "serve".to_string());
+    let mut args = std::env::args().skip(1);
+    let command = args.next().unwrap_or_else(|| "serve".to_string());
 
-    if command == "migrate" {
-        database::migrate(&config).await?;
-        tracing::info!("SQLx migrations applied successfully");
-        return Ok(());
-    }
-
-    if command != "serve" {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!("unknown crownfi-api command: {command}; expected serve or migrate"),
-        )
-        .into());
+    match command.as_str() {
+        "migrate" => {
+            database::migrate(&config).await?;
+            tracing::info!("SQLx migrations applied successfully");
+            return Ok(());
+        }
+        "seed" => {
+            let profile = args.next().ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "seed profile is required; expected: crownfi-api seed demo",
+                )
+            })?;
+            if profile != "demo" {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("unknown seed profile: {profile}; expected demo"),
+                )
+                .into());
+            }
+            seed::seed_demo(&config).await?;
+            tracing::info!(
+                profile = "demo",
+                "explicit CrownFi seed applied successfully"
+            );
+            return Ok(());
+        }
+        "serve" => {}
+        _ => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "unknown crownfi-api command: {command}; expected serve, migrate, or seed demo"
+                ),
+            )
+            .into());
+        }
     }
 
     let addr: SocketAddr = config.bind_addr.parse()?;
