@@ -83,7 +83,80 @@ jobs:
       - name: Format API
         run: cargo fmt -- --check
       - name: Test API
-        run: cargo test --locked
+        run: |
+          set -o pipefail
+          cargo test --locked 2>&1 | tee api-test.log
+      - name: Upload API test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crownfi-api-test-log
+          path: services/api/api-test.log
+          if-no-files-found: warn
+          retention-days: 3
+
+  api-database:
+    name: SQLx migration checks
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: crownfi
+          POSTGRES_USER: crownfi
+          POSTGRES_PASSWORD: crownfi-test-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U crownfi -d crownfi"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://crownfi:crownfi-test-only@127.0.0.1:5432/crownfi
+      CROWNFI_DATABASE_REQUIRED: "true"
+    defaults:
+      run:
+        working-directory: services/api
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Setup Rust stable
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+      - name: Apply SQLx migrations
+        run: |
+          set -o pipefail
+          cargo run --locked -- migrate 2>&1 | tee migration-apply.log
+      - name: Prove migrations are repeatable
+        run: |
+          set -o pipefail
+          cargo run --locked -- migrate 2>&1 | tee migration-repeat.log
+      - name: Verify canonical tables and empty platform data
+        working-directory: .
+        run: |
+          set -euo pipefail
+          container_id='${{ job.services.postgres.id }}'
+          test -n "$container_id"
+          docker exec "$container_id" psql -U crownfi -d crownfi -Atc \
+            "SELECT to_regclass('public.organizations') IS NOT NULL;" | grep -qx t
+          docker exec "$container_id" psql -U crownfi -d crownfi -Atc \
+            "SELECT count(*) FROM users;" | grep -qx 0
+          docker exec "$container_id" psql -U crownfi -d crownfi -Atc \
+            "SELECT count(*) FROM organizations;" | grep -qx 0
+          docker exec "$container_id" psql -U crownfi -d crownfi -Atc \
+            "SELECT count(*) FROM pageants;" | grep -qx 0
+      - name: Upload migration diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crownfi-sqlx-migration-logs
+          path: services/api/migration-*.log
+          if-no-files-found: warn
+          retention-days: 3
 
   contracts-security:
     name: Soroban contracts audit
