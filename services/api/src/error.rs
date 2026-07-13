@@ -19,6 +19,8 @@ pub enum ApiError {
     Forbidden,
     #[error("database_error")]
     Database,
+    #[error("storage_error: {0}")]
+    Storage(&'static str),
     #[error("service_unavailable: {0}")]
     ServiceUnavailable(&'static str),
 }
@@ -41,6 +43,7 @@ impl IntoResponse for ApiError {
             ApiError::Unauthorized => StatusCode::UNAUTHORIZED,
             ApiError::Forbidden => StatusCode::FORBIDDEN,
             ApiError::Database => StatusCode::INTERNAL_SERVER_ERROR,
+            ApiError::Storage(_) => StatusCode::BAD_GATEWAY,
             ApiError::ServiceUnavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
         };
 
