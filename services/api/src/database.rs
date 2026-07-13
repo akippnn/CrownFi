@@ -8,7 +8,9 @@ static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
 
 #[derive(Debug, thiserror::Error)]
 pub enum DatabaseInitError {
-    #[error("DATABASE_URL is required when CROWNFI_DATABASE_REQUIRED=true or when running migrations")]
+    #[error(
+        "DATABASE_URL is required when CROWNFI_DATABASE_REQUIRED=true or when running migrations"
+    )]
     MissingDatabaseUrl,
     #[error("failed to connect to PostgreSQL")]
     Connect(#[source] sqlx::Error),
@@ -49,9 +51,7 @@ pub async fn ping(pool: &PgPool) -> Result<(), sqlx::Error> {
 async fn connect_pool(config: &Config, database_url: &str) -> Result<PgPool, DatabaseInitError> {
     PgPoolOptions::new()
         .max_connections(config.database_max_connections)
-        .acquire_timeout(Duration::from_secs(
-            config.database_acquire_timeout_seconds,
-        ))
+        .acquire_timeout(Duration::from_secs(config.database_acquire_timeout_seconds))
         .connect(database_url)
         .await
         .map_err(DatabaseInitError::Connect)
