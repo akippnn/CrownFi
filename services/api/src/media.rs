@@ -668,8 +668,7 @@ fn media_delivery_url(state: &AppState, object_key: &str) -> Option<String> {
                 .config
                 .r2_public_base_url
                 .as_deref()
-                .map(str::trim_end_matches)
-                .map(|base| format!("{base}/{object_key}"))
+                .map(|base| format!("{}/{object_key}", base.trim_end_matches('/')))
         })
 }
 
