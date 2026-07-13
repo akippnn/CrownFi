@@ -15,6 +15,7 @@ pub struct MediaStore {
     bucket: String,
     public_base_url: Option<String>,
     upload_ttl: Duration,
+    max_object_bytes: i64,
 }
 
 #[derive(Debug, Clone)]
@@ -64,6 +65,7 @@ impl MediaStore {
                 .map(str::trim_end_matches)
                 .map(ToOwned::to_owned),
             upload_ttl: Duration::from_secs(config.r2_upload_ttl_seconds),
+            max_object_bytes: config.r2_max_image_bytes,
         })
     }
 
@@ -115,6 +117,16 @@ impl MediaStore {
             .send()
             .await
             .map_err(|error| format!("failed to inspect R2 object: {error}"))?;
+        let content_length = output.content_length().unwrap_or_default();
+        if content_length <= 0 || content_length > self.max_object_bytes {
+            return Ok(StoredObject {
+                content_length,
+                content_type: output.content_type().map(ToOwned::to_owned),
+                sha256_metadata: None,
+                e_tag: output.e_tag().map(ToOwned::to_owned),
+            });
+        }
+
         let metadata_sha256 = output
             .metadata()
             .and_then(|metadata| metadata.get("sha256"))
@@ -123,7 +135,7 @@ impl MediaStore {
         let verified_sha256 = metadata_sha256.filter(|declared| declared == &actual_sha256);
 
         Ok(StoredObject {
-            content_length: output.content_length().unwrap_or_default(),
+            content_length,
             content_type: output.content_type().map(ToOwned::to_owned),
             sha256_metadata: verified_sha256,
             e_tag: output.e_tag().map(ToOwned::to_owned),
@@ -145,6 +157,9 @@ impl MediaStore {
             .await
             .map_err(|error| format!("failed to collect R2 object body: {error}"))?
             .into_bytes();
+        if bytes.len() as i64 > self.max_object_bytes {
+            return Err("R2 object exceeds configured maximum size".to_string());
+        }
         Ok(hex::encode(Sha256::digest(bytes)))
     }
 
