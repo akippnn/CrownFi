@@ -1,4 +1,4 @@
-use sqlx::{PgPool, Postgres, Transaction};
+use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
 use crate::{config::Config, database};
@@ -8,6 +8,7 @@ const DEMO_ORGANIZATION_ID: Uuid = Uuid::from_u128(0xc10f10000000000000000000000
 const DEMO_PAGEANT_ID: Uuid = Uuid::from_u128(0xc10f1000000000000000000000000100);
 const DEMO_CATEGORY_ID: Uuid = Uuid::from_u128(0xc10f1000000000000000000000000200);
 const DEMO_AUDIT_ID: Uuid = Uuid::from_u128(0xc10f1000000000000000000000000f00);
+const DEMO_SECTION_ID_BASE: u128 = 0xc10f1000000000000000000000100000;
 
 const DEMO_CONTESTANTS: &[(u128, u128, &str, &str, &str, i32)] = &[
     (
@@ -216,7 +217,9 @@ async fn seed_sections(
         (3_u128, "gallery", "Gallery", "gallery"),
         (4_u128, "collectibles", "Collectibles", "collectibles"),
     ] {
-        let section_id = Uuid::from_u128(participation_id.as_u128() + offset);
+        let section_id = Uuid::from_u128(
+            DEMO_SECTION_ID_BASE + (u128::try_from(order).unwrap_or_default() * 0x10) + offset,
+        );
         sqlx::query(
             "INSERT INTO contestant_sections (id, pageant_contestant_id, kind, title, slug, sort_order, is_visible, settings_json) VALUES ($1, $2, $3, $4, $5, $6, true, $7) ON CONFLICT (pageant_contestant_id, slug) DO UPDATE SET kind = EXCLUDED.kind, title = EXCLUDED.title, sort_order = EXCLUDED.sort_order, is_visible = true, settings_json = EXCLUDED.settings_json, updated_at = now()",
         )
@@ -280,23 +283,4 @@ fn country_name(country_code: &str) -> &'static str {
         "TH" => "Thailand",
         _ => "Unknown",
     }
-}
-
-#[allow(dead_code)]
-async fn assert_seed_counts(pool: &PgPool) -> Result<(i64, i64, i64), sqlx::Error> {
-    let organizations =
-        sqlx::query_scalar("SELECT count(*) FROM organizations WHERE slug = 'crownfi-demo'")
-            .fetch_one(pool)
-            .await?;
-    let pageants = sqlx::query_scalar(
-        "SELECT count(*) FROM pageants WHERE slug = 'crownfi-international-2026'",
-    )
-    .fetch_one(pool)
-    .await?;
-    let contestants = sqlx::query_scalar(
-        "SELECT count(*) FROM pageant_contestants pc JOIN pageants p ON p.id = pc.pageant_id WHERE p.slug = 'crownfi-international-2026'",
-    )
-    .fetch_one(pool)
-    .await?;
-    Ok((organizations, pageants, contestants))
 }
