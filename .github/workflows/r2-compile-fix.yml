@@ -1,0 +1,52 @@
+name: Apply R2 compile fix
+
+on:
+  push:
+    branches: [slice/r2-media]
+    paths:
+      - services/api/src/storage.rs
+      - .github/workflows/r2-compile-fix.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v5
+        with:
+          ref: slice/r2-media
+      - name: Fix delivery URL trimming
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('services/api/src/media.rs')
+          text = path.read_text(encoding='utf-8')
+          old = '''                .as_deref()
+                  .map(str::trim_end_matches)
+                  .map(|base| format!("{base}/{object_key}"))'''
+          new = '''                .as_deref()
+                  .map(|base| format!("{}/{object_key}", base.trim_end_matches('/')))'''
+          if old not in text:
+              raise SystemExit('expected media delivery URL pattern not found')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+      - name: Format API sources
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt
+          rustup default stable
+          cargo fmt --manifest-path services/api/Cargo.toml
+      - name: Commit compile fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add services/api/src/media.rs services/api/src/storage.rs
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "fix(media): compile R2 delivery URL handling"
+          git push origin HEAD:slice/r2-media
