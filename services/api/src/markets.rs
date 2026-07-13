@@ -23,14 +23,18 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/markets", get(list_markets))
         .route("/markets/:market_id", get(get_market))
-        .route("/markets/:market_id/stake-intents", post(create_stake_intent))
+        .route(
+            "/markets/:market_id/stake-intents",
+            post(create_stake_intent),
+        )
         .route("/market-intents/:intent_id", get(get_market_intent))
-        .route("/market-intents/:intent_id/submission", post(record_submission))
+        .route(
+            "/market-intents/:intent_id/submission",
+            post(record_submission),
+        )
 }
 
-async fn list_markets(
-    State(state): State<AppState>,
-) -> Json<Vec<PredictionMarketProjection>> {
+async fn list_markets(State(state): State<AppState>) -> Json<Vec<PredictionMarketProjection>> {
     let mut markets = state
         .markets
         .lock()
