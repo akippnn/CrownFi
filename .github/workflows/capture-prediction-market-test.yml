@@ -29,7 +29,15 @@ jobs:
         run: |
           mkdir -p .ci
           set +e
-          cargo test --manifest-path contracts/prediction-market/Cargo.toml > .ci/prediction-market-test.log 2>&1
+          {
+            cargo update \
+              --manifest-path contracts/prediction-market/Cargo.toml \
+              -p ed25519-dalek@3.0.0 \
+              --precise 2.2.0
+            cargo test \
+              --manifest-path contracts/prediction-market/Cargo.toml \
+              --locked
+          } > .ci/prediction-market-test.log 2>&1
           status=$?
           set -e
 
