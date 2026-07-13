@@ -152,7 +152,9 @@ curl --fail --silent --show-error \
   >"$evidence_dir/contestants-after-restart.json"
 curl --fail --silent --show-error \
   "http://127.0.0.1:8080/platform/pageant-contestants/$pageant_contestant_id/sections" \
-  >"$evidence_dir/sections-after-restart.json"\npython3 - "$evidence_dir" "$organization_id" "$pageant_id" "$pageant_contestant_id" <<'PY'
+  >"$evidence_dir/sections-after-restart.json"
+
+python3 - "$evidence_dir" "$organization_id" "$pageant_id" "$pageant_contestant_id" <<'PY'
 import json
 import pathlib
 import sys
