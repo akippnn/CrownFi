@@ -11,6 +11,7 @@ This directory is the canonical documentation home for the CrownFi platform cons
 - [Platform acceptance matrix](testing/PLATFORM_ACCEPTANCE_MATRIX.md)
 - [Clean-clone smoke test](setup/clean-clone.md)
 - [Database migration ownership](architecture/database-migration-ownership.md)
+- [Worker and Stellar processing boundary](architecture/worker-stellar-processing-boundary.md)
 - [Stellar Testnet contract registry](blockchain/testnet-contract-registry.md)
 - [Security audit notes](security/security-audit.md)
 
@@ -30,6 +31,7 @@ This directory is the canonical documentation home for the CrownFi platform cons
 - [Current runtime and responsibility boundaries](architecture/current-platform.md)
 - [Platform transition plan](architecture/platform-refactor-plan.md)
 - [Database migration ownership](architecture/database-migration-ownership.md)
+- [Worker and Stellar processing boundary](architecture/worker-stellar-processing-boundary.md)
 - [Component boundaries](architecture/component-boundaries.md)
 - [CrownFi design system](design/crownfi-design-system.md)
 - [Operations workflow](operations/workflow.md)
