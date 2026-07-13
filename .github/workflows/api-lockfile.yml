@@ -1,14 +1,16 @@
-name: Generate Rust API lockfile
+name: Normalize Rust API sources
 
 on:
   push:
     branches: [foundation/database-v1]
     paths:
       - services/api/Cargo.toml
+      - services/api/src/**
       - .github/workflows/api-lockfile.yml
   pull_request:
     paths:
       - services/api/Cargo.toml
+      - services/api/src/**
       - .github/workflows/api-lockfile.yml
   workflow_dispatch:
 
@@ -16,7 +18,7 @@ permissions:
   contents: write
 
 jobs:
-  generate:
+  normalize:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -25,27 +27,32 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
       - name: Setup Rust stable
         run: |
-          rustup toolchain install stable --profile minimal
+          rustup toolchain install stable --profile minimal --component rustfmt
           rustup default stable
       - name: Generate API lockfile
         working-directory: services/api
         run: cargo generate-lockfile
-      - name: Upload API lockfile
+      - name: Format API sources
+        working-directory: services/api
+        run: cargo fmt
+      - name: Upload normalized API files
         uses: actions/upload-artifact@v4
         with:
-          name: crownfi-api-cargo-lock
-          path: services/api/Cargo.lock
+          name: crownfi-api-normalized
+          path: |
+            services/api/Cargo.lock
+            services/api/src
           if-no-files-found: error
           retention-days: 1
-      - name: Commit generated lockfile on branch pushes
+      - name: Commit normalized API files on branch pushes
         if: github.event_name == 'push'
         run: |
-          if git diff --quiet -- services/api/Cargo.lock; then
-            echo "Cargo.lock is already current."
+          if git diff --quiet -- services/api/Cargo.lock services/api/src; then
+            echo "Rust API files are already normalized."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add services/api/Cargo.lock
-          git commit -m "chore(api): refresh SQLx lockfile"
+          git add services/api/Cargo.lock services/api/src
+          git commit -m "chore(api): normalize SQLx foundation"
           git push origin "HEAD:${GITHUB_REF_NAME}"
