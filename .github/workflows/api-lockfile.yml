@@ -6,6 +6,10 @@ on:
     paths:
       - services/api/Cargo.toml
       - .github/workflows/api-lockfile.yml
+  pull_request:
+    paths:
+      - services/api/Cargo.toml
+      - .github/workflows/api-lockfile.yml
   workflow_dispatch:
 
 permissions:
