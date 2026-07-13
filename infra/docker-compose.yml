@@ -41,8 +41,8 @@ services:
       context: ..
       dockerfile: web/Dockerfile
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      DIRECT_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=legacy
+      DIRECT_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=legacy
     command: ["sh", "-c", "npx prisma db push && npm run seed"]
     depends_on:
       postgres:
@@ -58,6 +58,15 @@ services:
       CROWNFI_API_MODE: ${CROWNFI_API_MODE:-local}
       CROWNFI_DATABASE_REQUIRED: "true"
       CROWNFI_DATABASE_MAX_CONNECTIONS: ${CROWNFI_DATABASE_MAX_CONNECTIONS:-10}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379
+      R2_ENDPOINT: ${R2_ENDPOINT:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_BUCKET: ${R2_BUCKET:-}
+      R2_PUBLIC_BASE_URL: ${R2_PUBLIC_BASE_URL:-}
+      R2_UPLOAD_TTL_SECONDS: ${R2_UPLOAD_TTL_SECONDS:-300}
+      R2_MAX_IMAGE_BYTES: ${R2_MAX_IMAGE_BYTES:-15728640}
       STELLAR_MODE: ${STELLAR_MODE:-mock}
       STELLAR_PLATFORM_SECRET: ${STELLAR_PLATFORM_SECRET:-}
       AUDIT_ANCHOR_CONTRACT_ID: ${AUDIT_ANCHOR_CONTRACT_ID:-}
@@ -67,8 +76,6 @@ services:
       USDC_TEST_CONTRACT_ID: ${USDC_TEST_CONTRACT_ID:-}
       DEMO_CONTESTANT_PAYOUT: ${DEMO_CONTESTANT_PAYOUT:-}
       EVENT_TREASURY_PAYOUT: ${EVENT_TREASURY_PAYOUT:-}
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      REDIS_URL: redis://redis:6379
     ports:
       - "127.0.0.1:8080:8080"
     depends_on:
@@ -90,8 +97,8 @@ services:
       dockerfile: web/Dockerfile
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      DIRECT_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=legacy
+      DIRECT_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=legacy
       NEXT_PUBLIC_API_BASE_URL: http://api:8080
       STELLAR_MODE: ${STELLAR_MODE:-mock}
       WALLET_PROVIDER: ${WALLET_PROVIDER:-mock}
