@@ -79,7 +79,12 @@ pub async fn seed_demo(config: &Config) -> Result<(), SeedError> {
 fn demo_seed_allowed() -> bool {
     std::env::var("CROWNFI_ALLOW_DEMO_SEED")
         .ok()
-        .is_some_and(|value| matches!(value.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+        .is_some_and(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
 }
 
 async fn seed_user(tx: &mut Transaction<'_, Postgres>) -> Result<(), sqlx::Error> {
@@ -152,7 +157,9 @@ async fn seed_contestants(tx: &mut Transaction<'_, Postgres>) -> Result<(), sqlx
     let pageant_id = pageant_id(tx).await?;
     let category_id = category_id(tx, pageant_id).await?;
 
-    for (contestant_raw, participation_raw, display_name, country_code, sash, number) in DEMO_CONTESTANTS {
+    for (contestant_raw, participation_raw, display_name, country_code, sash, number) in
+        DEMO_CONTESTANTS
+    {
         let contestant_id = Uuid::from_u128(*contestant_raw);
         let participation_id = Uuid::from_u128(*participation_raw);
         sqlx::query(
@@ -277,9 +284,10 @@ fn country_name(country_code: &str) -> &'static str {
 
 #[allow(dead_code)]
 async fn assert_seed_counts(pool: &PgPool) -> Result<(i64, i64, i64), sqlx::Error> {
-    let organizations = sqlx::query_scalar("SELECT count(*) FROM organizations WHERE slug = 'crownfi-demo'")
-        .fetch_one(pool)
-        .await?;
+    let organizations =
+        sqlx::query_scalar("SELECT count(*) FROM organizations WHERE slug = 'crownfi-demo'")
+            .fetch_one(pool)
+            .await?;
     let pageants = sqlx::query_scalar(
         "SELECT count(*) FROM pageants WHERE slug = 'crownfi-international-2026'",
     )
