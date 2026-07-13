@@ -99,6 +99,7 @@ services:
       NODE_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=legacy
       DIRECT_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=legacy
+      CROWNFI_API_INTERNAL_URL: http://api:8080
       NEXT_PUBLIC_API_BASE_URL: http://api:8080
       STELLAR_MODE: ${STELLAR_MODE:-mock}
       WALLET_PROVIDER: ${WALLET_PROVIDER:-mock}
