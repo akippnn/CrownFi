@@ -24,10 +24,14 @@ impl Config {
     }
 
     pub fn has_database(&self) -> bool {
-        self.database_url.as_ref().is_some_and(|value| !value.is_empty())
+        self.database_url
+            .as_ref()
+            .is_some_and(|value| !value.is_empty())
     }
 
     pub fn has_redis(&self) -> bool {
-        self.redis_url.as_ref().is_some_and(|value| !value.is_empty())
+        self.redis_url
+            .as_ref()
+            .is_some_and(|value| !value.is_empty())
     }
 }
