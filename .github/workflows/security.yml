@@ -85,6 +85,57 @@ jobs:
       - name: Test API
         run: cargo test --locked
 
+  api-database:
+    name: SQLx migration checks
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: crownfi
+          POSTGRES_USER: crownfi
+          POSTGRES_PASSWORD: crownfi-ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U crownfi -d crownfi"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://crownfi:crownfi-ci@127.0.0.1:5432/crownfi
+      CROWNFI_DATABASE_REQUIRED: "true"
+    defaults:
+      run:
+        working-directory: services/api
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Setup Rust stable
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+      - name: Apply SQLx migrations
+        run: cargo run --locked -- migrate
+      - name: Prove migrations are repeatable
+        run: cargo run --locked -- migrate
+      - name: Verify canonical tables and empty platform data
+        working-directory: .
+        run: |
+          set -euo pipefail
+          container_id='${{ job.services.postgres.id }}'
+          test -n "$container_id"
+          docker exec "$container_id" psql -U crownfi -d crownfi -Atc \
+            "SELECT to_regclass('public.organizations') IS NOT NULL;" | grep -qx t
+          docker exec "$container_id" psql -U crownfi -d crownfi -Atc \
+            "SELECT count(*) FROM users;" | grep -qx 0
+          docker exec "$container_id" psql -U crownfi -d crownfi -Atc \
+            "SELECT count(*) FROM organizations;" | grep -qx 0
+          docker exec "$container_id" psql -U crownfi -d crownfi -Atc \
+            "SELECT count(*) FROM pageants;" | grep -qx 0
+
   contracts-security:
     name: Soroban contracts audit
     runs-on: ubuntu-latest
