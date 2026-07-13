@@ -79,7 +79,9 @@ curl --fail --silent --show-error "http://127.0.0.1:3000/platform/pageants/$page
   >"$evidence_dir/pageant.html"
 curl --fail --silent --show-error \
   "http://127.0.0.1:3000/platform/pageants/$pageant_id/contestants/$contestant_id" \
-  >"$evidence_dir/contestant.html"\nassert_contains "$evidence_dir/platform-seeded.html" "CrownFi International 2026"
+  >"$evidence_dir/contestant.html"
+
+assert_contains "$evidence_dir/platform-seeded.html" "CrownFi International 2026"
 assert_contains "$evidence_dir/pageant.html" "Ariella Santos"
 assert_contains "$evidence_dir/pageant.html" "Fan Choice"
 assert_contains "$evidence_dir/contestant.html" "Ariella Santos"
