@@ -1,95 +1,145 @@
 # CrownFi platform refactor plan
 
-This branch is the starting point for the broader CrownFi architecture refactor after the security hardening and ticketing PRs are merged.
+This document is the compact architecture transition plan. The detailed roadmap and release gates live in:
+
+- [`../planning/PLATFORM_V1_EXECUTION_PLAN.md`](../planning/PLATFORM_V1_EXECUTION_PLAN.md)
+- [`../testing/PLATFORM_ACCEPTANCE_MATRIX.md`](../testing/PLATFORM_ACCEPTANCE_MATRIX.md)
+- [`../planning/CAPABILITY_AND_HARDCODING_INVENTORY.md`](../planning/CAPABILITY_AND_HARDCODING_INVENTORY.md)
 
 ## Goal
 
-Move CrownFi from a hackathon MVP with Next.js API routes into a clearer full-stack architecture aligned with the hackathon technical plan:
+Move CrownFi from a one-pageant hackathon MVP with duplicated Next.js business routes and process-local Rust prototypes into a production-shaped Stellar Testnet platform with:
 
-- `apps/web` for the Next.js frontend.
-- `services/api` for a Rust/Axum backend.
-- `contracts/crownfi_audit` for the Soroban audit checkpoint contract.
-- `packages/shared` for shared request/response schemas and types.
-- `infra/docker-compose.yml` for local Postgres and Redis.
+- Next.js for UI, routing, and wallet approval;
+- Rust/Axum for business workflows and authorization;
+- PostgreSQL/SQLx for durable application state;
+- Redis for distributed coordination, rate limits, and jobs;
+- Cloudflare R2 for public/product/pageant media;
+- Stellar/Soroban for audit commitments, payments, tickets, collectibles, ownership, and settlement;
+- workers, indexing, and reconciliation for partial-failure recovery.
 
 ## Current state
 
-The current MVP already demonstrates the core product narrative:
+The repository already contains:
 
-- off-chain vote intake for speed and privacy;
-- database-level duplicate-vote prevention;
-- Merkle/tally proofs for published results;
-- Soroban/Stellar anchoring for audit checkpoints;
+- a working Next.js MVP;
+- a Rust/Axum service and platform Compose path;
+- PostgreSQL and Redis containers;
+- Soroban contracts and Testnet-capable helpers;
 - Freighter wallet flows;
-- ticketing and collectible demo flows;
-- security hardening around admin sessions and transaction intents.
+- voting proof, ticket, and collectible prototypes;
+- a reconstructed prediction-market contract/API boundary;
+- shared UI-kit, security, CI, and deployment work.
 
-However, backend logic is still inside Next.js route handlers, and the repo layout is not yet the desired long-term monorepo structure.
+The repository does **not** yet contain:
 
-## Refactor phases
+- SQLx migrations and canonical Rust repositories;
+- persistent organizations/pageants/contestants in Rust;
+- R2 media upload and asset records;
+- durable transaction intents and jobs;
+- a chain indexer/reconciliation service;
+- production KYC/provider integration;
+- complete Testnet deployment verification.
 
-### Phase 0 — create a working platform path
+## Transition principles
 
-Status: started in this branch.
+1. Preserve working behavior until its replacement passes acceptance tests.
+2. Migrate one vertical capability at a time.
+3. Do not merge unrelated repository histories or reintegrate ZIP snapshots.
+4. Do not silently fall back from Testnet to mock behavior.
+5. Do not store raw KYC documents in CrownFi's general media storage.
+6. Do not use floating-point values for money.
+7. Do not declare chain ownership or settlement successful before confirmation.
+8. Keep `main` deployable and use the current integration branch as the collaboration base.
 
-- Add `services/api` as a Rust/Axum service.
-- Add a local in-memory proof-of-flow API for events, votes, tallies, snapshots, and mock anchoring.
-- Add `infra/docker-compose.yml` with Postgres, Redis, API, and web services.
-- Add `docs/LOCAL_MVP_TESTING.md` and `docs/PRODUCTION_COMPOSE_PATH.md` so the team has an explicit testing path and production-like path.
-- Keep the existing `web/` app and Next.js routes running until each critical flow is migrated and tested.
+## Milestone A — Canonical runtime baseline
 
-### Phase 1 — preserve behavior and split components
+Status: **in progress**.
 
-- Keep the existing app working.
-- Extract ticketing, voting, verification, and admin UI into reusable components.
-- Keep the new UI components style-isolated enough for the upcoming redesign.
-- Fix overclaiming copy around anti-scalping and mock/testnet behavior.
+Completed or established:
 
-### Phase 2 — introduce Rust API skeleton
+- canonical architecture and responsibility boundaries;
+- collaboration and PR rules;
+- capability/hardcoding inventory;
+- acceptance matrix;
+- reconstruction/integration branch;
+- safe local environment defaults;
+- explicit web/API health endpoints;
+- canonical Compose health checks;
+- clean-clone smoke script and human procedure;
+- Testnet contract registry structure;
+- SQLx migration ownership decision;
+- corrected README/current architecture documentation.
 
-- Keep expanding `services/api` beyond the current skeleton.
-- Replace in-memory state with Postgres repositories.
-- Add Redis-backed rate limiting while retaining a local in-memory fallback.
-- Mirror existing API routes without removing Next.js routes yet.
-- Add tests for vote submission and duplicate-vote rejection at the API layer.
+Still required:
 
-### Phase 3 — move critical backend flows
+- run and pass the clean-clone procedure on a genuinely fresh environment;
+- record evidence and any undocumented setup step;
+- populate and independently verify Testnet contract deployments;
+- decide/implement the separate worker and Stellar processing boundary;
+- stabilize and promote the integration branch to `integration/platform-v1`;
+- confirm all acceptance checks on the final Milestone A commit.
 
-- Move vote submission, tally generation, ticket purchase confirmation, and admin actions from Next.js API routes to Rust.
-- Keep transaction intent validation and admin auth semantics.
-- Add Redis-backed rate limiting or an interface that can fall back to memory in local demo mode.
+## Milestone B — Platform/database/media foundation
 
-### Phase 4 — align data model
+- add SQLx and versioned migrations;
+- add PostgreSQL connection pooling and repositories;
+- add users, Stellar accounts, organizations, memberships, roles, and audit logs;
+- add pageants, categories, contestants, pageant participation, and dynamic sections;
+- add Cloudflare R2 media assets and variants;
+- make Rust the canonical read/write API for migrated platform data;
+- keep demo content behind an explicit seed command.
 
-- Add or rename models for vote receipts, tally snapshots, audit logs, Stellar checkpoints, and contestant support payments if that feature is included.
-- Keep vote power separate from tickets, collectibles, and donations.
+## Milestone C — Stellar collectible eCommerce and KYC
 
-### Phase 5 — Soroban cleanup
+- product catalogue and integer Stellar asset prices;
+- orders, payment attempts, provider events, and refunds;
+- persistent transaction intents and signed-envelope validation;
+- worker-driven mint fulfillment and retry;
+- indexed ownership and payout reconciliation;
+- action-based KYC/policy decisions with provider-held identity documents.
 
-- Rename or wrap `audit-anchor` as `crownfi_audit`.
-- Ensure the contract exposes clear checkpoint methods and admin-only commits.
-- Keep only hashes, roots, checkpoint metadata, and non-PII values on-chain.
+## Milestone D — Durable voting and audit anchoring
 
-### Phase 6 — documentation and demo polish
+- persistent voting rounds, rules, votes, receipts, and snapshots;
+- database-level duplicate protection and concurrency tests;
+- Merkle proof material and independent verification;
+- administrator-approved Soroban anchoring;
+- indexing and reconciliation of the commitment.
 
-- Update README setup commands.
-- Add architecture and hackathon pitch docs.
-- Add a clean demo script for the team.
-- Clearly label local demo mode vs Stellar Testnet mode.
+## Milestone E — Ticketing and operations
 
-## MVP acceptance rule
+- ticket products, inventory, reservations, and expiry;
+- Stellar issuance and ownership verification;
+- replay-resistant check-in;
+- organizer/admin operational dashboards;
+- staging deployment, monitoring, backups, and recovery.
 
-The architecture refactor is not considered demo-ready until the documented local path can:
+## Milestone F — Engagement and gated prediction markets
 
-1. Start Postgres and Redis.
-2. Start the Rust API.
-3. Return API health/readiness.
-4. Submit a vote.
-5. Reject a duplicate vote.
-6. Return a tally.
-7. Create a snapshot.
-8. Anchor the snapshot in mock mode.
-9. Start the web app.
-10. Run ticketing in mock mode.
+- append-only loyalty ledger;
+- rewards and redemptions;
+- pageant-aware leaderboards;
+- Testnet-only, moderated, policy-gated prediction markets;
+- chain-authoritative positions and settlement reconciliation.
 
-This rule is meant to prevent an architecture-only refactor that looks good in folders but does not actually run.
+## Milestone A acceptance rule
+
+The baseline is not complete until a new tester can, from a fresh clone and without private instructions:
+
+1. create the documented local environment;
+2. build the canonical Compose stack;
+3. reach PostgreSQL and Redis health;
+4. reach Rust API health/readiness;
+5. reach Next.js health and the application;
+6. identify that local mode is mock-only;
+7. produce the recorded smoke evidence;
+8. explain which expected future services are still missing.
+
+Run:
+
+```bash
+bash scripts/acceptance/clean-clone-smoke.sh
+```
+
+See [`../setup/clean-clone.md`](../setup/clean-clone.md).
