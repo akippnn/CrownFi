@@ -8,6 +8,7 @@ mod markets;
 mod media;
 mod models;
 mod orders;
+mod payouts;
 mod platform;
 mod seed;
 mod state;
@@ -86,7 +87,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .merge(orders::router().with_state(state.clone()))
         .merge(stellar_intents::router().with_state(state.clone()))
         .merge(stellar_reconciliation::router().with_state(state.clone()))
-        .merge(fulfillment::router().with_state(state));
+        .merge(fulfillment::router().with_state(state.clone()))
+        .merge(payouts::router().with_state(state));
 
     tracing::info!(%addr, "starting CrownFi API");
     let listener = TcpListener::bind(addr).await?;
