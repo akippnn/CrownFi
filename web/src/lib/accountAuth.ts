@@ -14,11 +14,15 @@ export type AccountSession = {
   exp: number;
 };
 
+function localProfile(): boolean {
+  return (process.env.CROWNFI_API_MODE ?? "local") === "local";
+}
+
 function sessionSecret(): string {
   const value = process.env.ACCOUNT_SESSION_SECRET;
   if (value) return value;
-  if (process.env.NODE_ENV === "production") {
-    throw new Error("ACCOUNT_SESSION_SECRET is required in production");
+  if (process.env.NODE_ENV === "production" && !localProfile()) {
+    throw new Error("ACCOUNT_SESSION_SECRET is required outside the local profile");
   }
   return "local-development-account-session-secret-change-before-sharing";
 }
