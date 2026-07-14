@@ -3,12 +3,17 @@ mod commerce;
 mod config;
 mod database;
 mod error;
+mod fulfillment;
 mod markets;
 mod media;
 mod models;
+mod orders;
+mod payouts;
 mod platform;
 mod seed;
 mod state;
+mod stellar_intents;
+mod stellar_reconciliation;
 mod storage;
 
 use std::{io, net::SocketAddr};
@@ -78,7 +83,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .merge(markets::router().with_state(state.clone()))
         .merge(platform::router().with_state(state.clone()))
         .merge(media::router().with_state(state.clone()))
-        .merge(commerce::router().with_state(state));
+        .merge(commerce::router().with_state(state.clone()))
+        .merge(orders::router().with_state(state.clone()))
+        .merge(stellar_intents::router().with_state(state.clone()))
+        .merge(stellar_reconciliation::router().with_state(state.clone()))
+        .merge(fulfillment::router().with_state(state.clone()))
+        .merge(payouts::router().with_state(state));
 
     tracing::info!(%addr, "starting CrownFi API");
     let listener = TcpListener::bind(addr).await?;
