@@ -1,0 +1,40 @@
+name: Commerce orders smoke
+
+on:
+  pull_request:
+    paths:
+      - "services/api/**"
+      - "infra/**"
+      - "scripts/acceptance/commerce-orders-smoke.sh"
+      - ".github/workflows/commerce-orders-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: commerce-orders-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  commerce-orders:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Run durable order and payment reconciliation flow
+        env:
+          CROWNFI_ORDERS_SMOKE_TIMEOUT_SECONDS: "1500"
+        run: bash scripts/acceptance/commerce-orders-smoke.sh
+      - name: Upload order evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crownfi-commerce-orders-smoke
+          path: .artifacts/acceptance/commerce-orders
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7
