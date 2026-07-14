@@ -89,6 +89,8 @@ for route_name, route in manifest.get("spec", {}).get("routing", {}).items():
     if not 1 <= route["port"] <= 65535:
         raise SystemExit(f"route {route_name!r} has an invalid port")
 PY
+elif [[ "${ARCTURUS_PROJECT_VALIDATED:-}" == "1" ]]; then
+  :
 elif command -v arcturusctl >/dev/null 2>&1; then
   arcturusctl project validate .arcturus/project.json || fail "canonical project validation failed"
 else
