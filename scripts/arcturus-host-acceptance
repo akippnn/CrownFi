@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+set -euo pipefail
+marker="${ARCTURUS_BOOT_MARKER:-$HOME/.local/state/arcturus/verify-next-boot}"
+host_status() {
+  # These are deliberately host-side checks. A service that happens to be active
+  # from a source checkout or an NVM interpreter is not an installable release.
+  # The routing receipt check ties the registry/router result to the active
+  # digest-pinned manifest instead of accepting a stale generated nginx file.
+  exec arcturusctl host-status --require-installed-artifacts \
+    --reject-source-unit-drift --reject-nvm-unit-drift \
+    --require-matching-routing-receipt "$@"
+}
+case "${1:-status}" in
+  status)
+    shift || true
+    host_status "$@"
+    ;;
+  arm)
+    shift || true
+    mkdir -p "$(dirname "$marker")"
+    umask 077
+    printf 'armed_at=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$marker"
+    echo "Next-boot verification marker armed at $marker."
+    ;;
+  verify-boot)
+    [[ -f "$marker" ]] || { echo "No next-boot marker is armed." >&2; exit 2; }
+    shift || true
+    arcturusctl host-status --require-installed-artifacts \
+      --reject-source-unit-drift --reject-nvm-unit-drift \
+      --require-matching-routing-receipt "$@"
+    rm -f "$marker"
+    ;;
+  reboot)
+    [[ "${2:-}" == "--confirm" ]] || {
+      echo "Refusing reboot. Run '$0 reboot --confirm' only after backup and critical-unit status pass." >&2
+      exit 2
+    }
+    [[ -f "$marker" ]] || { echo "Arm next-boot verification first." >&2; exit 2; }
+    systemctl reboot
+    ;;
+  *) echo "usage: $0 status|arm|verify-boot|reboot --confirm" >&2; exit 2 ;;
+esac

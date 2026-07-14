@@ -1,0 +1,297 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  arcturus-update bootstrap [arcturus-setup init options]
+  arcturus-update apply [--project-dir DIR] [--from BLUEPRINT_DIR] [--dry-run] [--force] [-- SETUP_OPTIONS...]
+  arcturus-update show [--project-dir DIR]
+
+bootstrap
+  Run from an Arcturus Service Blueprint checkout. Bootstraps a project,
+  installs this updater into the project, and records the normalized setup
+  command and blueprint identity.
+
+apply
+  Re-run setup from a newer blueprint using the project's tracked
+  .arcturus/project.env. By default the new blueprint is expected at
+  .arcturus/blueprint, so an extracted release can be dragged there and
+  applied with ./scripts/arcturus-update apply.
+
+show
+  Print the recorded blueprint provenance and the canonical replay command.
+USAGE
+}
+
+MODE="${1:-}"
+if [[ "$MODE" =~ ^(-h|--help)$ ]]; then usage; exit 0; fi
+[[ "$MODE" =~ ^(bootstrap|apply|show)$ ]] || { usage >&2; exit 2; }
+shift
+
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SELF_ROOT="$(cd "$SELF_DIR/.." && pwd)"
+PROJECT_DIR=""
+SOURCE_DIR=""
+DRY_RUN=false
+FORCE=false
+EXTRA_SETUP_ARGS=()
+ORIGINAL_ARGS=("$@")
+
+canonical_dir() {
+  mkdir -p "$1"
+  (cd "$1" && pwd)
+}
+
+project_from_context() {
+  local candidate
+  if candidate="$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null)"; then
+    printf '%s\n' "$candidate"
+  elif [[ "$(basename "$SELF_DIR")" == scripts && -d "$SELF_ROOT/.arcturus" ]]; then
+    printf '%s\n' "$SELF_ROOT"
+  else
+    printf '%s\n' "$PWD"
+  fi
+}
+
+find_project_arg() {
+  local index
+  for ((index=0; index<${#ORIGINAL_ARGS[@]}; index++)); do
+    if [[ "${ORIGINAL_ARGS[$index]}" == --project-dir ]]; then
+      ((index + 1 < ${#ORIGINAL_ARGS[@]})) || { echo "--project-dir requires a value" >&2; exit 2; }
+      printf '%s\n' "${ORIGINAL_ARGS[$((index + 1))]}"
+      return 0
+    fi
+  done
+  project_from_context
+}
+
+blueprint_identity() {
+  local root="$1"
+  local git_root
+  BLUEPRINT_VERSION="unknown"
+  BLUEPRINT_COMMIT="unknown"
+  BLUEPRINT_DIRTY=false
+  [[ -f "$root/VERSION" ]] && BLUEPRINT_VERSION="$(tr -d '[:space:]' < "$root/VERSION")"
+  git_root="$(git -C "$root" rev-parse --show-toplevel 2>/dev/null || true)"
+  if [[ -n "$git_root" && "$(cd "$git_root" && pwd)" == "$(cd "$root" && pwd)" ]]; then
+    BLUEPRINT_COMMIT="$(git -C "$root" rev-parse HEAD)"
+    git -C "$root" diff --quiet --ignore-submodules -- && git -C "$root" diff --cached --quiet --ignore-submodules -- || BLUEPRINT_DIRTY=true
+  fi
+  BLUEPRINT_FINGERPRINT="$(python3 - "$root" <<'PY'
+from pathlib import Path
+import hashlib, sys
+root = Path(sys.argv[1]).resolve()
+h = hashlib.sha256()
+for path in sorted(p for p in root.rglob('*') if p.is_file() and '.git' not in p.relative_to(root).parts):
+    rel = path.relative_to(root).as_posix().encode()
+    h.update(len(rel).to_bytes(8, 'big'))
+    h.update(rel)
+    data = path.read_bytes()
+    h.update(len(data).to_bytes(8, 'big'))
+    h.update(data)
+print(h.hexdigest())
+PY
+)"
+}
+
+sha256_file() {
+  sha256sum "$1" | cut -d' ' -f1
+}
+
+managed_updater_digest() {
+  local state="$PROJECT_DIR/.arcturus/bootstrap.json"
+  [[ -f "$state" ]] || return 0
+  python3 - "$state" <<'PY'
+import json, sys
+try:
+    print(json.load(open(sys.argv[1], encoding='utf-8')).get('updaterSha256', ''))
+except (OSError, ValueError):
+    pass
+PY
+}
+
+install_updater() {
+  local source="$SOURCE_DIR/scripts/arcturus-update"
+  local target="$PROJECT_DIR/scripts/arcturus-update"
+  local desired current managed proposal backup
+  [[ -f "$source" ]] || { echo "Blueprint updater is missing: $source" >&2; exit 2; }
+  desired="$(sha256_file "$source")"
+  current=""; [[ -f "$target" ]] && current="$(sha256_file "$target")"
+  managed="$(managed_updater_digest)"
+
+  if [[ ! -e "$target" || "$current" == "$desired" || ( -n "$managed" && "$current" == "$managed" ) ]]; then
+    mkdir -p "$(dirname "$target")"
+    install -m 0755 "$source" "$target.new"
+    mv -f "$target.new" "$target"
+  elif $FORCE; then
+    backup="$target.backup.$(date -u +%Y%m%dT%H%M%SZ)"
+    cp -a "$target" "$backup"
+    install -m 0755 "$source" "$target.new"
+    mv -f "$target.new" "$target"
+    echo "Replaced scripts/arcturus-update; backup: $backup"
+  else
+    proposal="$PROJECT_DIR/.arcturus/updates/scripts/arcturus-update.new"
+    mkdir -p "$(dirname "$proposal")"
+    install -m 0755 "$source" "$proposal"
+    echo "Preserved modified scripts/arcturus-update; proposed update: $proposal" >&2
+  fi
+  INSTALLED_UPDATER_DIGEST="$(sha256_file "$target")"
+}
+
+ensure_blueprint_cache_ignored() {
+  local ignore="$PROJECT_DIR/.gitignore"
+  touch "$ignore"
+  if ! grep -q '^# BEGIN ARCTURUS BLUEPRINT CACHE$' "$ignore"; then
+    cat >> "$ignore" <<'EOF_IGNORE'
+
+# BEGIN ARCTURUS BLUEPRINT CACHE
+.arcturus/blueprint/
+# END ARCTURUS BLUEPRINT CACHE
+EOF_IGNORE
+  fi
+}
+
+normalize_bootstrap_args_json() {
+  python3 - "$PROJECT_DIR" "${ORIGINAL_ARGS[@]}" <<'PY'
+import json, os, sys
+project = os.path.realpath(sys.argv[1])
+args = sys.argv[2:]
+out = []
+i = 0
+while i < len(args):
+    value = args[i]
+    if value == '--project-dir' and i + 1 < len(args):
+        out.extend([value, '.'])
+        i += 2
+        continue
+    if value == '--config' and i + 1 < len(args):
+        candidate = os.path.realpath(args[i + 1])
+        if candidate.startswith(project + os.sep):
+            candidate = os.path.relpath(candidate, project)
+        out.extend([value, candidate])
+        i += 2
+        continue
+    out.append(value)
+    i += 1
+print(json.dumps(['${ARCTURUS_BLUEPRINT_DIR}/scripts/arcturus-setup', 'init', *out]))
+PY
+}
+
+record_state() {
+  local action="$1" setup_command_json="$2"
+  local state_dir="$PROJECT_DIR/.arcturus"
+  local state_file="$state_dir/bootstrap.json"
+  local history_file="$state_dir/bootstrap-history.jsonl"
+  mkdir -p "$state_dir"
+  BLUEPRINT_VERSION="$BLUEPRINT_VERSION" \
+  BLUEPRINT_COMMIT="$BLUEPRINT_COMMIT" \
+  BLUEPRINT_DIRTY="$BLUEPRINT_DIRTY" \
+  BLUEPRINT_FINGERPRINT="$BLUEPRINT_FINGERPRINT" \
+  ACTION="$action" \
+  SETUP_COMMAND_JSON="$setup_command_json" \
+  UPDATER_SHA256="$INSTALLED_UPDATER_DIGEST" \
+  PROJECT_DIR="$PROJECT_DIR" \
+  STATE_FILE="$state_file" \
+  HISTORY_FILE="$history_file" \
+  python3 - <<'PY'
+import datetime, json, os
+now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat().replace('+00:00', 'Z')
+record = {
+    'schemaVersion': 1,
+    'appliedAt': now,
+    'action': os.environ['ACTION'],
+    'blueprintVersion': os.environ['BLUEPRINT_VERSION'],
+    'blueprintCommit': os.environ['BLUEPRINT_COMMIT'],
+    'blueprintDirty': os.environ['BLUEPRINT_DIRTY'].lower() == 'true',
+    'blueprintFingerprintSha256': os.environ['BLUEPRINT_FINGERPRINT'],
+    'projectConfig': '.arcturus/project.env',
+    'setupCommand': json.loads(os.environ['SETUP_COMMAND_JSON']),
+    'replayCommand': ['./scripts/arcturus-update', 'apply'],
+    'updaterSha256': os.environ['UPDATER_SHA256'],
+}
+state = os.environ['STATE_FILE']
+history = os.environ['HISTORY_FILE']
+tmp = state + '.new'
+with open(tmp, 'w', encoding='utf-8') as handle:
+    json.dump(record, handle, indent=2)
+    handle.write('\n')
+os.replace(tmp, state)
+with open(history, 'a', encoding='utf-8') as handle:
+    handle.write(json.dumps(record, separators=(',', ':')) + '\n')
+PY
+}
+
+show_state() {
+  local state="$PROJECT_DIR/.arcturus/bootstrap.json"
+  [[ -f "$state" ]] || { echo "No Arcturus bootstrap provenance found at $state" >&2; exit 1; }
+  python3 - "$state" <<'PY'
+import json, shlex, sys
+state = json.load(open(sys.argv[1], encoding='utf-8'))
+print(f"Blueprint version: {state.get('blueprintVersion', 'unknown')}")
+print(f"Blueprint commit:  {state.get('blueprintCommit', 'unknown')}")
+print(f"Applied at:        {state.get('appliedAt', 'unknown')}")
+print('Setup command:     ' + shlex.join(state.get('setupCommand', [])))
+print('Next update:       ' + shlex.join(state.get('replayCommand', ['./scripts/arcturus-update', 'apply'])))
+print('Drop the new blueprint at .arcturus/blueprint, or pass --from /path/to/blueprint.')
+PY
+}
+
+case "$MODE" in
+  bootstrap)
+    SOURCE_DIR="$SELF_ROOT"
+    PROJECT_DIR="$(canonical_dir "$(find_project_arg)")"
+    [[ -x "$SOURCE_DIR/scripts/arcturus-setup" ]] || { echo "Run bootstrap from an Arcturus Service Blueprint checkout." >&2; exit 2; }
+    blueprint_identity "$SOURCE_DIR"
+    "$SOURCE_DIR/scripts/arcturus-setup" init "${ORIGINAL_ARGS[@]}"
+    install_updater
+    ensure_blueprint_cache_ignored
+    setup_command_json="$(normalize_bootstrap_args_json)"
+    record_state bootstrap "$setup_command_json"
+    echo "Arcturus project bootstrap recorded. Future updates: ./scripts/arcturus-update apply"
+    ;;
+  apply)
+    PROJECT_DIR="$(project_from_context)"
+    while (($#)); do
+      case "$1" in
+        --project-dir) PROJECT_DIR="$2"; shift 2 ;;
+        --from) SOURCE_DIR="$2"; shift 2 ;;
+        --dry-run) DRY_RUN=true; shift ;;
+        --force) FORCE=true; shift ;;
+        --) shift; EXTRA_SETUP_ARGS+=("$@"); break ;;
+        *) echo "Unknown apply option: $1" >&2; usage >&2; exit 2 ;;
+      esac
+    done
+    PROJECT_DIR="$(canonical_dir "$PROJECT_DIR")"
+    SOURCE_DIR="${SOURCE_DIR:-$PROJECT_DIR/.arcturus/blueprint}"
+    SOURCE_DIR="$(cd "$SOURCE_DIR" 2>/dev/null && pwd)" || { echo "Blueprint directory not found: $SOURCE_DIR" >&2; exit 2; }
+    [[ -x "$SOURCE_DIR/scripts/arcturus-setup" ]] || { echo "Invalid blueprint directory: missing scripts/arcturus-setup" >&2; exit 2; }
+    [[ -f "$PROJECT_DIR/.arcturus/project.env" ]] || { echo "Missing $PROJECT_DIR/.arcturus/project.env; run bootstrap first." >&2; exit 2; }
+    blueprint_identity "$SOURCE_DIR"
+    setup_args=(init --project-dir "$PROJECT_DIR" --config "$PROJECT_DIR/.arcturus/project.env" --non-interactive)
+    $DRY_RUN && setup_args+=(--dry-run)
+    $FORCE && setup_args+=(--force)
+    setup_args+=("${EXTRA_SETUP_ARGS[@]}")
+    "$SOURCE_DIR/scripts/arcturus-setup" "${setup_args[@]}"
+    if $DRY_RUN; then
+      echo "Dry run complete; provenance was not changed."
+      exit 0
+    fi
+    install_updater
+    ensure_blueprint_cache_ignored
+    setup_command_json='["${ARCTURUS_BLUEPRINT_DIR}/scripts/arcturus-setup","init","--project-dir",".","--config",".arcturus/project.env","--non-interactive"]'
+    record_state apply "$setup_command_json"
+    echo "Arcturus blueprint updated to $BLUEPRINT_VERSION."
+    ;;
+  show)
+    PROJECT_DIR="$(project_from_context)"
+    while (($#)); do
+      case "$1" in
+        --project-dir) PROJECT_DIR="$2"; shift 2 ;;
+        *) echo "Unknown show option: $1" >&2; usage >&2; exit 2 ;;
+      esac
+    done
+    PROJECT_DIR="$(canonical_dir "$PROJECT_DIR")"
+    show_state
+    ;;
+esac

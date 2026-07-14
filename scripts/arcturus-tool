@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+if command -v arcturusctl >/dev/null 2>&1; then exec arcturusctl "$@"; fi
+bundle="${ARCTURUS_BUNDLE:-$(sed -n 's/^ARCTURUS_BUNDLE=//p' .arcturus/lock.env)}"
+[[ "$bundle" =~ @sha256:[0-9a-f]{64}$ ]] || {
+  echo "Install arcturusctl or configure a digest-pinned ARCTURUS_BUNDLE." >&2
+  exit 2
+}
+if command -v buildah >/dev/null 2>&1; then
+  root="${ARCTURUS_BUILDAH_ROOT:?ARCTURUS_BUILDAH_ROOT is required for Buildah tool execution}"
+  runroot="${ARCTURUS_BUILDAH_RUNROOT:?ARCTURUS_BUILDAH_RUNROOT is required for Buildah tool execution}"
+  auth_args=()
+  [[ -z "${REGISTRY_AUTH_FILE:-}" ]] || auth_args=(--authfile "$REGISTRY_AUTH_FILE")
+  container="$(buildah --root "$root" --runroot "$runroot" from "${auth_args[@]}" "$bundle")"
+  cleanup() { buildah --root "$root" --runroot "$runroot" rm "$container" >/dev/null 2>&1 || true; }
+  trap cleanup EXIT INT TERM
+  buildah --root "$root" --runroot "$runroot" run \
+    --volume "$PWD:/workspace:rw,z" --workingdir /workspace \
+    --env "ARCTURUS_TOKEN_FILE=${ARCTURUS_TOKEN_FILE:-}" \
+    --env "ARCTURUS_API_URL=${ARCTURUS_API_URL:-}" \
+    "$container" -- python3.12 /opt/arcturus/deploy/arcturusctl.py "$@"
+  exit $?
+fi
+if command -v podman >/dev/null 2>&1; then
+  auth_args=()
+  [[ -z "${REGISTRY_AUTH_FILE:-}" ]] || auth_args=(--authfile "$REGISTRY_AUTH_FILE")
+  exec podman "${auth_args[@]}" run --rm --security-opt label=disable -v "$PWD:/workspace:rw,z" -w /workspace \
+    -e ARCTURUS_DEPLOY_TOKEN -e ARCTURUS_TOKEN_FILE -e ARCTURUS_API_URL "$bundle" "$@"
+fi
+echo "Install arcturusctl, Podman, or Buildah." >&2
+exit 2
