@@ -29,6 +29,21 @@ jobs:
         with:
           components: rustfmt
       - name: Check Rust formatting
-        run: cargo fmt --manifest-path services/api/Cargo.toml -- --check
+        run: |
+          mkdir -p .artifacts/commerce-rust
+          set +e
+          cargo fmt --manifest-path services/api/Cargo.toml -- --check >.artifacts/commerce-rust/fmt.txt 2>&1
+          status=$?
+          cat .artifacts/commerce-rust/fmt.txt
+          exit "$status"
       - name: Test Rust API
         run: cargo test --manifest-path services/api/Cargo.toml --locked
+      - name: Upload Rust diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crownfi-commerce-rust-diagnostics
+          path: .artifacts/commerce-rust
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7
