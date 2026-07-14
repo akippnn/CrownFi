@@ -1,0 +1,225 @@
+{
+  "apiVersion": "arcturus.u128.org/project-spec/v1",
+  "components": {
+    "postgres": {
+      "image": "docker.io/library/postgres@sha256:7a396fd264a2067788b6551122b50f162bf6136312c7fc9d74381cb92c648382",
+      "containerName": "stellar-project-postgres",
+      "environment": {
+        "POSTGRES_DB": "crownfi",
+        "POSTGRES_USER": "crownfi"
+      },
+      "secrets": [
+        {
+          "name": "stellar-postgres-password-20260713",
+          "type": "env",
+          "target": "POSTGRES_PASSWORD"
+        }
+      ],
+      "volumes": [
+        {
+          "source": "crownfi-platform_crownfi_postgres",
+          "target": "/var/lib/postgresql/data",
+          "type": "volume",
+          "external": true
+        }
+      ],
+      "networks": [
+        "app"
+      ],
+      "healthCheck": {
+        "command": "pg_isready -U crownfi -d crownfi",
+        "interval": "5s",
+        "timeout": "5s",
+        "retries": 10,
+        "startPeriod": "5s"
+      },
+      "restart": "always"
+    },
+    "redis": {
+      "image": "docker.io/library/redis@sha256:b1addbe72465a718643cff9e60a58e6df1841e29d6d7d60c9a85d8d72f08d1a7",
+      "containerName": "stellar-project-redis",
+      "networks": [
+        "app"
+      ],
+      "healthCheck": {
+        "command": "redis-cli ping",
+        "interval": "5s",
+        "timeout": "5s",
+        "retries": 10,
+        "startPeriod": "5s"
+      },
+      "restart": "always"
+    },
+    "api": {
+      "image": "git.u128.org/mprojects/stellar-project/api@sha256:d752f702c23b49c2ab71349fbe75f8f31a92f21f228008b21969a299950faff0",
+      "containerName": "stellar-project-api",
+      "environment": {
+        "CROWNFI_API_BIND": "0.0.0.0:8080",
+        "CROWNFI_API_MODE": "testnet",
+        "STELLAR_MODE": "mock",
+        "REDIS_URL": "redis://stellar-project-redis:6379"
+      },
+      "secrets": [
+        {
+          "name": "stellar-database-url-20260712",
+          "type": "env",
+          "target": "DATABASE_URL"
+        }
+      ],
+      "dependsOn": [
+        "postgres",
+        "redis"
+      ],
+      "networks": [
+        "app"
+      ],
+      "restart": "always"
+    },
+    "db-init": {
+      "image": "git.u128.org/mprojects/stellar-project/web@sha256:c9ba632da4b9d581fee8a0c2ae8434c205cc123b7919eff608a0aa7d1c49f8eb",
+      "containerName": "stellar-project-db-init",
+      "mode": "oneshot",
+      "command": [
+        "sh",
+        "-c",
+        "npx prisma db push && npm run seed"
+      ],
+      "secrets": [
+        {
+          "name": "stellar-database-url-20260712",
+          "type": "env",
+          "target": "DATABASE_URL"
+        },
+        {
+          "name": "stellar-database-url-20260712",
+          "type": "env",
+          "target": "DIRECT_URL"
+        }
+      ],
+      "dependsOn": [
+        "postgres"
+      ],
+      "networks": [
+        "app"
+      ],
+      "restart": "no"
+    },
+    "web": {
+      "image": "git.u128.org/mprojects/stellar-project/web@sha256:c9ba632da4b9d581fee8a0c2ae8434c205cc123b7919eff608a0aa7d1c49f8eb",
+      "containerName": "stellar-project-web",
+      "environment": {
+        "NODE_ENV": "production",
+        "STELLAR_MODE": "mock",
+        "WALLET_PROVIDER": "mock",
+        "NEXT_PUBLIC_STELLAR_NETWORK": "testnet",
+        "NEXT_PUBLIC_STELLAR_NETWORK_PASSPHRASE": "Test SDF Network ; September 2015",
+        "ADMIN_WALLETS": "",
+        "NEXT_PUBLIC_ADMIN_WALLETS": ""
+      },
+      "secrets": [
+        {
+          "name": "stellar-database-url-20260712",
+          "type": "env",
+          "target": "DATABASE_URL"
+        },
+        {
+          "name": "stellar-database-url-20260712",
+          "type": "env",
+          "target": "DIRECT_URL"
+        },
+        {
+          "name": "stellar-admin-session-20260712",
+          "type": "env",
+          "target": "ADMIN_SESSION_SECRET"
+        }
+      ],
+      "dependsOn": [
+        "api",
+        "db-init"
+      ],
+      "networks": [
+        "app",
+        "internal_routing"
+      ],
+      "healthCheck": {
+        "command": "node -e \"fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
+        "interval": "10s",
+        "timeout": "5s",
+        "retries": 10,
+        "startPeriod": "20s"
+      },
+      "restart": "always"
+    }
+  },
+  "networks": [
+    {
+      "name": "app",
+      "external": false
+    },
+    {
+      "name": "internal_routing",
+      "external": true
+    }
+  ],
+  "routing": {
+    "web": {
+      "component": "web",
+      "port": 3000,
+      "protocol": "http",
+      "domains": [
+        "stellar-project.u128.org"
+      ],
+      "websocket": true,
+      "maxBodySize": "10G"
+    }
+  },
+  "deployment": {
+    "timeoutSeconds": 600,
+    "rollbackOnFailure": true
+  },
+  "builds": {
+    "api": {
+      "repository": "git.u128.org/mprojects/stellar-project/api",
+      "context": ".",
+      "containerfile": "services/api/Dockerfile",
+      "validationTargets": [
+        "test"
+      ],
+      "releaseTarget": "runtime",
+      "components": [
+        "api"
+      ]
+    },
+    "web": {
+      "repository": "git.u128.org/mprojects/stellar-project/web",
+      "context": ".",
+      "containerfile": "web/Dockerfile",
+      "validationTargets": [
+        "builder"
+      ],
+      "releaseTarget": "runtime",
+      "components": [
+        "web",
+        "db-init"
+      ]
+    }
+  },
+  "fixedComponents": [
+    "postgres",
+    "redis"
+  ],
+  "verification": {
+    "publicUrl": "https://stellar-project.u128.org",
+    "publicMode": "cloudflare-challenge",
+    "requireRouting": true
+  },
+  "migration": {
+    "legacyCompose": [
+      {
+        "project": "crownfi-platform",
+        "required": false,
+        "cleanup": "retain"
+      }
+    ]
+  }
+}

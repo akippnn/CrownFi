@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+action="${1:-status}"; shift || true
+case "$action" in
+  status|enable|disable|remove|rollback) exec ./scripts/arcturus-tool project "$action" .arcturus/project.json "$@" ;;
+  *) echo "usage: $0 status|rollback|enable|disable|remove" >&2; exit 2 ;;
+esac

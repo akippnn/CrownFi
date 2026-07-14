@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+revision="${1:?revision required}"
+api_digest_file="${2:?API digest file required}"
+web_digest_file="${3:?web digest file required}"
+for digest_file in "$api_digest_file" "$web_digest_file"; do
+  digest="$(tr -d '[:space:]' <"$digest_file")"
+  [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "invalid image digest in $digest_file" >&2; exit 1; }
+done
+exec ./scripts/arcturus-tool project render .arcturus/project.json \
+  --revision "$revision" --digest "api=$api_digest_file" --digest "web=$web_digest_file" \
+  --output release.json --request-output deployment-request.json
