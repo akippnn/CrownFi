@@ -6,11 +6,15 @@ const API_BASE = (
   "http://127.0.0.1:8080"
 ).replace(/\/$/, "");
 
+function localProfile(): boolean {
+  return (process.env.CROWNFI_API_MODE ?? "local") === "local";
+}
+
 function internalToken(): string {
   const value = process.env.CROWNFI_WEB_INTERNAL_TOKEN;
   if (value) return value;
-  if (process.env.NODE_ENV === "production") {
-    throw new Error("CROWNFI_WEB_INTERNAL_TOKEN is required in production");
+  if (process.env.NODE_ENV === "production" && !localProfile()) {
+    throw new Error("CROWNFI_WEB_INTERNAL_TOKEN is required outside the local profile");
   }
   return "local-web-to-api-token-change-before-sharing";
 }
