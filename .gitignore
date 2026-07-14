@@ -28,3 +28,19 @@ web.digest
 release.json
 deployment-request.json
 deployment-response.json
+
+# BEGIN ARCTURUS GENERATED
+.arcturus/build/
+.arcturus/updates/
+image.digest
+release.json
+deployment-request.json
+deployment-response.json
+.env
+.env.*
+!.env.example
+# END ARCTURUS GENERATED
+
+# BEGIN ARCTURUS BLUEPRINT CACHE
+.arcturus/blueprint/
+# END ARCTURUS BLUEPRINT CACHE
