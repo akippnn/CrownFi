@@ -13,7 +13,6 @@ concurrency:
   cancel-in-progress: false
 env:
   ARCTURUS_REGISTRY_HOST: "git.u128.org"
-  ARCTURUS_BUNDLE: ${{ vars.ARCTURUS_BUNDLE }}
 jobs:
   lifecycle:
     name: Run lifecycle operation
