@@ -1,0 +1,40 @@
+name: Collectible fulfillment smoke
+
+on:
+  pull_request:
+    paths:
+      - "services/api/**"
+      - "infra/**"
+      - "scripts/acceptance/collectible-fulfillment-smoke.sh"
+      - ".github/workflows/collectible-fulfillment-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: collectible-fulfillment-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  collectible-fulfillment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Run restart-safe collectible fulfillment flow
+        env:
+          CROWNFI_FULFILLMENT_TIMEOUT_SECONDS: "1500"
+        run: bash scripts/acceptance/collectible-fulfillment-smoke.sh
+      - name: Upload fulfillment evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crownfi-collectible-fulfillment
+          path: .artifacts/acceptance/collectible-fulfillment
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7
