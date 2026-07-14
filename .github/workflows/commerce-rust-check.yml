@@ -1,0 +1,33 @@
+name: Commerce Rust checks
+
+on:
+  pull_request:
+    paths:
+      - "services/api/**"
+      - ".github/workflows/commerce-rust-check.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: commerce-rust-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  commerce-rust:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Setup Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path services/api/Cargo.toml -- --check
+      - name: Test Rust API
+        run: cargo test --manifest-path services/api/Cargo.toml --locked
