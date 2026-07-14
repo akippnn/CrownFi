@@ -1,0 +1,40 @@
+name: Stellar transaction intents smoke
+
+on:
+  pull_request:
+    paths:
+      - "services/api/**"
+      - "infra/**"
+      - "scripts/acceptance/stellar-transaction-intents-smoke.sh"
+      - ".github/workflows/stellar-transaction-intents-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stellar-intents-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  stellar-transaction-intents:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Run persistent Stellar intent flow
+        env:
+          CROWNFI_STELLAR_INTENTS_TIMEOUT_SECONDS: "1500"
+        run: bash scripts/acceptance/stellar-transaction-intents-smoke.sh
+      - name: Upload Stellar intent evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crownfi-stellar-transaction-intents
+          path: .artifacts/acceptance/stellar-transaction-intents
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7
