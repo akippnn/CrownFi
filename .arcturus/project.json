@@ -6,10 +6,7 @@
     "provider": "gitea",
     "apiUrl": "http://100.108.225.27:9090",
     "storage": "isolated",
-    "deployTokenSecret": "ARCTURUS_DEPLOY_TOKEN",
-    "testIntent": {
-      "mode": "command"
-    }
+    "deployTokenSecret": "ARCTURUS_DEPLOY_TOKEN"
   },
   "registry": {
     "host": "git.u128.org",
