@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAccountSession, readAccountSession, setAccountCookie } from "@/lib/accountAuth";
 import { crownfiInternalFetch, responseJson } from "@/lib/crownfi-internal";
-import { displaySuffix, sealConfig } from "@/lib/protectedConfig";
+import { maskedSuffix, sealConfiguration } from "@/lib/configEnvelope";
 
 export async function POST(request: NextRequest) {
   const session = readAccountSession(request);
@@ -19,13 +19,13 @@ export async function POST(request: NextRequest) {
   if (r2 && Object.values(r2).some((value) => String(value ?? "").trim())) {
     integrations.push({
       provider: "cloudflare-r2",
-      protected_value: sealConfig({
+      protected_value: sealConfiguration({
         endpoint: String(r2.endpoint ?? "").trim(),
         bucket: String(r2.bucket ?? "").trim(),
         accessKeyId: String(r2.accessKeyId ?? "").trim(),
         secretAccessKey: String(r2.secretAccessKey ?? "").trim(),
       }),
-      value_suffix: displaySuffix(r2.accessKeyId),
+      value_suffix: maskedSuffix(r2.accessKeyId),
     });
   }
 
