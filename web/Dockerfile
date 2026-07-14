@@ -13,6 +13,13 @@ COPY web ./
 RUN npx prisma generate
 RUN npm run build
 
+FROM rust:1-bookworm AS api-migrator-builder
+WORKDIR /api
+COPY services/api/Cargo.toml services/api/Cargo.lock ./
+COPY services/api/migrations ./migrations
+COPY services/api/src ./src
+RUN cargo build --release --locked
+
 FROM node:22-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
@@ -23,5 +30,6 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
+COPY --from=api-migrator-builder /api/target/release/crownfi-api /usr/local/bin/crownfi-api
 EXPOSE 3000
 CMD ["npm", "run", "start"]

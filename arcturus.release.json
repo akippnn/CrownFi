@@ -62,6 +62,8 @@
         "environment": {
           "CROWNFI_API_BIND": "0.0.0.0:8080",
           "CROWNFI_API_MODE": "testnet",
+          "CROWNFI_DATABASE_REQUIRED": "true",
+          "CROWNFI_ALLOW_MAINNET": "false",
           "STELLAR_MODE": "mock",
           "REDIS_URL": "redis://stellar-project-redis:6379"
         },
@@ -70,15 +72,38 @@
             "name": "stellar-database-url-20260712",
             "type": "env",
             "target": "DATABASE_URL"
+          },
+          {
+            "name": "stellar-web-internal-20260715",
+            "type": "env",
+            "target": "CROWNFI_WEB_INTERNAL_TOKEN"
+          },
+          {
+            "name": "stellar-setup-bootstrap-20260715",
+            "type": "env",
+            "target": "CROWNFI_SETUP_BOOTSTRAP_TOKEN"
+          },
+          {
+            "name": "stellar-payout-worker-20260715",
+            "type": "env",
+            "target": "CROWNFI_PAYOUT_WORKER_TOKEN"
           }
         ],
         "dependsOn": [
           "postgres",
-          "redis"
+          "redis",
+          "db-init"
         ],
         "networks": [
           "app"
         ],
+        "healthCheck": {
+          "command": "curl --fail --silent http://127.0.0.1:8080/ready",
+          "interval": "10s",
+          "timeout": "5s",
+          "retries": 10,
+          "startPeriod": "10s"
+        },
         "restart": "always"
       },
       "db-init": {
@@ -86,20 +111,14 @@
         "containerName": "stellar-project-db-init",
         "mode": "oneshot",
         "command": [
-          "sh",
-          "-c",
-          "npx prisma db push && npm run seed"
+          "/usr/local/bin/crownfi-api",
+          "migrate"
         ],
         "secrets": [
           {
             "name": "stellar-database-url-20260712",
             "type": "env",
             "target": "DATABASE_URL"
-          },
-          {
-            "name": "stellar-database-url-20260712",
-            "type": "env",
-            "target": "DIRECT_URL"
           }
         ],
         "dependsOn": [
@@ -115,6 +134,8 @@
         "containerName": "stellar-project-web",
         "environment": {
           "NODE_ENV": "production",
+          "CROWNFI_API_MODE": "testnet",
+          "CROWNFI_API_INTERNAL_URL": "http://stellar-project-api:8080",
           "STELLAR_MODE": "mock",
           "WALLET_PROVIDER": "mock",
           "NEXT_PUBLIC_STELLAR_NETWORK": "testnet",
@@ -137,6 +158,21 @@
             "name": "stellar-admin-session-20260712",
             "type": "env",
             "target": "ADMIN_SESSION_SECRET"
+          },
+          {
+            "name": "stellar-web-internal-20260715",
+            "type": "env",
+            "target": "CROWNFI_WEB_INTERNAL_TOKEN"
+          },
+          {
+            "name": "stellar-account-session-20260715",
+            "type": "env",
+            "target": "ACCOUNT_SESSION_SECRET"
+          },
+          {
+            "name": "stellar-config-protection-20260715",
+            "type": "env",
+            "target": "CROWNFI_CONFIG_PROTECTION_KEY"
           }
         ],
         "dependsOn": [
@@ -173,7 +209,7 @@
         "port": 3000,
         "protocol": "http",
         "domains": [
-          "stellar-project.u128.org"
+          "crownfi.u128.org"
         ],
         "websocket": true,
         "maxBodySize": "10G"
