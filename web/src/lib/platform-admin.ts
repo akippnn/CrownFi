@@ -15,8 +15,12 @@ function enabledValue(value: string | undefined) {
 }
 
 export function organizerReviewConfig() {
+  const mode = process.env.CROWNFI_API_MODE?.trim().toLowerCase() || "local";
+  const forbiddenMode = mode === "staging" || mode === "production";
   return {
-    enabled: enabledValue(process.env.CROWNFI_ORGANIZER_REVIEW_ENABLED),
+    enabled: enabledValue(process.env.CROWNFI_ORGANIZER_REVIEW_ENABLED) && !forbiddenMode,
+    mode,
+    forbiddenMode,
     actorUserId: process.env.CROWNFI_ORGANIZER_ACTOR_USER_ID?.trim() || null,
   };
 }
@@ -48,7 +52,13 @@ export async function platformAdminPost<T>(
 ): Promise<PlatformAdminResult<T>> {
   const config = organizerReviewConfig();
   if (!config.enabled) {
-    return { ok: false, status: 404, error: "organizer_review_disabled" };
+    return {
+      ok: false,
+      status: config.forbiddenMode ? 403 : 404,
+      error: config.forbiddenMode
+        ? "organizer_review_forbidden_in_runtime_mode"
+        : "organizer_review_disabled",
+    };
   }
 
   const token = adminToken();
