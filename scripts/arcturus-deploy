@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+set -euo pipefail
+exec ./scripts/arcturus-tool project deploy .arcturus/project.json --request deployment-request.json

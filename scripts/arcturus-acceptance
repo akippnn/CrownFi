@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+token_file="${ARCTURUS_TOKEN_FILE:-}"
+cleanup=false
+if [[ -z "$token_file" ]]; then
+  [[ -n "${ARCTURUS_DEPLOY_TOKEN:-}" ]] || {
+    echo "Set ARCTURUS_TOKEN_FILE or ARCTURUS_DEPLOY_TOKEN." >&2
+    exit 2
+  }
+  umask 077
+  token_file="$(mktemp)"
+  printf '%s\n' "$ARCTURUS_DEPLOY_TOKEN" >"$token_file"
+  unset ARCTURUS_DEPLOY_TOKEN
+  cleanup=true
+fi
+trap '$cleanup && rm -f "$token_file"' EXIT
+./scripts/arcturus-tool project verify .arcturus/project.json --release release.json --token-file "$token_file"
+./scripts/arcturus-tool project rollback-probe .arcturus/project.json \
+  --request deployment-request.json --token-file "$token_file"
+./scripts/arcturus-tool project verify .arcturus/project.json --release release.json --token-file "$token_file"

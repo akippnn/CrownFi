@@ -1,0 +1,22 @@
+name: Deploy stellar-project
+on:
+  push:
+    branches: [main]
+concurrency:
+  group: arcturus-stellar-project
+  cancel-in-progress: false
+env:
+  ARCTURUS_REGISTRY_HOST: "git.u128.org"
+  ARCTURUS_BUNDLE: ${{ vars.ARCTURUS_BUNDLE }}
+jobs:
+  deploy:
+    name: Build, deploy, and verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Build, deploy, and verify immutable release
+        env:
+          REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
+          REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
+          ARCTURUS_DEPLOY_TOKEN: ${{ secrets.ARCTURUS_DEPLOY_TOKEN }}
+        run: ./scripts/arcturus-ci '${{ github.sha }}'
