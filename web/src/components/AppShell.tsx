@@ -6,23 +6,20 @@ import { useSession } from "@/session/SessionProvider";
 import { Icons } from "./icons";
 import { short } from "@/lib/format";
 
+// The CrownFi logo is the only global route back to the landing page.
+// Keep the primary navigation focused on usable discovery and ownership flows;
+// voting, ticketing, and verification stay contextual until their durable flows
+// are ready for human acceptance.
 const USER_LINKS = [
-  { href: "/", label: "Home" },
-  { href: "/platform", label: "Pageants" },
-  { href: "/vote", label: "Vote" },
-  { href: "/verify", label: "Verify" },
-  { href: "/tickets", label: "Tickets" },
-  { href: "/contestants", label: "Collect" },
-  { href: "/organize", label: "Organize" },
-  { href: "/me", label: "Me" },
+  { href: "/platform", label: "Explore" },
+  { href: "/contestants", label: "Collectibles" },
+  { href: "/me", label: "Account" },
 ];
 
-const TABS = [
-  { href: "/vote", label: "Vote", Icon: Icons.Vote },
-  { href: "/verify", label: "Verify", Icon: Icons.Verify },
-  { href: "/tickets", label: "Tickets", Icon: Icons.Tickets },
-  { href: "/contestants", label: "Collect", Icon: Icons.Collect },
-  { href: "/me", label: "Me", Icon: Icons.Me },
+const MOBILE_TABS = [
+  { href: "/platform", label: "Explore", Icon: Icons.Crown },
+  { href: "/contestants", label: "Collectibles", Icon: Icons.Collect },
+  { href: "/me", label: "Account", Icon: Icons.Me },
 ];
 
 function isActivePath(path: string, href: string) {
@@ -35,7 +32,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [menu, setMenu] = useState(false);
   const { fan, address, isAdmin, connect, disconnect, connecting, error, needsInstall, clearError } = useSession();
 
-  const links = isAdmin ? [...USER_LINKS, { href: "/admin", label: "Admin" }] : USER_LINKS;
+  const links = isAdmin ? [...USER_LINKS, { href: "/admin", label: "Manage" }] : USER_LINKS;
 
   return (
     <div className="min-h-screen pb-20 sm:pb-0 text-white">
@@ -45,13 +42,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <button className="btn-ghost h-9 w-9 !px-0 sm:hidden" onClick={() => setDrawer(true)} aria-label="Open menu">
               <Icons.Menu size={18} strokeWidth={1.75} />
             </button>
-            <Link href="/" className="flex items-center gap-2">
+            <Link href="/" className="flex items-center gap-2" aria-label="CrownFi landing page">
               <img src="/assets/brand/crownfi_log_crown-chain_gold_transparency-fixed.webp" alt="CrownFi Logo" className="h-6 w-6 object-contain" />
               <span className="font-display text-xl font-semibold tracking-wide text-gold">CrownFi</span>
             </Link>
           </div>
 
-          <nav className="hidden items-center gap-1 text-sm sm:flex">
+          <nav className="hidden items-center gap-1 text-sm sm:flex" aria-label="Primary navigation">
             {links.map((l) => (
               <Link key={l.href} href={l.href}
                 className={`rounded-full px-3.5 py-1.5 transition ${isActivePath(path, l.href) ? "bg-gradient-to-b from-[#f3e5ab] via-gold to-[#b8912f] text-black font-semibold" : "text-gold-soft/75 hover:bg-gold/10 hover:text-white"}`}>
@@ -66,7 +63,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               onClick={() => (address ? setMenu((m) => !m) : connect())}
               disabled={connecting}
               className="flex items-center gap-2 rounded-full border border-gold/20 bg-black/50 px-2.5 py-1.5 text-sm transition hover:border-gold disabled:opacity-60"
-              aria-label={address ? "Account" : "Connect Freighter"}
+              aria-label={address ? "Account and wallet" : "Connect Freighter"}
             >
               <span className="grid h-6 w-6 place-items-center rounded-full bg-gradient-to-b from-[#f3e5ab] via-gold to-[#b8912f] text-black">
                 <Icons.Wallet size={14} strokeWidth={2} />
@@ -84,17 +81,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     <div className="text-xs text-gold-soft/60">Connected</div>
                     <div className="mono text-white">{short(address, 6)}</div>
                     {fan && <div className="mt-1 text-xs text-gold">{fan.points} loyalty points</div>}
-                    {isAdmin && <div className="mt-1 inline-block rounded-full bg-gold/20 px-2 py-0.5 text-[11px] font-semibold text-gold-soft">Admin wallet</div>}
+                    {isAdmin && <div className="mt-1 inline-block rounded-full bg-gold/20 px-2 py-0.5 text-[11px] font-semibold text-gold-soft">Organizer access</div>}
                   </div>
                   <Link
-                    href="/admin"
+                    href="/me"
                     onClick={() => setMenu(false)}
                     className="mb-1 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-gold-soft hover:bg-gold/10 hover:text-white"
                   >
-                    <Icons.Lock size={15} strokeWidth={1.8} />
-                    Administration
-                    {!isAdmin && <span className="ml-auto text-[10px] uppercase tracking-wider text-gold-soft/35">restricted</span>}
+                    <Icons.Me size={15} strokeWidth={1.8} />
+                    Account
                   </Link>
+                  {isAdmin && (
+                    <Link
+                      href="/admin"
+                      onClick={() => setMenu(false)}
+                      className="mb-1 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-gold-soft hover:bg-gold/10 hover:text-white"
+                    >
+                      <Icons.Lock size={15} strokeWidth={1.8} />
+                      Manage CrownFi
+                    </Link>
+                  )}
                   <button onClick={() => { disconnect(); setMenu(false); }} className="w-full rounded-lg px-3 py-2 text-left text-gold-soft hover:bg-gold/10 hover:text-white">Disconnect</button>
                 </div>
               </>
@@ -130,11 +136,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="fixed inset-0 z-50 sm:hidden">
           <div className="absolute inset-0 bg-black/60" onClick={() => setDrawer(false)} />
           <div className="absolute left-0 top-0 h-full w-72 border-r border-line bg-black/95 p-5">
-            <div className="mb-6 flex items-center gap-2">
+            <Link href="/" onClick={() => setDrawer(false)} className="mb-6 flex items-center gap-2" aria-label="CrownFi landing page">
               <img src="/assets/brand/crownfi_log_crown-chain_gold_transparency-fixed.webp" alt="CrownFi Logo" className="h-6 w-6 object-contain" />
               <span className="font-display text-xl font-semibold text-gold">CrownFi</span>
-            </div>
-            <nav className="grid gap-1">
+            </Link>
+            <nav className="grid gap-1" aria-label="Mobile navigation">
               {links.map((l) => (
                 <Link key={l.href} href={l.href} onClick={() => setDrawer(false)}
                   className={`rounded-xl px-3 py-2.5 text-sm ${isActivePath(path, l.href) ? "bg-gradient-to-b from-[#f3e5ab] via-gold to-[#b8912f] text-black font-semibold" : "text-gold-soft/80 hover:bg-gold/10 hover:text-white"}`}>
@@ -148,9 +154,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">{children}</main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-black/90 backdrop-blur-xl sm:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-black/90 backdrop-blur-xl sm:hidden" aria-label="Primary mobile navigation">
         <div className="mx-auto flex max-w-md items-stretch justify-between px-2">
-          {TABS.map(({ href, label, Icon }) => {
+          {MOBILE_TABS.map(({ href, label, Icon }) => {
             const active = isActivePath(path, href);
             return (
               <Link key={href} href={href}
