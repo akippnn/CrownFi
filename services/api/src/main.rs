@@ -6,6 +6,7 @@ mod error;
 mod markets;
 mod media;
 mod models;
+mod orders;
 mod platform;
 mod seed;
 mod state;
@@ -78,7 +79,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .merge(markets::router().with_state(state.clone()))
         .merge(platform::router().with_state(state.clone()))
         .merge(media::router().with_state(state.clone()))
-        .merge(commerce::router().with_state(state));
+        .merge(commerce::router().with_state(state.clone()))
+        .merge(orders::router().with_state(state));
 
     tracing::info!(%addr, "starting CrownFi API");
     let listener = TcpListener::bind(addr).await?;
