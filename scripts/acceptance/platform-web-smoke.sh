@@ -28,7 +28,7 @@ set -a
 # shellcheck disable=SC1090
 source "$env_file"
 set +a
-admin_token="${ADMIN_SESSION_SECRET:?ADMIN_SESSION_SECRET is required for the platform web smoke test}"
+admin_token="${ADMIN_DEMO_TOKEN:-local-admin-demo-token}"
 
 mkdir -p "$evidence_dir"
 compose=(docker compose --project-name "$project_name" --env-file "$env_file" -f infra/docker-compose.yml)
