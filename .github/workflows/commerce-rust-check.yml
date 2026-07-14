@@ -28,22 +28,20 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
-      - name: Check Rust formatting
-        run: |
-          mkdir -p .artifacts/commerce-rust
-          set +e
-          cargo fmt --manifest-path services/api/Cargo.toml -- --check >.artifacts/commerce-rust/fmt.txt 2>&1
-          status=$?
-          cat .artifacts/commerce-rust/fmt.txt
-          exit "$status"
+      - name: Format Rust sources
+        run: cargo fmt --manifest-path services/api/Cargo.toml
+      - name: Check formatting diff
+        run: git diff --exit-code
       - name: Test Rust API
         run: cargo test --manifest-path services/api/Cargo.toml --locked
-      - name: Upload Rust diagnostics
+      - name: Upload formatted source and diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: crownfi-commerce-rust-diagnostics
-          path: .artifacts/commerce-rust
+          path: |
+            services/api/src/commerce.rs
+            services/api/src/main.rs
           include-hidden-files: true
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 7
