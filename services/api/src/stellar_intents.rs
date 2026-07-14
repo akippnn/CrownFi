@@ -150,7 +150,9 @@ async fn create_transaction_intent(
     let source_account = normalize_stellar_account(body.source_account)?;
     let destination_account = normalize_stellar_account(body.destination_account)?;
     if source_account == destination_account {
-        return Err(ApiError::InvalidRequest("stellar_source_equals_destination"));
+        return Err(ApiError::InvalidRequest(
+            "stellar_source_equals_destination",
+        ));
     }
     if body.source_account_sequence < 0 {
         return Err(ApiError::InvalidRequest("invalid_source_account_sequence"));
@@ -361,7 +363,9 @@ async fn accept_signed_envelope(
     let envelope_bytes = decode_base64(&signed_envelope_xdr)?;
     let parsed = parse_payment_envelope(&envelope_bytes)?;
     if parsed.signature_count == 0 {
-        return Err(ApiError::InvalidRequest("signed_envelope_has_no_signatures"));
+        return Err(ApiError::InvalidRequest(
+            "signed_envelope_has_no_signatures",
+        ));
     }
 
     let mut tx = pool.begin().await.map_err(map_database_error)?;
@@ -388,7 +392,9 @@ async fn accept_signed_envelope(
     }
 
     if intent.status != "awaiting_signature" {
-        return Err(ApiError::Conflict("transaction_intent_not_awaiting_signature"));
+        return Err(ApiError::Conflict(
+            "transaction_intent_not_awaiting_signature",
+        ));
     }
     if intent.expires_at <= OffsetDateTime::now_utc() {
         sqlx::query(
@@ -544,7 +550,9 @@ fn build_unsigned_payment_envelope(
 fn parse_payment_envelope(bytes: &[u8]) -> Result<ParsedEnvelope, ApiError> {
     let mut reader = XdrReader::new(bytes);
     if reader.read_i32()? != ENVELOPE_TYPE_TX {
-        return Err(ApiError::InvalidRequest("unsupported_stellar_envelope_type"));
+        return Err(ApiError::InvalidRequest(
+            "unsupported_stellar_envelope_type",
+        ));
     }
     let transaction_start = reader.position();
     let source_account = reader.read_ed25519_account()?;
@@ -557,7 +565,11 @@ fn parse_payment_envelope(bytes: &[u8]) -> Result<ParsedEnvelope, ApiError> {
             let _min_time = reader.read_u64()?;
             Some(reader.read_u64()?)
         }
-        _ => return Err(ApiError::InvalidRequest("unsupported_stellar_preconditions")),
+        _ => {
+            return Err(ApiError::InvalidRequest(
+                "unsupported_stellar_preconditions",
+            ))
+        }
     };
     let memo_text = match reader.read_i32()? {
         MEMO_NONE => None,
@@ -565,7 +577,9 @@ fn parse_payment_envelope(bytes: &[u8]) -> Result<ParsedEnvelope, ApiError> {
         _ => return Err(ApiError::InvalidRequest("unsupported_stellar_memo")),
     };
     if reader.read_u32()? != 1 {
-        return Err(ApiError::InvalidRequest("stellar_intent_requires_one_operation"));
+        return Err(ApiError::InvalidRequest(
+            "stellar_intent_requires_one_operation",
+        ));
     }
     if reader.read_i32()? != 0 {
         return Err(ApiError::InvalidRequest("operation_source_not_allowed"));
@@ -577,7 +591,9 @@ fn parse_payment_envelope(bytes: &[u8]) -> Result<ParsedEnvelope, ApiError> {
     let (asset_code, asset_issuer) = reader.read_asset()?;
     let amount = reader.read_i64()?;
     if reader.read_i32()? != 0 {
-        return Err(ApiError::InvalidRequest("unsupported_transaction_extension"));
+        return Err(ApiError::InvalidRequest(
+            "unsupported_transaction_extension",
+        ));
     }
     let transaction_end = reader.position();
     let signature_count = reader.read_u32()?;
@@ -781,8 +797,16 @@ fn decode_base64(value: &str) -> Result<Vec<u8>, ApiError> {
         if (third_padding || fourth_padding) && !is_last {
             return Err(ApiError::InvalidRequest("invalid_signed_envelope_xdr"));
         }
-        let third = if third_padding { 0 } else { base64_value(chunk[2])? };
-        let fourth = if fourth_padding { 0 } else { base64_value(chunk[3])? };
+        let third = if third_padding {
+            0
+        } else {
+            base64_value(chunk[2])?
+        };
+        let fourth = if fourth_padding {
+            0
+        } else {
+            base64_value(chunk[3])?
+        };
         let combined = (u32::from(first) << 18)
             | (u32::from(second) << 12)
             | (u32::from(third) << 6)
@@ -920,7 +944,10 @@ impl<'a> XdrReader<'a> {
 }
 
 fn decode_asset_code(bytes: &[u8]) -> Result<String, ApiError> {
-    let end = bytes.iter().position(|value| *value == 0).unwrap_or(bytes.len());
+    let end = bytes
+        .iter()
+        .position(|value| *value == 0)
+        .unwrap_or(bytes.len());
     if bytes[end..].iter().any(|value| *value != 0) || end == 0 {
         return Err(ApiError::InvalidRequest("invalid_asset_code"));
     }
@@ -951,11 +978,7 @@ fn write_u64(output: &mut Vec<u8>, value: u64) {
     output.extend_from_slice(&value.to_be_bytes());
 }
 
-fn write_xdr_string(
-    output: &mut Vec<u8>,
-    value: &str,
-    max_length: usize,
-) -> Result<(), ApiError> {
+fn write_xdr_string(output: &mut Vec<u8>, value: &str, max_length: usize) -> Result<(), ApiError> {
     let bytes = value.as_bytes();
     if bytes.len() > max_length {
         return Err(ApiError::InvalidRequest("invalid_stellar_memo"));
@@ -1112,7 +1135,10 @@ mod tests {
         assert_eq!(parsed.asset_code, "XLM");
         assert_eq!(parsed.memo_text.as_deref(), Some("CFI-test"));
         assert_eq!(parsed.signature_count, 0);
-        assert_eq!(hash_bytes(&parsed.transaction_body), built.transaction_body_sha256);
+        assert_eq!(
+            hash_bytes(&parsed.transaction_body),
+            built.transaction_body_sha256
+        );
     }
 
     #[test]
