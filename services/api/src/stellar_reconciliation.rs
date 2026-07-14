@@ -253,7 +253,9 @@ async fn record_submission_receipt(
     let pool = database_pool(&state)?;
     let tx_hash = hex_string(body.transaction_hash, 64, "invalid_transaction_hash")?;
     if !(200..=299).contains(&body.horizon_status_code) {
-        return Err(ApiError::InvalidRequest("horizon_submission_not_successful"));
+        return Err(ApiError::InvalidRequest(
+            "horizon_submission_not_successful",
+        ));
     }
     let response_hash = body
         .horizon_response
@@ -270,7 +272,10 @@ async fn record_submission_receipt(
     if expected.transaction_hash != tx_hash {
         return Err(ApiError::Conflict("submitted_transaction_hash_mismatch"));
     }
-    if matches!(expected.stellar_transaction_status.as_str(), "submitted" | "confirmed") {
+    if matches!(
+        expected.stellar_transaction_status.as_str(),
+        "submitted" | "confirmed"
+    ) {
         tx.commit().await.map_err(db_error)?;
         return Ok((StatusCode::OK, Json(load_response(pool, intent_id).await?)));
     }
@@ -334,7 +339,9 @@ async fn record_chain_evidence(
     let asset_issuer = asset_issuer(&asset_code, body.asset_issuer)?;
     let memo = required_text(body.memo_text, 28, "invalid_stellar_memo")?;
     if body.closed_at > OffsetDateTime::now_utc() + time::Duration::minutes(5) {
-        return Err(ApiError::InvalidRequest("chain_evidence_closed_at_in_future"));
+        return Err(ApiError::InvalidRequest(
+            "chain_evidence_closed_at_in_future",
+        ));
     }
 
     let evidence_hash = evidence_hash(
@@ -406,7 +413,11 @@ async fn record_chain_evidence(
         &body.raw_transaction,
         &body.raw_operation,
     );
-    let status_text = if failure.is_none() { "accepted" } else { "rejected" };
+    let status_text = if failure.is_none() {
+        "accepted"
+    } else {
+        "rejected"
+    };
 
     let expected_json = serde_json::json!({
         "network": &expected.network,
@@ -649,7 +660,11 @@ async fn load_response(pool: &PgPool, intent_id: Uuid) -> Result<ReconciliationR
 }
 
 fn reconciliation_http_status(response: &ReconciliationResponse, created: bool) -> StatusCode {
-    match response.reconciliation.as_ref().map(|record| record.status.as_str()) {
+    match response
+        .reconciliation
+        .as_ref()
+        .map(|record| record.status.as_str())
+    {
         Some("accepted") if created => StatusCode::CREATED,
         Some("accepted") => StatusCode::OK,
         Some("rejected") => StatusCode::CONFLICT,
@@ -967,7 +982,10 @@ fn registry_network(value: String) -> Result<String, ApiError> {
 
 fn contract_status(value: String) -> Result<String, ApiError> {
     let value = value.trim().to_ascii_lowercase();
-    if matches!(value.as_str(), "recorded_unverified" | "verified" | "deprecated") {
+    if matches!(
+        value.as_str(),
+        "recorded_unverified" | "verified" | "deprecated"
+    ) {
         Ok(value)
     } else {
         Err(ApiError::InvalidRequest("invalid_contract_status"))
@@ -988,7 +1006,9 @@ fn optional_hex(
     length: usize,
     error: &'static str,
 ) -> Result<Option<String>, ApiError> {
-    value.map(|value| hex_string(value, length, error)).transpose()
+    value
+        .map(|value| hex_string(value, length, error))
+        .transpose()
 }
 
 fn required_text(value: String, max: usize, error: &'static str) -> Result<String, ApiError> {
@@ -1029,7 +1049,11 @@ async fn ensure_user_exists(pool: &PgPool, user_id: Uuid) -> Result<(), ApiError
     }
 }
 
-async fn require_editor(pool: &PgPool, organization_id: Uuid, user_id: Uuid) -> Result<(), ApiError> {
+async fn require_editor(
+    pool: &PgPool,
+    organization_id: Uuid,
+    user_id: Uuid,
+) -> Result<(), ApiError> {
     let allowed = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS (SELECT 1 FROM organization_members WHERE organization_id=$1 AND user_id=$2 AND status='active' AND role IN ('owner','admin','editor'))",
     )

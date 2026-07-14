@@ -362,11 +362,46 @@ async fn seed_miss_stellarverse(
     let collection_id = uuid("c10f1700-0000-4000-8000-000000000032")?;
     let edition_id = uuid("c10f1700-0000-4000-8000-000000000033")?;
     let contestants = [
-        ("c10f1700-0000-4000-8000-000000000101", "c10f1700-0000-4000-8000-000000000201", "Amara Reyes", "PH", "Philippines", 1),
-        ("c10f1700-0000-4000-8000-000000000102", "c10f1700-0000-4000-8000-000000000202", "Hana Sato", "JP", "Japan", 2),
-        ("c10f1700-0000-4000-8000-000000000103", "c10f1700-0000-4000-8000-000000000203", "Linh Nguyen", "VN", "Vietnam", 3),
-        ("c10f1700-0000-4000-8000-000000000104", "c10f1700-0000-4000-8000-000000000204", "Mei Chen", "CN", "China", 4),
-        ("c10f1700-0000-4000-8000-000000000105", "c10f1700-0000-4000-8000-000000000205", "Aisha Rahman", "SG", "Singapore", 5),
+        (
+            "c10f1700-0000-4000-8000-000000000101",
+            "c10f1700-0000-4000-8000-000000000201",
+            "Amara Reyes",
+            "PH",
+            "Philippines",
+            1,
+        ),
+        (
+            "c10f1700-0000-4000-8000-000000000102",
+            "c10f1700-0000-4000-8000-000000000202",
+            "Hana Sato",
+            "JP",
+            "Japan",
+            2,
+        ),
+        (
+            "c10f1700-0000-4000-8000-000000000103",
+            "c10f1700-0000-4000-8000-000000000203",
+            "Linh Nguyen",
+            "VN",
+            "Vietnam",
+            3,
+        ),
+        (
+            "c10f1700-0000-4000-8000-000000000104",
+            "c10f1700-0000-4000-8000-000000000204",
+            "Mei Chen",
+            "CN",
+            "China",
+            4,
+        ),
+        (
+            "c10f1700-0000-4000-8000-000000000105",
+            "c10f1700-0000-4000-8000-000000000205",
+            "Aisha Rahman",
+            "SG",
+            "Singapore",
+            5,
+        ),
     ];
 
     let mut tx = pool.begin().await.map_err(map_database_error)?;
@@ -726,7 +761,11 @@ fn optional_country_code(value: Option<String>) -> Result<Option<String>, ApiErr
     value
         .map(|value| {
             let value = value.trim().to_ascii_uppercase();
-            if value.len() == 2 && value.chars().all(|character| character.is_ascii_uppercase()) {
+            if value.len() == 2
+                && value
+                    .chars()
+                    .all(|character| character.is_ascii_uppercase())
+            {
                 Ok(value)
             } else {
                 Err(ApiError::InvalidRequest("invalid_country_code"))

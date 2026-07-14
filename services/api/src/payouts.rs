@@ -202,12 +202,13 @@ async fn create_payout_rule(
     let actor = require_admin_actor(&state, &headers)?;
     let pool = database_pool(&state)?;
     require_editor(pool, organization_id, actor).await?;
-    let product_org = sqlx::query_scalar::<_, Uuid>("SELECT organization_id FROM products WHERE id=$1")
-        .bind(product_id)
-        .fetch_optional(pool)
-        .await
-        .map_err(db_error)?
-        .ok_or(ApiError::NotFound)?;
+    let product_org =
+        sqlx::query_scalar::<_, Uuid>("SELECT organization_id FROM products WHERE id=$1")
+            .bind(product_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(db_error)?
+            .ok_or(ApiError::NotFound)?;
     if product_org != organization_id {
         return Err(ApiError::NotFound);
     }
@@ -280,7 +281,8 @@ async fn create_payout_batch(
 ) -> Result<(StatusCode, Json<PayoutBatchResponse>), ApiError> {
     let actor = require_admin_actor(&state, &headers)?;
     let pool = database_pool(&state)?;
-    let idempotency_key = required_text(body.idempotency_key, 200, "invalid_payout_idempotency_key")?;
+    let idempotency_key =
+        required_text(body.idempotency_key, 200, "invalid_payout_idempotency_key")?;
     let mut tx = pool.begin().await.map_err(db_error)?;
     let rows = sqlx::query_as::<_, OrderPayoutSource>(
         "SELECT o.organization_id,o.status,o.environment,o.amount_minor,o.asset_code,o.asset_scale,o.asset_issuer,oi.product_id,oi.quantity FROM orders o JOIN order_items oi ON oi.order_id=o.id WHERE o.id=$1 FOR UPDATE OF o,oi",
@@ -430,14 +432,13 @@ async fn get_payout_batch(
 ) -> Result<Json<PayoutBatchResponse>, ApiError> {
     let actor = require_admin_actor(&state, &headers)?;
     let pool = database_pool(&state)?;
-    let organization_id = sqlx::query_scalar::<_, Uuid>(
-        "SELECT organization_id FROM payout_batches WHERE id=$1",
-    )
-    .bind(batch_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(db_error)?
-    .ok_or(ApiError::NotFound)?;
+    let organization_id =
+        sqlx::query_scalar::<_, Uuid>("SELECT organization_id FROM payout_batches WHERE id=$1")
+            .bind(batch_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(db_error)?
+            .ok_or(ApiError::NotFound)?;
     require_editor(pool, organization_id, actor).await?;
     Ok(Json(load_batch(pool, batch_id).await?))
 }
@@ -464,7 +465,9 @@ async fn record_payout_submission(
         .as_deref()
         != Some(transaction_hash.as_str())
     {
-        return Err(ApiError::InvalidRequest("submission_response_hash_mismatch"));
+        return Err(ApiError::InvalidRequest(
+            "submission_response_hash_mismatch",
+        ));
     }
 
     let mut tx = pool.begin().await.map_err(db_error)?;
@@ -610,7 +613,11 @@ async fn record_transfer_evidence(
         body.successful,
         &body.raw_operation,
     );
-    let processing_status = if failure.is_none() { "accepted" } else { "rejected" };
+    let processing_status = if failure.is_none() {
+        "accepted"
+    } else {
+        "rejected"
+    };
     let evidence_id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO payout_transfer_evidence (id,payout_transfer_id,network,transaction_hash,operation_index,source_account,recipient_account,amount_minor,asset_code,asset_scale,asset_issuer,ledger_sequence,successful,evidence_sha256,raw_operation,processing_status,reconciliation_error) VALUES ($1,$2,'testnet',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)",
@@ -700,15 +707,13 @@ async fn record_payout_failure(
     } else {
         "failed"
     };
-    sqlx::query(
-        "UPDATE payout_batches SET status=$2,failure_code=$3,updated_at=now() WHERE id=$1",
-    )
-    .bind(batch_id)
-    .bind(next_status)
-    .bind(&failure_code)
-    .execute(&mut *tx)
-    .await
-    .map_err(db_error)?;
+    sqlx::query("UPDATE payout_batches SET status=$2,failure_code=$3,updated_at=now() WHERE id=$1")
+        .bind(batch_id)
+        .bind(next_status)
+        .bind(&failure_code)
+        .execute(&mut *tx)
+        .await
+        .map_err(db_error)?;
     sqlx::query(
         "UPDATE payout_transfers SET status='failed',failure_code=$2,updated_at=now() WHERE payout_batch_id=$1 AND status='submitted'",
     )
@@ -1172,7 +1177,11 @@ async fn ensure_user(pool: &PgPool, user_id: Uuid) -> Result<(), ApiError> {
     }
 }
 
-async fn require_editor(pool: &PgPool, organization_id: Uuid, user_id: Uuid) -> Result<(), ApiError> {
+async fn require_editor(
+    pool: &PgPool,
+    organization_id: Uuid,
+    user_id: Uuid,
+) -> Result<(), ApiError> {
     let allowed = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS (SELECT 1 FROM organization_members WHERE organization_id=$1 AND user_id=$2 AND status='active' AND role IN ('owner','admin','editor'))",
     )

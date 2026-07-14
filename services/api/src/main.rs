@@ -62,14 +62,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .into());
             }
             seed::seed_demo(&config).await?;
-            tracing::info!(profile = "demo", "explicit CrownFi seed applied successfully");
+            tracing::info!(
+                profile = "demo",
+                "explicit CrownFi seed applied successfully"
+            );
             return Ok(());
         }
         "serve" => {}
         _ => {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                format!("unknown crownfi-api command: {command}; expected serve, migrate, or seed demo"),
+                format!(
+                    "unknown crownfi-api command: {command}; expected serve, migrate, or seed demo"
+                ),
             )
             .into());
         }

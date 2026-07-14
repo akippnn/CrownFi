@@ -223,9 +223,6 @@ async fn create_fulfillment_job(
     }
     let source = &sources[0];
     require_editor_tx(&mut tx, source.organization_id, actor_user_id).await?;
-    if source.order_status != "paid" {
-        return Err(ApiError::Conflict("order_not_paid"));
-    }
     if source.environment != "testnet" {
         return Err(ApiError::InvalidRequest("fulfillment_requires_testnet"));
     }
@@ -297,6 +294,10 @@ async fn create_fulfillment_job(
         return Ok((StatusCode::OK, Json(load_fulfillment(pool, existing_id).await?)));
     }
 
+    if source.order_status != "paid" {
+        return Err(ApiError::Conflict("order_not_paid"));
+    }
+
     let job_id = Uuid::new_v4();
     let mint_id = Uuid::new_v4();
     let mint_reference_sha256 = hash_text(&format!(
@@ -362,7 +363,10 @@ async fn create_fulfillment_job(
     .await?;
     tx.commit().await.map_err(db_error)?;
 
-    Ok((StatusCode::CREATED, Json(load_fulfillment(pool, job_id).await?)))
+    Ok((
+        StatusCode::CREATED,
+        Json(load_fulfillment(pool, job_id).await?),
+    ))
 }
 
 async fn get_fulfillment_job(
@@ -372,14 +376,13 @@ async fn get_fulfillment_job(
 ) -> Result<Json<FulfillmentResponse>, ApiError> {
     let actor_user_id = require_admin_actor(&state, &headers)?;
     let pool = database_pool(&state)?;
-    let organization_id = sqlx::query_scalar::<_, Uuid>(
-        "SELECT organization_id FROM fulfillment_jobs WHERE id=$1",
-    )
-    .bind(job_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(db_error)?
-    .ok_or(ApiError::NotFound)?;
+    let organization_id =
+        sqlx::query_scalar::<_, Uuid>("SELECT organization_id FROM fulfillment_jobs WHERE id=$1")
+            .bind(job_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(db_error)?
+            .ok_or(ApiError::NotFound)?;
     require_editor(pool, organization_id, actor_user_id).await?;
     Ok(Json(load_fulfillment(pool, job_id).await?))
 }
@@ -644,7 +647,11 @@ async fn record_mint_evidence(
         body.successful,
         &body.raw_event,
     );
-    let processing_status = if failure.is_none() { "accepted" } else { "rejected" };
+    let processing_status = if failure.is_none() {
+        "accepted"
+    } else {
+        "rejected"
+    };
     let evidence_id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO collectible_mint_evidence (id,collectible_mint_id,network,transaction_hash,contract_id,token_id,owner_account,ledger_sequence,event_index,successful,evidence_sha256,raw_event,processing_status,reconciliation_error) VALUES ($1,$2,'testnet',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)",
@@ -1059,7 +1066,11 @@ fn require_admin_actor(state: &AppState, headers: &HeaderMap) -> Result<Uuid, Ap
         .ok_or(ApiError::Unauthorized)
 }
 
-async fn require_editor(pool: &PgPool, organization_id: Uuid, user_id: Uuid) -> Result<(), ApiError> {
+async fn require_editor(
+    pool: &PgPool,
+    organization_id: Uuid,
+    user_id: Uuid,
+) -> Result<(), ApiError> {
     let allowed = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS (SELECT 1 FROM organization_members WHERE organization_id=$1 AND user_id=$2 AND status='active' AND role IN ('owner','admin','editor'))",
     )

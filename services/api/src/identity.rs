@@ -406,11 +406,8 @@ async fn complete_setup(
             if !integration.protected_value.starts_with("v1.") {
                 return Err(ApiError::InvalidRequest("integration_value_not_protected"));
             }
-            let value_suffix = optional_text(
-                integration.value_suffix,
-                32,
-                "invalid_integration_suffix",
-            )?;
+            let value_suffix =
+                optional_text(integration.value_suffix, 32, "invalid_integration_suffix")?;
             sqlx::query(
                 "INSERT INTO integration_settings (id, provider, protected_value, value_suffix, updated_by_user_id) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (provider) DO UPDATE SET protected_value = EXCLUDED.protected_value, value_suffix = EXCLUDED.value_suffix, validation_status = 'not_validated', last_validated_at = NULL, updated_by_user_id = EXCLUDED.updated_by_user_id, updated_at = now()",
             )
@@ -853,7 +850,14 @@ async fn write_audit(
 }
 
 fn suffix(value: &str) -> String {
-    value.chars().rev().take(6).collect::<String>().chars().rev().collect()
+    value
+        .chars()
+        .rev()
+        .take(6)
+        .collect::<String>()
+        .chars()
+        .rev()
+        .collect()
 }
 
 fn map_database_error(error: sqlx::Error) -> ApiError {
@@ -862,9 +866,7 @@ fn map_database_error(error: sqlx::Error) -> ApiError {
         return match code.as_deref() {
             Some("23505") => ApiError::Conflict("resource_already_exists"),
             Some("23503") => ApiError::InvalidRequest("related_resource_not_found"),
-            Some("23514") | Some("22P02") => {
-                ApiError::InvalidRequest("database_constraint_failed")
-            }
+            Some("23514") | Some("22P02") => ApiError::InvalidRequest("database_constraint_failed"),
             _ => {
                 tracing::error!(error = %error, "identity database operation failed");
                 ApiError::Database
