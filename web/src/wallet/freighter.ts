@@ -24,6 +24,12 @@ function errMsg(error: unknown): string {
   return String(error);
 }
 
+function bytesToBase64(value: Uint8Array): string {
+  let binary = "";
+  for (const byte of value) binary += String.fromCharCode(byte);
+  return window.btoa(binary);
+}
+
 export function networkPassphrase(network: CrownFiStellarNetwork): string {
   return network === "public" ? PUBLIC_PASSPHRASE : TESTNET_PASSPHRASE;
 }
@@ -110,9 +116,8 @@ export async function signWalletMessage(
   const signature =
     typeof response.signedMessage === "string"
       ? response.signedMessage
-      : Buffer.from(response.signedMessage).toString("base64");
+      : bytesToBase64(response.signedMessage);
   return { signature };
 }
 
-// Compatibility alias for the legacy administration page while it redirects to Manage.
 export const signAdminMessage = signWalletMessage;
