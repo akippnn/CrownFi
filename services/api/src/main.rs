@@ -3,6 +3,7 @@ mod commerce;
 mod config;
 mod database;
 mod error;
+mod identity;
 mod markets;
 mod media;
 mod models;
@@ -75,6 +76,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr: SocketAddr = config.bind_addr.parse()?;
     let state = AppState::new(config).await?;
     let app = router(state.clone())
+        .merge(identity::router().with_state(state.clone()))
         .merge(markets::router().with_state(state.clone()))
         .merge(platform::router().with_state(state.clone()))
         .merge(media::router().with_state(state.clone()))
