@@ -9,30 +9,36 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "account_session_required" }, { status: 401 });
   }
   const body = await request.json().catch(() => null);
+  const bootstrapToken = String(body?.bootstrapToken ?? "").trim();
+  if (!bootstrapToken) {
+    return NextResponse.json({ error: "bootstrap_token_required" }, { status: 400 });
+  }
+
   const integrations: Array<{
     provider: string;
     protected_value: string;
     value_suffix: string | null;
   }> = [];
-
   const r2 = body?.r2 && typeof body.r2 === "object" ? body.r2 : null;
   if (r2 && Object.values(r2).some((value) => String(value ?? "").trim())) {
+    const endpoint = String(r2.endpoint ?? "").trim();
+    const bucket = String(r2.bucket ?? "").trim();
+    const accessKeyId = String(r2.accessKeyId ?? "").trim();
+    const secretAccessKey = String(r2.secretAccessKey ?? "").trim();
+    if (!endpoint || !bucket || !accessKeyId || !secretAccessKey) {
+      return NextResponse.json({ error: "r2_configuration_incomplete" }, { status: 400 });
+    }
     integrations.push({
       provider: "cloudflare-r2",
-      protected_value: sealConfiguration({
-        endpoint: String(r2.endpoint ?? "").trim(),
-        bucket: String(r2.bucket ?? "").trim(),
-        accessKeyId: String(r2.accessKeyId ?? "").trim(),
-        secretAccessKey: String(r2.secretAccessKey ?? "").trim(),
-      }),
-      value_suffix: maskedSuffix(r2.accessKeyId),
+      protected_value: sealConfiguration({ endpoint, bucket, accessKeyId, secretAccessKey }),
+      value_suffix: maskedSuffix(accessKeyId),
     });
   }
 
   const response = await crownfiInternalFetch("/internal/setup/complete", {
     method: "POST",
     body: JSON.stringify({
-      bootstrap_token: String(body?.bootstrapToken ?? ""),
+      bootstrap_token: bootstrapToken,
       user_id: session.userId,
       display_name: String(body?.displayName ?? ""),
       email: String(body?.email ?? "").trim() || null,
