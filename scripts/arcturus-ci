@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+revision="${1:-${GITHUB_SHA:-${CI_COMMIT_SHA:-}}}"
+[[ "$revision" =~ ^[0-9a-f]{40}$ ]] || {
+  echo "Arcturus CI requires the full 40-character commit SHA." >&2
+  exit 2
+}
+for variable in REGISTRY_TOKEN ARCTURUS_DEPLOY_TOKEN; do
+  [[ -n "${!variable:-}" ]] || { echo "Required CI secret $variable is missing." >&2; exit 2; }
+done
+registry_user="${REGISTRY_USER:-${GITHUB_ACTOR:-${GITEA_ACTOR:-}}}"
+[[ -n "$registry_user" ]] || {
+  echo "Registry username is missing; set REGISTRY_USER or use a runner that exports GITHUB_ACTOR/GITEA_ACTOR." >&2
+  exit 2
+}
+command -v buildah >/dev/null 2>&1 || {
+  echo "Buildah is required; application language toolchains are not required on the runner." >&2
+  exit 2
+}
+
+run_id="${GITHUB_RUN_ID:-${CI_RUN_NUMBER:-$$}}-${GITHUB_RUN_ATTEMPT:-1}"
+work_rel=".arcturus/build/$run_id"
+work="$PWD/$work_rel"
+graph="$work/storage"
+runroot="$work/runroot"
+authfile="$work/auth.json"
+token_file="$work_rel/deploy.token"
+plan="$work/build-plan.tsv"
+mkdir -p "$graph" "$runroot"
+chmod 0700 "$work"
+umask 077
+printf '%s\n' "$ARCTURUS_DEPLOY_TOKEN" >"$token_file"
+unset ARCTURUS_DEPLOY_TOKEN
+export ARCTURUS_TOKEN_FILE="$token_file"
+export REGISTRY_AUTH_FILE="$authfile"
+export ARCTURUS_BUILDAH_ROOT="$graph"
+export ARCTURUS_BUILDAH_RUNROOT="$runroot"
+cleanup() {
+  buildah --root "$graph" --runroot "$runroot" rm --all >/dev/null 2>&1 || true
+  rm -rf "$work"
+}
+trap cleanup EXIT INT TERM
+
+printf '%s' "$REGISTRY_TOKEN" | buildah --root "$graph" --runroot "$runroot" \
+  login --authfile "$authfile" --username "$registry_user" --password-stdin \
+  "${ARCTURUS_REGISTRY_HOST:?ARCTURUS_REGISTRY_HOST is required}"
+unset REGISTRY_TOKEN
+./scripts/arcturus-tool project preflight .arcturus/project.json --token-file "$token_file"
+./scripts/arcturus-tool project validate .arcturus/project.json
+export ARCTURUS_PROJECT_VALIDATED=1
+./scripts/arcturus-guard
+./scripts/arcturus-tool project plan .arcturus/project.json --format tsv >"$plan"
+
+digest_args=()
+while IFS=$'\t' read -r name repository context containerfile validations release_target components; do
+  [[ -n "$name" && -n "$repository" && -n "$components" ]] || {
+    echo "Invalid build plan row for '$name'." >&2
+    exit 2
+  }
+  if [[ "$validations" != "-" ]]; then
+    IFS=',' read -r -a targets <<<"$validations"
+    for target in "${targets[@]}"; do
+      buildah --root "$graph" --runroot "$runroot" bud --authfile "$authfile" \
+        --file "$containerfile" --target "$target" \
+        --tag "$repository:validation-$revision-$target" "$context"
+    done
+  fi
+  target_args=()
+  [[ "$release_target" == "-" ]] || target_args=(--target "$release_target")
+  buildah --root "$graph" --runroot "$runroot" bud --authfile "$authfile" \
+    --file "$containerfile" "${target_args[@]}" --tag "$repository:$revision" "$context"
+  digest_file="$work_rel/$name.digest"
+  buildah --root "$graph" --runroot "$runroot" push --authfile "$authfile" \
+    --digestfile "$digest_file" "$repository:$revision" "docker://$repository:$revision"
+  digest_args+=(--digest "$name=$digest_file")
+done <"$plan"
+
+./scripts/arcturus-tool project render .arcturus/project.json --revision "$revision" \
+  "${digest_args[@]}" --output release.json --request-output deployment-request.json
+./scripts/arcturus-tool project deploy .arcturus/project.json --request deployment-request.json \
+  --token-file "$token_file"
+./scripts/arcturus-tool project verify .arcturus/project.json --release release.json \
+  --token-file "$token_file"
+if [[ "${2:-}" == "--acceptance" ]]; then
+  ./scripts/arcturus-acceptance
+fi

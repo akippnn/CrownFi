@@ -1,0 +1,55 @@
+{
+  "apiVersion": "arcturus.u128.org/project/v1",
+  "service": "stellar-project",
+  "manifest": "arcturus.release.json",
+  "ci": {
+    "provider": "gitea",
+    "apiUrl": "http://100.108.225.27:9090",
+    "storage": "isolated",
+    "deployTokenSecret": "ARCTURUS_DEPLOY_TOKEN",
+    "testIntent": {
+      "mode": "command"
+    }
+  },
+  "registry": {
+    "host": "git.u128.org",
+    "userSecret": "REGISTRY_USER",
+    "tokenSecret": "REGISTRY_TOKEN"
+  },
+  "builds": {
+    "api": {
+      "repository": "git.u128.org/mprojects/stellar-project/api",
+      "context": ".",
+      "containerfile": "services/api/Dockerfile",
+      "validationTargets": [
+        "test"
+      ],
+      "releaseTarget": "runtime",
+      "components": [
+        "api"
+      ]
+    },
+    "web": {
+      "repository": "git.u128.org/mprojects/stellar-project/web",
+      "context": ".",
+      "containerfile": "web/Dockerfile",
+      "validationTargets": [
+        "builder"
+      ],
+      "releaseTarget": "runtime",
+      "components": [
+        "web",
+        "db-init"
+      ]
+    }
+  },
+  "fixedComponents": [
+    "postgres",
+    "redis"
+  ],
+  "verification": {
+    "publicUrl": "https://stellar-project.u128.org",
+    "publicMode": "cloudflare-challenge",
+    "requireRouting": true
+  }
+}
