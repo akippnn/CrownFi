@@ -1,0 +1,40 @@
+name: Commerce catalogue smoke
+
+on:
+  pull_request:
+    paths:
+      - "services/api/**"
+      - "infra/**"
+      - "scripts/acceptance/commerce-catalogue-smoke.sh"
+      - ".github/workflows/commerce-catalogue-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: commerce-catalogue-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  commerce-catalogue:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Run commerce catalogue flow
+        env:
+          CROWNFI_COMMERCE_SMOKE_TIMEOUT_SECONDS: "1500"
+        run: bash scripts/acceptance/commerce-catalogue-smoke.sh
+      - name: Upload commerce evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crownfi-commerce-catalogue-smoke
+          path: .artifacts/acceptance/commerce-catalogue
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7
