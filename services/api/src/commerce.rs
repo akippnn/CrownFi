@@ -240,14 +240,12 @@ async fn create_product(
     .await
     .map_err(map_database_error)?;
 
-    sqlx::query(
-        "INSERT INTO product_inventory (product_id, supply_limit) VALUES ($1, $2)",
-    )
-    .bind(product_id)
-    .bind(body.supply_limit)
-    .execute(&mut *tx)
-    .await
-    .map_err(map_database_error)?;
+    sqlx::query("INSERT INTO product_inventory (product_id, supply_limit) VALUES ($1, $2)")
+        .bind(product_id)
+        .bind(body.supply_limit)
+        .execute(&mut *tx)
+        .await
+        .map_err(map_database_error)?;
 
     if let Some(media_asset_id) = body.primary_media_asset_id {
         sqlx::query(
@@ -597,20 +595,21 @@ async fn validate_catalogue_scope(
             return Err(ApiError::Forbidden);
         }
         if pageant_id.is_some_and(|requested| requested != scope.1) {
-            return Err(ApiError::InvalidRequest("pageant_contestant_scope_mismatch"));
+            return Err(ApiError::InvalidRequest(
+                "pageant_contestant_scope_mismatch",
+            ));
         }
         return Ok(Some(scope.1));
     }
 
     if let Some(pageant_id) = pageant_id {
-        let owner = sqlx::query_scalar::<_, Uuid>(
-            "SELECT organization_id FROM pageants WHERE id = $1",
-        )
-        .bind(pageant_id)
-        .fetch_optional(pool)
-        .await
-        .map_err(map_database_error)?
-        .ok_or(ApiError::InvalidRequest("pageant_not_found"))?;
+        let owner =
+            sqlx::query_scalar::<_, Uuid>("SELECT organization_id FROM pageants WHERE id = $1")
+                .bind(pageant_id)
+                .fetch_optional(pool)
+                .await
+                .map_err(map_database_error)?
+                .ok_or(ApiError::InvalidRequest("pageant_not_found"))?;
         if owner != organization_id {
             return Err(ApiError::Forbidden);
         }
@@ -638,10 +637,7 @@ async fn require_public_media(
     }
 }
 
-async fn organization_for_collection(
-    pool: &PgPool,
-    collection_id: Uuid,
-) -> Result<Uuid, ApiError> {
+async fn organization_for_collection(pool: &PgPool, collection_id: Uuid) -> Result<Uuid, ApiError> {
     sqlx::query_scalar::<_, Uuid>(
         "SELECT organization_id FROM collectible_collections WHERE id = $1",
     )
@@ -846,13 +842,19 @@ mod tests {
 
     #[test]
     fn validates_catalogue_slugs() {
-        assert_eq!(required_slug("Fan-Edition-1".to_string()).unwrap(), "fan-edition-1");
+        assert_eq!(
+            required_slug("Fan-Edition-1".to_string()).unwrap(),
+            "fan-edition-1"
+        );
         assert!(required_slug("fan edition".to_string()).is_err());
     }
 
     #[test]
     fn validates_metadata_hashes() {
         let hash = "A".repeat(64);
-        assert_eq!(validate_optional_sha256(Some(hash)).unwrap().unwrap(), "a".repeat(64));
+        assert_eq!(
+            validate_optional_sha256(Some(hash)).unwrap().unwrap(),
+            "a".repeat(64)
+        );
     }
 }
