@@ -6,7 +6,7 @@ The goal of the current security posture is practical MVP hardening: enough to r
 
 ## Supported branch
 
-Security checks are configured for `main` through GitHub Actions.
+Security checks are configured for `main` and pull requests through GitHub Actions.
 
 ## Current MVP safeguards
 
@@ -14,7 +14,8 @@ Security checks are configured for `main` through GitHub Actions.
 - Short-lived transaction intents for live Stellar/Soroban confirmation flows.
 - Signed XDR source/body-hash validation before recording ticket, collectible, or audit-anchor outcomes.
 - Basic rate limiting for high-risk demo endpoints.
-- CI checks for npm audit, TypeScript, Merkle tests, Rust format/tests/audit, secret smoke tests, and best-effort CodeQL.
+- CI checks for npm audit, TypeScript, Merkle tests, Rust format/tests/audit, and committed-secret smoke tests.
+- GitHub CodeQL analysis for JavaScript/TypeScript, Rust, and GitHub Actions, with results uploaded to the repository's code-scanning alerts.
 - Clear testnet/demo framing in docs and README.
 - Docker Compose path for local and VPS-style deployment experiments.
 
