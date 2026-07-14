@@ -8,6 +8,7 @@ pub struct Config {
     pub database_acquire_timeout_seconds: u64,
     pub redis_url: Option<String>,
     pub admin_demo_token: String,
+    pub payout_worker_token: Option<String>,
     pub stellar_mode: String,
     pub r2_endpoint: Option<String>,
     pub r2_access_key_id: Option<String>,
@@ -35,6 +36,7 @@ impl Config {
             redis_url: env_optional("REDIS_URL"),
             admin_demo_token: std::env::var("ADMIN_DEMO_TOKEN")
                 .unwrap_or_else(|_| "local-admin-demo-token".to_string()),
+            payout_worker_token: env_optional("CROWNFI_PAYOUT_WORKER_TOKEN"),
             stellar_mode: std::env::var("STELLAR_MODE").unwrap_or_else(|_| "mock".to_string()),
             r2_endpoint: env_optional("R2_ENDPOINT"),
             r2_access_key_id: env_optional("R2_ACCESS_KEY_ID"),
