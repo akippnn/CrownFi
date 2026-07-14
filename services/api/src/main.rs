@@ -1,9 +1,12 @@
+mod access;
 mod app;
 mod commerce;
 mod config;
 mod database;
 mod error;
 mod fulfillment;
+mod identity;
+mod manage;
 mod markets;
 mod media;
 mod models;
@@ -59,19 +62,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .into());
             }
             seed::seed_demo(&config).await?;
-            tracing::info!(
-                profile = "demo",
-                "explicit CrownFi seed applied successfully"
-            );
+            tracing::info!(profile = "demo", "explicit CrownFi seed applied successfully");
             return Ok(());
         }
         "serve" => {}
         _ => {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                format!(
-                    "unknown crownfi-api command: {command}; expected serve, migrate, or seed demo"
-                ),
+                format!("unknown crownfi-api command: {command}; expected serve, migrate, or seed demo"),
             )
             .into());
         }
@@ -80,6 +78,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr: SocketAddr = config.bind_addr.parse()?;
     let state = AppState::new(config).await?;
     let app = router(state.clone())
+        .merge(identity::router().with_state(state.clone()))
+        .merge(access::router().with_state(state.clone()))
+        .merge(manage::router().with_state(state.clone()))
         .merge(markets::router().with_state(state.clone()))
         .merge(platform::router().with_state(state.clone()))
         .merge(media::router().with_state(state.clone()))
