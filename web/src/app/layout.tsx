@@ -1,5 +1,6 @@
 import "./globals.css";
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { Fraunces, Manrope } from "next/font/google";
 import { SessionProvider } from "@/session/SessionProvider";
 import { AppShell } from "@/components/AppShell";
@@ -26,7 +27,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`${display.variable} ${body.variable} dark`}>
       <body className="bg-[#070708] font-sans antialiased text-white">
         <SessionProvider>
-          <AppShell>{children}</AppShell>
+          <Suspense fallback={<main className="mx-auto max-w-7xl px-4 py-8 text-gold-soft/50">Loading CrownFi…</main>}>
+            <AppShell>{children}</AppShell>
+          </Suspense>
         </SessionProvider>
       </body>
     </html>
