@@ -4,7 +4,6 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use base64::{engine::general_purpose::STANDARD, Engine as _};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -15,7 +14,6 @@ use uuid::Uuid;
 use crate::{app::require_admin, error::ApiError, state::AppState};
 
 const TESTNET_NETWORK_PASSPHRASE: &str = "Test SDF Network ; September 2015";
-const TESTNET_HORIZON_URL: &str = "https://horizon-testnet.stellar.org";
 const ENVELOPE_TYPE_TX: i32 = 2;
 const KEY_TYPE_ED25519: i32 = 0;
 const PRECOND_NONE: i32 = 0;
@@ -26,6 +24,8 @@ const OPERATION_PAYMENT: i32 = 1;
 const ASSET_NATIVE: i32 = 0;
 const ASSET_ALPHANUM4: i32 = 1;
 const ASSET_ALPHANUM12: i32 = 2;
+const BASE64_ALPHABET: &[u8; 64] =
+    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -40,10 +40,6 @@ pub fn router() -> Router<AppState> {
         .route(
             "/admin/platform/stellar-intents/:intent_id/signed-envelope",
             post(accept_signed_envelope),
-        )
-        .route(
-            "/admin/platform/stellar-intents/:intent_id/submit",
-            post(submit_signed_envelope),
         )
 }
 
@@ -153,11 +149,14 @@ async fn create_transaction_intent(
 
     let source_account = normalize_stellar_account(body.source_account)?;
     let destination_account = normalize_stellar_account(body.destination_account)?;
-    let source_account_sequence = body.source_account_sequence;
-    if source_account_sequence < 0 {
+    if source_account == destination_account {
+        return Err(ApiError::InvalidRequest("stellar_source_equals_destination"));
+    }
+    if body.source_account_sequence < 0 {
         return Err(ApiError::InvalidRequest("invalid_source_account_sequence"));
     }
-    let transaction_sequence = source_account_sequence
+    let transaction_sequence = body
+        .source_account_sequence
         .checked_add(1)
         .ok_or(ApiError::InvalidRequest("transaction_sequence_overflow"))?;
     if transaction_sequence <= 0 {
@@ -228,9 +227,10 @@ async fn create_transaction_intent(
     }
 
     let request_sha256 = hash_text(&format!(
-        "organization={};order={order_id};attempt={};source={source_account};destination={destination_account};source_sequence={source_account_sequence};base_fee={base_fee};timeout={timeout_seconds};amount={};asset={}:{}:{}",
+        "organization={};order={order_id};attempt={};source={source_account};destination={destination_account};source_sequence={};base_fee={base_fee};timeout={timeout_seconds};amount={};asset={}:{}:{}",
         payment.0,
         body.payment_attempt_id,
+        body.source_account_sequence,
         payment.3,
         payment.4,
         payment.5,
@@ -358,9 +358,7 @@ async fn accept_signed_envelope(
         100_000,
         "invalid_signed_envelope_xdr",
     )?;
-    let envelope_bytes = STANDARD
-        .decode(signed_envelope_xdr.as_bytes())
-        .map_err(|_| ApiError::InvalidRequest("invalid_signed_envelope_xdr"))?;
+    let envelope_bytes = decode_base64(&signed_envelope_xdr)?;
     let parsed = parse_payment_envelope(&envelope_bytes)?;
     if parsed.signature_count == 0 {
         return Err(ApiError::InvalidRequest("signed_envelope_has_no_signatures"));
@@ -450,153 +448,6 @@ async fn accept_signed_envelope(
     ))
 }
 
-async fn submit_signed_envelope(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(intent_id): Path<Uuid>,
-) -> Result<(StatusCode, Json<TransactionIntentResponse>), ApiError> {
-    let actor_user_id = require_admin_actor(&state, &headers)?;
-    if state.config.stellar_mode != "testnet" {
-        return Err(ApiError::ServiceUnavailable("stellar_testnet_mode_required"));
-    }
-    let pool = database_pool(&state)?;
-
-    let mut tx = pool.begin().await.map_err(map_database_error)?;
-    let intent = load_intent_for_update(&mut tx, intent_id).await?;
-    require_organization_editor_tx(&mut tx, intent.organization_id, actor_user_id).await?;
-    let transaction = sqlx::query_as::<_, StellarTransactionRecord>(
-        "SELECT id, transaction_intent_id, network, envelope_sha256, signed_envelope_xdr, transaction_hash, status, horizon_status_code, horizon_response, failure_code, submitted_at, confirmed_at, created_at, updated_at FROM stellar_transactions WHERE transaction_intent_id = $1 FOR UPDATE",
-    )
-    .bind(intent_id)
-    .fetch_optional(&mut *tx)
-    .await
-    .map_err(map_database_error)?
-    .ok_or(ApiError::Conflict("transaction_intent_not_signed"))?;
-
-    if matches!(transaction.status.as_str(), "submitted" | "confirmed") {
-        tx.commit().await.map_err(map_database_error)?;
-        return Ok((
-            StatusCode::OK,
-            Json(load_transaction_intent(pool, intent_id).await?),
-        ));
-    }
-    if transaction.status != "signed" || intent.status != "signed" {
-        return Err(ApiError::Conflict("stellar_transaction_not_submittable"));
-    }
-    if intent.expires_at <= OffsetDateTime::now_utc() {
-        sqlx::query(
-            "UPDATE transaction_intents SET status = 'expired', failure_code = 'intent_expired', updated_at = now() WHERE id = $1",
-        )
-        .bind(intent_id)
-        .execute(&mut *tx)
-        .await
-        .map_err(map_database_error)?;
-        sqlx::query(
-            "UPDATE stellar_transactions SET status = 'failed', failure_code = 'intent_expired', updated_at = now() WHERE id = $1",
-        )
-        .bind(transaction.id)
-        .execute(&mut *tx)
-        .await
-        .map_err(map_database_error)?;
-        tx.commit().await.map_err(map_database_error)?;
-        return Err(ApiError::Conflict("transaction_intent_expired"));
-    }
-    tx.commit().await.map_err(map_database_error)?;
-
-    let horizon_url = format!("{TESTNET_HORIZON_URL}/transactions");
-    let response = reqwest::Client::new()
-        .post(horizon_url)
-        .form(&[("tx", transaction.signed_envelope_xdr.as_str())])
-        .send()
-        .await
-        .map_err(|error| {
-            tracing::error!(%error, "Stellar Horizon submission failed before response");
-            ApiError::ServiceUnavailable("stellar_horizon_unavailable")
-        })?;
-    let status_code = response.status();
-    let response_text = response.text().await.map_err(|error| {
-        tracing::error!(%error, "failed to read Stellar Horizon response");
-        ApiError::ServiceUnavailable("stellar_horizon_response_unreadable")
-    })?;
-    let horizon_response = serde_json::from_str::<Value>(&response_text)
-        .unwrap_or_else(|_| serde_json::json!({ "raw": response_text }));
-
-    let mut tx = pool.begin().await.map_err(map_database_error)?;
-    let refreshed = load_intent_for_update(&mut tx, intent_id).await?;
-    require_organization_editor_tx(&mut tx, refreshed.organization_id, actor_user_id).await?;
-
-    if status_code.is_success() {
-        sqlx::query(
-            "UPDATE stellar_transactions SET status = 'submitted', horizon_status_code = $2, horizon_response = $3, submitted_at = now(), failure_code = NULL, updated_at = now() WHERE transaction_intent_id = $1 AND status = 'signed'",
-        )
-        .bind(intent_id)
-        .bind(i32::from(status_code.as_u16()))
-        .bind(&horizon_response)
-        .execute(&mut *tx)
-        .await
-        .map_err(map_database_error)?;
-        sqlx::query(
-            "UPDATE transaction_intents SET status = 'submitted', submitted_at = now(), failure_code = NULL, updated_at = now() WHERE id = $1 AND status = 'signed'",
-        )
-        .bind(intent_id)
-        .execute(&mut *tx)
-        .await
-        .map_err(map_database_error)?;
-        write_audit(
-            &mut tx,
-            refreshed.organization_id,
-            actor_user_id,
-            "stellar_transaction.submit",
-            "transaction_intent",
-            intent_id,
-            serde_json::json!({
-                "transaction_hash": transaction.transaction_hash,
-                "horizon_status_code": status_code.as_u16(),
-                "network": "testnet",
-            }),
-        )
-        .await?;
-        tx.commit().await.map_err(map_database_error)?;
-        return Ok((
-            StatusCode::OK,
-            Json(load_transaction_intent(pool, intent_id).await?),
-        ));
-    }
-
-    sqlx::query(
-        "UPDATE stellar_transactions SET status = 'failed', horizon_status_code = $2, horizon_response = $3, failure_code = 'horizon_rejected', updated_at = now() WHERE transaction_intent_id = $1",
-    )
-    .bind(intent_id)
-    .bind(i32::from(status_code.as_u16()))
-    .bind(&horizon_response)
-    .execute(&mut *tx)
-    .await
-    .map_err(map_database_error)?;
-    sqlx::query(
-        "UPDATE transaction_intents SET status = 'failed', failure_code = 'horizon_rejected', updated_at = now() WHERE id = $1",
-    )
-    .bind(intent_id)
-    .execute(&mut *tx)
-    .await
-    .map_err(map_database_error)?;
-    write_audit(
-        &mut tx,
-        refreshed.organization_id,
-        actor_user_id,
-        "stellar_transaction.reject",
-        "transaction_intent",
-        intent_id,
-        serde_json::json!({
-            "transaction_hash": transaction.transaction_hash,
-            "horizon_status_code": status_code.as_u16(),
-            "network": "testnet",
-        }),
-    )
-    .await?;
-    tx.commit().await.map_err(map_database_error)?;
-    Err(ApiError::Conflict("stellar_submission_rejected"))
-}
-
 async fn load_transaction_intent(
     pool: &PgPool,
     intent_id: Uuid,
@@ -650,7 +501,7 @@ fn build_unsigned_payment_envelope(
     if amount_minor <= 0 || expires_at_unix <= 0 {
         return Err(ApiError::InvalidRequest("invalid_stellar_payment_intent"));
     }
-    if memo_text.as_bytes().is_empty() || memo_text.len() > 28 {
+    if memo_text.is_empty() || memo_text.len() > 28 {
         return Err(ApiError::InvalidRequest("invalid_stellar_memo"));
     }
     let source_key = decode_stellar_account(source_account)?;
@@ -681,7 +532,7 @@ fn build_unsigned_payment_envelope(
     envelope.extend_from_slice(&transaction_body);
     write_u32(&mut envelope, 0);
     let unsigned_envelope_sha256 = hash_bytes(&envelope);
-    let envelope_xdr = STANDARD.encode(envelope);
+    let envelope_xdr = encode_base64(&envelope);
 
     Ok(BuiltEnvelope {
         envelope_xdr,
@@ -814,10 +665,10 @@ fn write_asset(
     let code = asset_code.as_bytes();
     let width = if code.len() <= 4 {
         write_i32(output, ASSET_ALPHANUM4);
-        4
+        4usize
     } else if code.len() <= 12 {
         write_i32(output, ASSET_ALPHANUM12);
-        12
+        12usize
     } else {
         return Err(ApiError::InvalidRequest("invalid_asset_code"));
     };
@@ -887,6 +738,75 @@ fn crc16_xmodem(bytes: &[u8]) -> u16 {
         }
     }
     crc
+}
+
+fn encode_base64(bytes: &[u8]) -> String {
+    let mut output = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let first = chunk[0];
+        let second = chunk.get(1).copied().unwrap_or(0);
+        let third = chunk.get(2).copied().unwrap_or(0);
+        let combined = (u32::from(first) << 16) | (u32::from(second) << 8) | u32::from(third);
+        output.push(BASE64_ALPHABET[((combined >> 18) & 0x3f) as usize] as char);
+        output.push(BASE64_ALPHABET[((combined >> 12) & 0x3f) as usize] as char);
+        output.push(if chunk.len() > 1 {
+            BASE64_ALPHABET[((combined >> 6) & 0x3f) as usize] as char
+        } else {
+            '='
+        });
+        output.push(if chunk.len() > 2 {
+            BASE64_ALPHABET[(combined & 0x3f) as usize] as char
+        } else {
+            '='
+        });
+    }
+    output
+}
+
+fn decode_base64(value: &str) -> Result<Vec<u8>, ApiError> {
+    let bytes = value.as_bytes();
+    if bytes.is_empty() || bytes.len() % 4 != 0 {
+        return Err(ApiError::InvalidRequest("invalid_signed_envelope_xdr"));
+    }
+    let mut output = Vec::with_capacity((bytes.len() / 4) * 3);
+    for (index, chunk) in bytes.chunks_exact(4).enumerate() {
+        let is_last = index + 1 == bytes.len() / 4;
+        let first = base64_value(chunk[0])?;
+        let second = base64_value(chunk[1])?;
+        let third_padding = chunk[2] == b'=';
+        let fourth_padding = chunk[3] == b'=';
+        if third_padding && !fourth_padding {
+            return Err(ApiError::InvalidRequest("invalid_signed_envelope_xdr"));
+        }
+        if (third_padding || fourth_padding) && !is_last {
+            return Err(ApiError::InvalidRequest("invalid_signed_envelope_xdr"));
+        }
+        let third = if third_padding { 0 } else { base64_value(chunk[2])? };
+        let fourth = if fourth_padding { 0 } else { base64_value(chunk[3])? };
+        let combined = (u32::from(first) << 18)
+            | (u32::from(second) << 12)
+            | (u32::from(third) << 6)
+            | u32::from(fourth);
+        output.push(((combined >> 16) & 0xff) as u8);
+        if !third_padding {
+            output.push(((combined >> 8) & 0xff) as u8);
+        }
+        if !fourth_padding {
+            output.push((combined & 0xff) as u8);
+        }
+    }
+    Ok(output)
+}
+
+fn base64_value(value: u8) -> Result<u8, ApiError> {
+    match value {
+        b'A'..=b'Z' => Ok(value - b'A'),
+        b'a'..=b'z' => Ok(value - b'a' + 26),
+        b'0'..=b'9' => Ok(value - b'0' + 52),
+        b'+' => Ok(62),
+        b'/' => Ok(63),
+        _ => Err(ApiError::InvalidRequest("invalid_signed_envelope_xdr")),
+    }
 }
 
 struct XdrReader<'a> {
@@ -1168,7 +1088,7 @@ mod tests {
     use super::*;
 
     const SOURCE: &str = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
-    const DESTINATION: &str = "GBZXN7PIRZGNMHGAQQLDMH7AQBHPENB6X7M5S2TQ4JQKZPBKVC6K2DLH";
+    const DESTINATION: &str = "GAAQEAYEAUDAOCAJBIFQYDIOB4IBCEQTCQKRMFYYDENBWHA5DYPSABOV";
 
     #[test]
     fn builds_and_parses_one_payment_envelope() {
@@ -1184,7 +1104,7 @@ mod tests {
             1_900_000_000,
         )
         .unwrap();
-        let bytes = STANDARD.decode(built.envelope_xdr).unwrap();
+        let bytes = decode_base64(&built.envelope_xdr).unwrap();
         let parsed = parse_payment_envelope(&bytes).unwrap();
         assert_eq!(parsed.sequence, 1);
         assert_eq!(parsed.fee, 100);
@@ -1193,6 +1113,12 @@ mod tests {
         assert_eq!(parsed.memo_text.as_deref(), Some("CFI-test"));
         assert_eq!(parsed.signature_count, 0);
         assert_eq!(hash_bytes(&parsed.transaction_body), built.transaction_body_sha256);
+    }
+
+    #[test]
+    fn base64_round_trip_is_exact() {
+        let bytes = b"CrownFi Stellar XDR";
+        assert_eq!(decode_base64(&encode_base64(bytes)).unwrap(), bytes);
     }
 
     #[test]
