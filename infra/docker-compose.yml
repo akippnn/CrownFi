@@ -98,6 +98,7 @@ services:
       dockerfile: web/Dockerfile
     environment:
       NODE_ENV: production
+      CROWNFI_API_MODE: ${CROWNFI_API_MODE:-local}
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=legacy
       DIRECT_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=legacy
       CROWNFI_API_INTERNAL_URL: http://api:8080
