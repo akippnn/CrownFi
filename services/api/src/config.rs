@@ -8,6 +8,9 @@ pub struct Config {
     pub database_acquire_timeout_seconds: u64,
     pub redis_url: Option<String>,
     pub admin_demo_token: String,
+    pub web_internal_token: String,
+    pub setup_bootstrap_token: String,
+    pub allow_mainnet: bool,
     pub stellar_mode: String,
     pub r2_endpoint: Option<String>,
     pub r2_access_key_id: Option<String>,
@@ -35,6 +38,11 @@ impl Config {
             redis_url: env_optional("REDIS_URL"),
             admin_demo_token: std::env::var("ADMIN_DEMO_TOKEN")
                 .unwrap_or_else(|_| "local-admin-demo-token".to_string()),
+            web_internal_token: std::env::var("CROWNFI_WEB_INTERNAL_TOKEN")
+                .unwrap_or_else(|_| "local-web-to-api-token-change-before-sharing".to_string()),
+            setup_bootstrap_token: std::env::var("CROWNFI_SETUP_BOOTSTRAP_TOKEN")
+                .unwrap_or_else(|_| "local-first-admin-setup-token".to_string()),
+            allow_mainnet: env_bool("CROWNFI_ALLOW_MAINNET", false),
             stellar_mode: std::env::var("STELLAR_MODE").unwrap_or_else(|_| "mock".to_string()),
             r2_endpoint: env_optional("R2_ENDPOINT"),
             r2_access_key_id: env_optional("R2_ACCESS_KEY_ID"),
