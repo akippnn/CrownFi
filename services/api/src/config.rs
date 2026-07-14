@@ -39,7 +39,7 @@ impl Config {
                 if local_profile {
                     "local-first-admin-setup-token".to_string()
                 } else {
-                    String::new()
+                    format!("disabled-{}", uuid::Uuid::new_v4())
                 }
             });
 
