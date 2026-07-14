@@ -173,11 +173,8 @@ async fn create_order(
         return Err(ApiError::InvalidRequest("invalid_order_quantity"));
     }
     let environment = validate_environment(body.environment)?;
-    let idempotency_key = required_text(
-        body.idempotency_key,
-        200,
-        "invalid_order_idempotency_key",
-    )?;
+    let idempotency_key =
+        required_text(body.idempotency_key, 200, "invalid_order_idempotency_key")?;
     let request_sha256 = hash_text(&format!(
         "buyer={actor_user_id};organization={organization_id};product={};price={};quantity={};environment={environment}",
         body.product_id, body.price_id, body.quantity
@@ -308,10 +305,7 @@ async fn create_order(
     .await?;
     tx.commit().await.map_err(map_database_error)?;
 
-    Ok((
-        StatusCode::CREATED,
-        Json(load_order(pool, order_id).await?),
-    ))
+    Ok((StatusCode::CREATED, Json(load_order(pool, order_id).await?)))
 }
 
 async fn get_order(
@@ -321,14 +315,13 @@ async fn get_order(
 ) -> Result<Json<OrderDetailResponse>, ApiError> {
     let actor_user_id = require_admin_actor(&state, &headers)?;
     let pool = database_pool(&state)?;
-    let organization_id = sqlx::query_scalar::<_, Uuid>(
-        "SELECT organization_id FROM orders WHERE id = $1",
-    )
-    .bind(order_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(map_database_error)?
-    .ok_or(ApiError::NotFound)?;
+    let organization_id =
+        sqlx::query_scalar::<_, Uuid>("SELECT organization_id FROM orders WHERE id = $1")
+            .bind(order_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(map_database_error)?
+            .ok_or(ApiError::NotFound)?;
     require_organization_editor(pool, organization_id, actor_user_id).await?;
     Ok(Json(load_order(pool, order_id).await?))
 }
@@ -341,13 +334,10 @@ async fn create_payment_attempt(
 ) -> Result<(StatusCode, Json<PaymentAttemptRecord>), ApiError> {
     let actor_user_id = require_admin_actor(&state, &headers)?;
     let pool = database_pool(&state)?;
-    let provider = required_text(body.provider, 80, "invalid_payment_provider")?
-        .to_ascii_lowercase();
-    let provider_reference = optional_text(
-        body.provider_reference,
-        200,
-        "invalid_provider_reference",
-    )?;
+    let provider =
+        required_text(body.provider, 80, "invalid_payment_provider")?.to_ascii_lowercase();
+    let provider_reference =
+        optional_text(body.provider_reference, 200, "invalid_provider_reference")?;
     let payer_account = validate_optional_stellar_account(body.payer_account)?;
     let mut tx = pool.begin().await.map_err(map_database_error)?;
 
@@ -417,11 +407,8 @@ async fn record_payment_event(
     }
 
     let pool = database_pool(&state)?;
-    let provider_event_id = required_text(
-        body.provider_event_id,
-        200,
-        "invalid_provider_event_id",
-    )?;
+    let provider_event_id =
+        required_text(body.provider_event_id, 200, "invalid_provider_event_id")?;
     let outcome = validate_payment_outcome(body.outcome)?;
     let environment = validate_environment(body.environment)?;
     let asset_code = validate_asset_code(body.asset_code)?;
@@ -898,34 +885,14 @@ mod tests {
     fn reconciles_exact_integer_payment() {
         assert_eq!(
             reconcile_event(
-                2_500_000,
-                "XLM",
-                7,
-                None,
-                None,
-                "testnet",
-                2_500_000,
-                "XLM",
-                7,
-                None,
-                None,
+                2_500_000, "XLM", 7, None, None, "testnet", 2_500_000, "XLM", 7, None, None,
                 "testnet",
             ),
             None
         );
         assert_eq!(
             reconcile_event(
-                2_500_000,
-                "XLM",
-                7,
-                None,
-                None,
-                "testnet",
-                2_499_999,
-                "XLM",
-                7,
-                None,
-                None,
+                2_500_000, "XLM", 7, None, None, "testnet", 2_499_999, "XLM", 7, None, None,
                 "testnet",
             ),
             Some("amount_mismatch".to_string())

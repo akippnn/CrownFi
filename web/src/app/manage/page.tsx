@@ -10,7 +10,7 @@ import {
   Globe2,
   Plus,
   RefreshCw,
-  Seedling,
+  Sprout,
   Settings2,
   ShieldCheck,
   UserPlus,
@@ -399,7 +399,7 @@ export default function ManagePage() {
                     <p className="mt-1 text-sm text-gold-soft/50">Create durable drafts or reconcile the deterministic browser-test reference pageant.</p>
                   </div>
                   <button onClick={seedReference} disabled={!organizationId || busy === "seed"} className="rounded-xl border border-gold/30 bg-gold/10 px-4 py-2.5 text-sm font-semibold text-gold-soft disabled:opacity-45">
-                    <Seedling className="mr-2 inline" size={16} /> {busy === "seed" ? "Reconciling…" : "Seed Miss Stellarverse"}
+                    <Sprout className="mr-2 inline" size={16} /> {busy === "seed" ? "Reconciling…" : "Seed Miss Stellarverse"}
                   </button>
                 </div>
                 <form onSubmit={createPageant} className="mt-6 grid gap-4 sm:grid-cols-2">

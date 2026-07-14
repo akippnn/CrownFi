@@ -24,19 +24,18 @@ pub struct Config {
 
 impl Config {
     pub fn from_env() -> Self {
-        let api_mode = std::env::var("CROWNFI_API_MODE")
-            .unwrap_or_else(|_| "local-demo".to_string());
+        let api_mode =
+            std::env::var("CROWNFI_API_MODE").unwrap_or_else(|_| "local-demo".to_string());
         let local_profile = api_mode.starts_with("local");
-        let web_internal_token = env_optional("CROWNFI_WEB_INTERNAL_TOKEN")
-            .unwrap_or_else(|| {
-                if local_profile {
-                    "local-web-to-api-token-change-before-sharing".to_string()
-                } else {
-                    String::new()
-                }
-            });
-        let setup_bootstrap_token = env_optional("CROWNFI_SETUP_BOOTSTRAP_TOKEN")
-            .unwrap_or_else(|| {
+        let web_internal_token = env_optional("CROWNFI_WEB_INTERNAL_TOKEN").unwrap_or_else(|| {
+            if local_profile {
+                "local-web-to-api-token-change-before-sharing".to_string()
+            } else {
+                String::new()
+            }
+        });
+        let setup_bootstrap_token =
+            env_optional("CROWNFI_SETUP_BOOTSTRAP_TOKEN").unwrap_or_else(|| {
                 if local_profile {
                     "local-first-admin-setup-token".to_string()
                 } else {
