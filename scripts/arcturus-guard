@@ -23,10 +23,13 @@ if project.get("manifest") != "arcturus.release.json":
 if project.get("ci", {}).get("storage") != "isolated":
     raise SystemExit("CI storage must be isolated")
 test_intent = project.get("ci", {}).get("testIntent", {})
-if test_intent.get("mode") not in {"command", "container-target", "waived"}:
-    raise SystemExit("CI must declare test intent: command, container-target, or waived")
-if test_intent.get("mode") == "waived" and not test_intent.get("reason"):
-    raise SystemExit("a waived test intent requires a reviewable reason")
+if test_intent:
+    if test_intent.get("mode") not in {"command", "container-target", "waived"}:
+        raise SystemExit("CI must declare test intent: command, container-target, or waived")
+    if test_intent.get("mode") == "waived" and not test_intent.get("reason"):
+        raise SystemExit("a waived test intent requires a reviewable reason")
+elif not any(build.get("validationTargets") for build in project.get("builds", {}).values()):
+    raise SystemExit("CI must declare at least one validation target")
 obsolete = {"DEPLOY_WEBHOOK_SECRET", "DEPLOY_SECRET", "REGISTRY_PASSWORD", "REGISTRY_AUTH"}
 secret_names = {
     project.get("ci", {}).get("deployTokenSecret"),
