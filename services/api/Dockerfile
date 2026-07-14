@@ -5,6 +5,9 @@ COPY services/api/migrations ./migrations
 COPY services/api/src ./src
 RUN cargo build --release --locked
 
+FROM builder AS test
+RUN cargo test --locked
+
 FROM debian:bookworm-slim AS runtime
 WORKDIR /app
 RUN apt-get update \
