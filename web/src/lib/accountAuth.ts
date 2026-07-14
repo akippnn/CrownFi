@@ -57,7 +57,7 @@ export function setAccountCookie(response: NextResponse, token: string) {
   response.cookies.set(COOKIE, token, {
     httpOnly: true,
     sameSite: "strict",
-    secure: process.env.NODE_ENV === "production",
+    secure: process.env.NODE_ENV === "production" && !localProfile(),
     path: "/",
     maxAge: SESSION_TTL_MS / 1000,
   });
@@ -67,7 +67,7 @@ export function clearAccountCookie(response: NextResponse) {
   response.cookies.set(COOKIE, "", {
     httpOnly: true,
     sameSite: "strict",
-    secure: process.env.NODE_ENV === "production",
+    secure: process.env.NODE_ENV === "production" && !localProfile(),
     path: "/",
     maxAge: 0,
   });
