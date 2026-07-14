@@ -24,7 +24,7 @@ export function organizerReviewConfig() {
 function adminToken() {
   return (
     process.env.CROWNFI_API_ADMIN_TOKEN?.trim() ||
-    process.env.ADMIN_SESSION_SECRET?.trim() ||
+    process.env.ADMIN_DEMO_TOKEN?.trim() ||
     null
   );
 }
