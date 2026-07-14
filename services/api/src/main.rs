@@ -1,4 +1,5 @@
 mod app;
+mod commerce;
 mod config;
 mod database;
 mod error;
@@ -76,7 +77,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = router(state.clone())
         .merge(markets::router().with_state(state.clone()))
         .merge(platform::router().with_state(state.clone()))
-        .merge(media::router().with_state(state));
+        .merge(media::router().with_state(state.clone()))
+        .merge(commerce::router().with_state(state));
 
     tracing::info!(%addr, "starting CrownFi API");
     let listener = TcpListener::bind(addr).await?;
