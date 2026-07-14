@@ -70,7 +70,7 @@ CREATE INDEX stellar_chain_evidence_ledger_idx
 
 CREATE TABLE stellar_reconciliation_results (
     id UUID PRIMARY KEY,
-    transaction_intent_id UUID NOT NULL UNIQUE REFERENCES transaction_intents(id) ON DELETE CASCADE,
+    transaction_intent_id UUID NOT NULL REFERENCES transaction_intents(id) ON DELETE CASCADE,
     chain_evidence_id UUID NOT NULL UNIQUE REFERENCES stellar_chain_evidence(id) ON DELETE CASCADE,
     status TEXT NOT NULL CHECK (status IN ('accepted', 'rejected')),
     failure_code TEXT,
@@ -85,5 +85,10 @@ CREATE TABLE stellar_reconciliation_results (
     )
 );
 
+CREATE UNIQUE INDEX stellar_reconciliation_one_accepted_per_intent
+    ON stellar_reconciliation_results (transaction_intent_id)
+    WHERE status = 'accepted';
+CREATE INDEX stellar_reconciliation_intent_idx
+    ON stellar_reconciliation_results (transaction_intent_id, reconciled_at DESC);
 CREATE INDEX stellar_reconciliation_status_idx
     ON stellar_reconciliation_results (status, reconciled_at DESC);
