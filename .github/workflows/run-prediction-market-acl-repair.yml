@@ -1,4 +1,4 @@
-name: Apply prediction market ACL repair
+name: Repair prediction market smoke transport
 
 on:
   pull_request:
@@ -19,50 +19,40 @@ jobs:
         with:
           ref: ${{ github.head_ref || 'feat/prediction-market-foundation-v1' }}
           persist-credentials: true
-      - name: Extract and run the validated repair program
+      - name: Repair internal transport fixtures
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          import subprocess
 
-          workflow = Path('.github/workflows/repair-prediction-market-acl.yml').read_text(encoding='utf-8')
-          marker = "          python3 - <<'PY'\n"
-          start = workflow.index(marker) + len(marker)
-          end = workflow.index("\n          PY\n", start)
-          raw_lines = workflow[start:end].splitlines()
-          lines = []
-          in_triple_string = False
-          for raw_line in raw_lines:
-              line = raw_line
-              if not in_triple_string and line.startswith('          '):
-                  line = line[10:]
-              lines.append(line)
-              if line.count('"""') % 2 == 1:
-                  in_triple_string = not in_triple_string
-          program = '\n'.join(lines) + '\n'
-          program_path = Path('/tmp/repair_prediction_market_acl.py')
-          program_path.write_text(program, encoding='utf-8')
-          subprocess.run(['python3', str(program_path)], check=True)
+          path = Path('scripts/acceptance/prediction-market-foundation-smoke.sh')
+          text = path.read_text(encoding='utf-8')
+          start = text.index('stake_body=')
+          end = text.index('transaction_hash=', start)
+          segment = text[start:end].replace(
+              '--header "x-admin-demo-token: $admin_token"',
+              '--header "x-crownfi-web-token: $web_token"',
+          )
+          text = text[:start] + segment + text[end:]
+          text = text.replace(
+              "printf '%s\n' \"$missing_transport_status\" >\"$evidence_dir/missing-web-transport-status.txt\"",
+              "printf '%s\\n' \"$missing_transport_status\" >\"$evidence_dir/missing-web-transport-status.txt\"",
+          )
+          text = text.replace(
+              "printf '%s\n' \"$foreign_intent_status\" >\"$evidence_dir/foreign-intent-read-status.txt\"",
+              "printf '%s\\n' \"$foreign_intent_status\" >\"$evidence_dir/foreign-intent-read-status.txt\"",
+          )
+          path.write_text(text, encoding='utf-8')
           PY
-      - name: Setup Rust stable
-        run: |
-          rustup toolchain install stable --profile minimal --component rustfmt
-          rustup default stable
-      - name: Format and test API
-        working-directory: services/api
-        run: |
-          cargo fmt
-          cargo test --locked
       - name: Validate smoke script syntax
         run: bash -n scripts/acceptance/prediction-market-foundation-smoke.sh
-      - name: Commit validated ACL adoption
+      - name: Commit smoke repair
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add services/api/src/authorization_acl.rs services/api/src/markets.rs scripts/acceptance/prediction-market-foundation-smoke.sh docs/security/AUTHORIZATION.md
+          git add scripts/acceptance/prediction-market-foundation-smoke.sh
           if git diff --cached --quiet; then
-            echo "Prediction-market ACL adoption is already applied."
+            echo "Prediction-market smoke transport is already repaired."
             exit 0
           fi
-          git commit -m "fix(markets): adopt centralized ACL capabilities"
+          git commit -m "test(markets): use web transport for protected smoke routes"
           git push origin HEAD:${{ github.head_ref || 'feat/prediction-market-foundation-v1' }}
