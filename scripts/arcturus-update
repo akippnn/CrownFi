@@ -40,7 +40,7 @@ ORIGINAL_ARGS=("$@")
 
 canonical_dir() {
   mkdir -p "$1"
-  (cd "$1" && pwd)
+  (cd "$1" && pwd -P)
 }
 
 project_from_context() {
@@ -74,7 +74,7 @@ blueprint_identity() {
   BLUEPRINT_DIRTY=false
   [[ -f "$root/VERSION" ]] && BLUEPRINT_VERSION="$(tr -d '[:space:]' < "$root/VERSION")"
   git_root="$(git -C "$root" rev-parse --show-toplevel 2>/dev/null || true)"
-  if [[ -n "$git_root" && "$(cd "$git_root" && pwd)" == "$(cd "$root" && pwd)" ]]; then
+  if [[ -n "$git_root" && "$(cd "$git_root" && pwd -P)" == "$(cd "$root" && pwd -P)" ]]; then
     BLUEPRINT_COMMIT="$(git -C "$root" rev-parse HEAD)"
     git -C "$root" diff --quiet --ignore-submodules -- && git -C "$root" diff --cached --quiet --ignore-submodules -- || BLUEPRINT_DIRTY=true
   fi
@@ -264,7 +264,7 @@ case "$MODE" in
     done
     PROJECT_DIR="$(canonical_dir "$PROJECT_DIR")"
     SOURCE_DIR="${SOURCE_DIR:-$PROJECT_DIR/.arcturus/blueprint}"
-    SOURCE_DIR="$(cd "$SOURCE_DIR" 2>/dev/null && pwd)" || { echo "Blueprint directory not found: $SOURCE_DIR" >&2; exit 2; }
+    SOURCE_DIR="$(cd "$SOURCE_DIR" 2>/dev/null && pwd -P)" || { echo "Blueprint directory not found: $SOURCE_DIR" >&2; exit 2; }
     [[ -x "$SOURCE_DIR/scripts/arcturus-setup" ]] || { echo "Invalid blueprint directory: missing scripts/arcturus-setup" >&2; exit 2; }
     [[ -f "$PROJECT_DIR/.arcturus/project.env" ]] || { echo "Missing $PROJECT_DIR/.arcturus/project.env; run bootstrap first." >&2; exit 2; }
     blueprint_identity "$SOURCE_DIR"

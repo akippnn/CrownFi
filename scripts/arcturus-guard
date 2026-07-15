@@ -22,14 +22,12 @@ if project.get("manifest") != "arcturus.release.json":
     raise SystemExit("project manifest must be arcturus.release.json")
 if project.get("ci", {}).get("storage") != "isolated":
     raise SystemExit("CI storage must be isolated")
-test_intent = project.get("ci", {}).get("testIntent", {})
-if test_intent:
+test_intent = project.get("ci", {}).get("testIntent")
+if test_intent is not None:
     if test_intent.get("mode") not in {"command", "container-target", "waived"}:
-        raise SystemExit("CI must declare test intent: command, container-target, or waived")
+        raise SystemExit("legacy CI test intent must be command, container-target, or waived")
     if test_intent.get("mode") == "waived" and not test_intent.get("reason"):
-        raise SystemExit("a waived test intent requires a reviewable reason")
-elif not any(build.get("validationTargets") for build in project.get("builds", {}).values()):
-    raise SystemExit("CI must declare at least one validation target")
+        raise SystemExit("a waived legacy test intent requires a reviewable reason")
 obsolete = {"DEPLOY_WEBHOOK_SECRET", "DEPLOY_SECRET", "REGISTRY_PASSWORD", "REGISTRY_AUTH"}
 secret_names = {
     project.get("ci", {}).get("deployTokenSecret"),
@@ -41,9 +39,9 @@ if obsolete & secret_names:
 
 components = manifest.get("spec", {}).get("components", {})
 mapped = {}
+has_validation_target = False
 for build_name, build in project.get("builds", {}).items():
-    if not build.get("validationTargets"):
-        raise SystemExit(f"build {build_name!r} requires at least one validation target")
+    has_validation_target = has_validation_target or bool(build.get("validationTargets"))
     for value in [*build.get("validationTargets", []), build.get("releaseTarget")]:
         if value and not all(c.isalnum() or c in "_.-" for c in value):
             raise SystemExit(f"build {build_name!r} has an invalid target")
@@ -56,6 +54,8 @@ for build_name, build in project.get("builds", {}).items():
         if repository != build.get("repository"):
             raise SystemExit(f"component {component_name!r} repository differs from its build")
         mapped[component_name] = build_name
+if test_intent is None and not has_validation_target:
+    raise SystemExit("project requires at least one Containerfile validation target")
 fixed = set(project.get("fixedComponents", []))
 if set(components) != set(mapped) | fixed or set(mapped) & fixed:
     raise SystemExit("every component must map exactly once to a build or fixed image")
@@ -89,9 +89,13 @@ for route_name, route in manifest.get("spec", {}).get("routing", {}).items():
     if not 1 <= route["port"] <= 65535:
         raise SystemExit(f"route {route_name!r} has an invalid port")
 PY
-elif [[ "${ARCTURUS_PROJECT_VALIDATED:-}" == "1" ]]; then
+elif [[ "${ARCTURUS_PROJECT_VALIDATED:-}" == 1 ]]; then
+  # The generic CI driver has already run the digest-pinned canonical validator.
+  # Do not require the application language toolchain or a second local CLI.
   :
 elif command -v arcturusctl >/dev/null 2>&1; then
+  # Do not silently use a reduced node/jq implementation: the shipped CLI is the
+  # same canonical schema validator used by CI and the host control plane.
   arcturusctl project validate .arcturus/project.json || fail "canonical project validation failed"
 else
   fail "validation requires python3 or the pinned arcturusctl canonical validator"
@@ -100,7 +104,7 @@ fi
 workflow_files=()
 while IFS= read -r file; do workflow_files+=("$file"); done < <(find .gitea/workflows .github/workflows -type f \( -name '*.yml' -o -name '*.yaml' \) 2>/dev/null | sort)
 if ((${#workflow_files[@]})); then
-  if grep -nEi '(:latest|/deploy["'"'"'[:space:]]|docker[[:space:]]+compose|podman[[:space:]]+compose|watchtower|terraform[[:space:]]+(apply|destroy)|DEPLOY_WEBHOOK_SECRET|REGISTRY_PASSWORD|authorization:[[:space:]]*bearer|curl[^#]*(/v1/deployments|/v1/services))' "${workflow_files[@]}"; then
+  if grep -nEi '(:latest|/deploy["'\''[:space:]]|docker[[:space:]]+compose|podman[[:space:]]+compose|watchtower|terraform[[:space:]]+(apply|destroy)|DEPLOY_WEBHOOK_SECRET|REGISTRY_PASSWORD|authorization:[[:space:]]*bearer|curl[^#]*(/v1/deployments|/v1/services))' "${workflow_files[@]}"; then
     fail "legacy, mutable, or competing production deployment ownership found in a workflow"
   fi
   grep -qE '(arcturus-ci|project deploy)' "${workflow_files[@]}" || fail "CI does not invoke the project-aware deployment driver"
