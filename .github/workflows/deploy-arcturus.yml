@@ -2,7 +2,7 @@ name: Deploy unified CrownFi through Arcturus
 
 on:
   push:
-    branches: [integration/platform-v1]
+    branches: [main]
   workflow_dispatch:
     inputs:
       acceptance:
@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   deploy:
-    if: github.repository == 'akippnn/CrownFi' && github.ref == 'refs/heads/integration/platform-v1'
+    if: github.repository == 'akippnn/CrownFi' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     environment:
@@ -40,7 +40,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$GITHUB_REPOSITORY" = "akippnn/CrownFi"
-          test "$GITHUB_REF" = "refs/heads/integration/platform-v1"
+          test "$GITHUB_REF" = "refs/heads/main"
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
 
