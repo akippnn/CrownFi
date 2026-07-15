@@ -1,7 +1,7 @@
 name: Deploy stellar-project
 on:
   push:
-    branches: [main]
+    branches: [integration/platform-v1]
 concurrency:
   group: arcturus-stellar-project
   cancel-in-progress: false
