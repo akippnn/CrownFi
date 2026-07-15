@@ -10,8 +10,9 @@
     "seed": "tsx prisma/seed.ts",
     "test:merkle": "tsx src/lib/merkle.test.ts",
     "test:ticketing": "tsx src/lib/ticketing.test.ts",
+    "test:theme": "tsx scripts/dark-theme.test.ts",
     "typecheck": "prisma generate && tsc --noEmit",
-    "check": "npm run typecheck && npm run test:merkle",
+    "check": "npm run typecheck && npm run test:merkle && npm run test:theme",
     "security:audit": "npm audit --audit-level=moderate"
   },
   "dependencies": {
