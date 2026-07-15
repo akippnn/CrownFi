@@ -1,0 +1,31 @@
+name: Regenerate sustainable tracking
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/regenerate-sustainable-tracking.yml
+      - scripts/regenerate-sustainable-tracking.mjs
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: crownfi-sustainable-tracking
+  cancel-in-progress: false
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Regenerate trackers and archive provenance
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SOURCE_REPO: Web3Iloilo/CrownFi
+          TARGET_REPO: ${{ github.repository }}
+        run: node scripts/regenerate-sustainable-tracking.mjs
