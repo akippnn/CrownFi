@@ -1,0 +1,262 @@
+name: Label status bot
+
+on:
+  issues:
+    types: [opened, reopened, closed, labeled]
+  pull_request_target:
+    types: [opened, reopened, closed, labeled, converted_to_draft, ready_for_review]
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+  schedule:
+    - cron: "23 2 * * 1"
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: label-status-${{ github.event.issue.number || github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    name: Reconcile labels
+    runs-on: ubuntu-latest
+    steps:
+      - name: Apply label policy
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            const statuses = [
+              "status: ready",
+              "status: in-progress",
+              "status: in-review",
+              "status: awaiting-human-test",
+              "status: blocked",
+              "status: deferred",
+            ];
+
+            const issueTypes = [
+              "type: tracker",
+              "type: concern",
+              "type: bug",
+            ];
+
+            const statusSet = new Set(statuses);
+            const typeSet = new Set(issueTypes);
+            const auditPriority = [
+              "status: deferred",
+              "status: blocked",
+              "status: awaiting-human-test",
+              "status: in-review",
+              "status: in-progress",
+              "status: ready",
+            ];
+
+            const labelNames = (item) =>
+              (item.labels || []).map((label) =>
+                typeof label === "string" ? label : label.name
+              );
+
+            async function getItem(number) {
+              const { data } = await github.rest.issues.get({ owner, repo, issue_number: number });
+              return data;
+            }
+
+            async function removeLabel(number, label) {
+              try {
+                await github.rest.issues.removeLabel({
+                  owner,
+                  repo,
+                  issue_number: number,
+                  name: label,
+                });
+              } catch (error) {
+                if (error.status !== 404) throw error;
+              }
+            }
+
+            async function clearStatuses(number, item = null) {
+              const current = item || await getItem(number);
+              const active = labelNames(current).filter((label) => statusSet.has(label));
+              for (const label of active) {
+                await removeLabel(number, label);
+              }
+              return active;
+            }
+
+            async function setExclusiveStatus(number, desired, item = null) {
+              if (!statusSet.has(desired)) {
+                throw new Error(`Unsupported status label: ${desired}`);
+              }
+
+              const current = item || await getItem(number);
+              if (current.state === "closed") {
+                await clearStatuses(number, current);
+                return;
+              }
+
+              const active = labelNames(current).filter((label) => statusSet.has(label));
+              for (const label of active) {
+                if (label !== desired) await removeLabel(number, label);
+              }
+
+              if (!active.includes(desired)) {
+                await github.rest.issues.addLabels({
+                  owner,
+                  repo,
+                  issue_number: number,
+                  labels: [desired],
+                });
+              }
+            }
+
+            async function inferredOpenStatus(item) {
+              if (!item.pull_request) return "status: ready";
+              const { data: pull } = await github.rest.pulls.get({
+                owner,
+                repo,
+                pull_number: item.number,
+              });
+              return pull.draft ? "status: in-progress" : "status: in-review";
+            }
+
+            async function auditRepository() {
+              const items = await github.paginate(github.rest.issues.listForRepo, {
+                owner,
+                repo,
+                state: "all",
+                per_page: 100,
+              });
+
+              const report = {
+                closedStatusesRemoved: [],
+                missingStatusesFilled: [],
+                duplicateStatusesCollapsed: [],
+                issuesMissingType: [],
+                issuesWithMultipleTypes: [],
+                prsWithIssueTypes: [],
+              };
+
+              for (const item of items) {
+                const names = labelNames(item);
+                const activeStatuses = names.filter((label) => statusSet.has(label));
+                const activeTypes = names.filter((label) => typeSet.has(label));
+                const isPullRequest = Boolean(item.pull_request);
+
+                if (item.state === "closed") {
+                  if (activeStatuses.length > 0) {
+                    await clearStatuses(item.number, item);
+                    report.closedStatusesRemoved.push(`#${item.number}`);
+                  }
+                  continue;
+                }
+
+                if (activeStatuses.length === 0) {
+                  const inferred = await inferredOpenStatus(item);
+                  await setExclusiveStatus(item.number, inferred, item);
+                  report.missingStatusesFilled.push(`#${item.number} → ${inferred}`);
+                } else if (activeStatuses.length > 1) {
+                  const keep = auditPriority.find((label) => activeStatuses.includes(label));
+                  await setExclusiveStatus(item.number, keep, item);
+                  report.duplicateStatusesCollapsed.push(`#${item.number} → ${keep}`);
+                }
+
+                if (isPullRequest && activeTypes.length > 0) {
+                  report.prsWithIssueTypes.push(`#${item.number}: ${activeTypes.join(", ")}`);
+                } else if (!isPullRequest && activeTypes.length === 0) {
+                  report.issuesMissingType.push(`#${item.number}`);
+                } else if (!isPullRequest && activeTypes.length > 1) {
+                  report.issuesWithMultipleTypes.push(`#${item.number}: ${activeTypes.join(", ")}`);
+                }
+              }
+
+              core.summary.addHeading("CrownFi label-policy audit");
+              for (const [key, entries] of Object.entries(report)) {
+                core.summary.addHeading(key, 3);
+                if (entries.length === 0) {
+                  core.summary.addRaw("None\n");
+                } else {
+                  core.summary.addList(entries);
+                }
+              }
+              await core.summary.write();
+            }
+
+            const event = context.eventName;
+            const action = context.payload.action;
+
+            if (event === "schedule" || event === "workflow_dispatch") {
+              await auditRepository();
+              return;
+            }
+
+            if (event === "issue_comment") {
+              const body = context.payload.comment.body.trim();
+              const match = body.match(/^\/status\s+(ready|in-progress|in-review|awaiting-human-test|blocked|deferred)$/i);
+              if (!match) return;
+
+              const association = context.payload.comment.author_association;
+              const permitted = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
+              if (!permitted.has(association)) {
+                core.setFailed(`@${context.actor} is not permitted to change workflow status.`);
+                return;
+              }
+
+              const desired = `status: ${match[1].toLowerCase()}`;
+              await setExclusiveStatus(context.payload.issue.number, desired, context.payload.issue);
+              await github.rest.reactions.createForIssueComment({
+                owner,
+                repo,
+                comment_id: context.payload.comment.id,
+                content: "hooray",
+              });
+              return;
+            }
+
+            const item = context.payload.issue || context.payload.pull_request;
+            if (!item) return;
+            const number = item.number;
+
+            if (action === "closed") {
+              await clearStatuses(number, item);
+              return;
+            }
+
+            if (action === "labeled") {
+              const added = context.payload.label?.name;
+              if (statusSet.has(added)) {
+                await setExclusiveStatus(number, added, item);
+              }
+              return;
+            }
+
+            if (event === "issues" && (action === "opened" || action === "reopened")) {
+              const active = labelNames(item).filter((label) => statusSet.has(label));
+              if (active.length === 0) {
+                await setExclusiveStatus(number, "status: ready", item);
+              } else if (active.length > 1) {
+                const keep = auditPriority.find((label) => active.includes(label));
+                await setExclusiveStatus(number, keep, item);
+              }
+              return;
+            }
+
+            if (event === "pull_request_target") {
+              if (action === "converted_to_draft") {
+                await setExclusiveStatus(number, "status: in-progress", item);
+              } else if (action === "ready_for_review") {
+                await setExclusiveStatus(number, "status: in-review", item);
+              } else if (action === "opened" || action === "reopened") {
+                await setExclusiveStatus(
+                  number,
+                  item.draft ? "status: in-progress" : "status: in-review",
+                  item,
+                );
+              }
+            }
