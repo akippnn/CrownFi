@@ -212,9 +212,7 @@ pub async fn enforce(
             if gate.actor_required && actor.is_none() {
                 return Err(ApiError::Unauthorized);
             }
-            if gate.expected_actor_user_id.is_some()
-                && gate.expected_actor_user_id != actor
-            {
+            if gate.expected_actor_user_id.is_some() && gate.expected_actor_user_id != actor {
                 return Err(ApiError::Forbidden);
             }
             Ok(next.run(request).await)
@@ -254,12 +252,8 @@ pub async fn enforce(
                 }
             };
             let principal = load_principal(pool, actor_user_id, scope.organization_id).await?;
-            let (allowed, reason) = authorize_principal(
-                actor_user_id,
-                &principal,
-                plan.capability,
-                &scope,
-            );
+            let (allowed, reason) =
+                authorize_principal(actor_user_id, &principal, plan.capability, &scope);
 
             record_decision(
                 pool,
@@ -308,9 +302,7 @@ async fn classify_request(
         return Ok(RequestClass::Public);
     }
 
-    if segments.as_slice() == ["internal", "identity", "challenges"]
-        && method == &Method::POST
-    {
+    if segments.as_slice() == ["internal", "identity", "challenges"] && method == &Method::POST {
         let requested_user_id = body_uuid(body, "requested_user_id");
         let link = body_string(body, "purpose").as_deref() == Some("link");
         return Ok(RequestClass::TokenOnly(TokenGate {
@@ -337,9 +329,7 @@ async fn classify_request(
         }));
     }
 
-    if segments.as_slice() == ["internal", "setup", "complete"]
-        && method == &Method::POST
-    {
+    if segments.as_slice() == ["internal", "setup", "complete"] && method == &Method::POST {
         return Ok(RequestClass::TokenOnly(TokenGate {
             transport: Transport::WebInternal,
             actor_required: true,
@@ -348,9 +338,7 @@ async fn classify_request(
         }));
     }
 
-    if segments.as_slice() == ["admin", "platform", "bootstrap"]
-        && method == &Method::POST
-    {
+    if segments.as_slice() == ["admin", "platform", "bootstrap"] && method == &Method::POST {
         return Ok(RequestClass::TokenOnly(TokenGate {
             transport: Transport::AdminApi,
             actor_required: false,
@@ -470,9 +458,7 @@ async fn classify_internal(
         ));
     }
 
-    if segments.as_slice() == ["internal", "manage", "pageants"]
-        && method == &Method::POST
-    {
+    if segments.as_slice() == ["internal", "manage", "pageants"] && method == &Method::POST {
         let organization_id = required_body_uuid(body, "organization_id")?;
         return Ok(protected_web(
             Capability::PageantWrite,
@@ -485,9 +471,7 @@ async fn classify_internal(
         ));
     }
 
-    if segments.as_slice() == ["internal", "manage", "categories"]
-        && method == &Method::POST
-    {
+    if segments.as_slice() == ["internal", "manage", "categories"] && method == &Method::POST {
         let pageant_id = required_body_uuid(body, "pageant_id")?;
         let organization_id = organization_for_pageant(pool, pageant_id).await?;
         return Ok(protected_web(
@@ -501,9 +485,7 @@ async fn classify_internal(
         ));
     }
 
-    if segments.as_slice() == ["internal", "manage", "contestants"]
-        && method == &Method::POST
-    {
+    if segments.as_slice() == ["internal", "manage", "contestants"] && method == &Method::POST {
         let pageant_id = required_body_uuid(body, "pageant_id")?;
         let organization_id = organization_for_pageant(pool, pageant_id).await?;
         return Ok(protected_web(
@@ -637,10 +619,7 @@ async fn classify_admin(
         ));
     }
 
-    if segments.len() == 5
-        && segments[2] == "pageant-contestants"
-        && method == &Method::POST
-    {
+    if segments.len() == 5 && segments[2] == "pageant-contestants" && method == &Method::POST {
         let pageant_contestant_id = parse_uuid(segments[3])?;
         let organization_id =
             organization_for_pageant_contestant(pool, pageant_contestant_id).await?;
@@ -701,9 +680,7 @@ async fn classify_admin(
             && method == &Method::POST
         {
             Capability::OrderManage
-        } else if segments.len() == 5
-            && segments[4] == "stellar-intents"
-            && method == &Method::POST
+        } else if segments.len() == 5 && segments[4] == "stellar-intents" && method == &Method::POST
         {
             Capability::IntentWrite
         } else if segments.len() == 5
@@ -711,9 +688,7 @@ async fn classify_admin(
             && method == &Method::POST
         {
             Capability::FulfillmentCreate
-        } else if segments.len() == 5
-            && segments[4] == "payout-batches"
-            && method == &Method::POST
+        } else if segments.len() == 5 && segments[4] == "payout-batches" && method == &Method::POST
         {
             Capability::PayoutManage
         } else {
@@ -749,9 +724,7 @@ async fn classify_admin(
         let (organization_id, buyer_user_id) = scope_for_intent(pool, intent_id).await?;
         let capability = if segments.len() == 4 && method == &Method::GET {
             Capability::IntentRead
-        } else if segments.len() == 5
-            && segments[4] == "signed-envelope"
-            && method == &Method::POST
+        } else if segments.len() == 5 && segments[4] == "signed-envelope" && method == &Method::POST
         {
             Capability::IntentWrite
         } else if segments.len() == 5
@@ -759,10 +732,7 @@ async fn classify_admin(
             && method == &Method::POST
         {
             Capability::ChainEvidenceWrite
-        } else if segments.len() == 5
-            && segments[4] == "reconciliation"
-            && method == &Method::GET
-        {
+        } else if segments.len() == 5 && segments[4] == "reconciliation" && method == &Method::GET {
             Capability::ReconciliationRead
         } else {
             return Ok(RequestClass::Deny(Transport::AdminApi));
@@ -784,7 +754,10 @@ async fn classify_admin(
         let capability = if segments.len() == 4 && method == &Method::GET {
             Capability::FulfillmentRead
         } else if segments.len() == 5
-            && matches!(segments[4], "claim" | "submission" | "failure" | "mint-evidence")
+            && matches!(
+                segments[4],
+                "claim" | "submission" | "failure" | "mint-evidence"
+            )
             && method == &Method::POST
         {
             Capability::FulfillmentOperate
@@ -793,19 +766,11 @@ async fn classify_admin(
         };
         return Ok(protected_admin(
             capability,
-            Scope::owned(
-                organization_id,
-                buyer_user_id,
-                "fulfillment_job",
-                job_id,
-            ),
+            Scope::owned(organization_id, buyer_user_id, "fulfillment_job", job_id),
         ));
     }
 
-    if segments.len() == 4
-        && segments[2] == "payout-batches"
-        && method == &Method::GET
-    {
+    if segments.len() == 4 && segments[2] == "payout-batches" && method == &Method::GET {
         let payout_batch_id = parse_uuid(segments[3])?;
         let (organization_id, buyer_user_id) =
             scope_for_payout_batch(pool, payout_batch_id).await?;
@@ -865,9 +830,7 @@ fn is_public_request(method: &Method, path: &str) -> bool {
     // Explicitly retain the legacy in-memory proof-of-flow routes until the
     // durable Voting and Prediction Market slices replace them. Unknown
     // /admin and /internal routes still fail closed.
-    (method == &Method::POST
-        && path.starts_with("/events/")
-        && path.ends_with("/vote"))
+    (method == &Method::POST && path.starts_with("/events/") && path.ends_with("/vote"))
         || (method == &Method::POST
             && path.starts_with("/markets/")
             && path.ends_with("/stake-intents"))
@@ -889,11 +852,9 @@ fn require_transport(
     transport: Transport,
 ) -> Result<(), ApiError> {
     let valid = match transport {
-        Transport::WebInternal => header_matches(
-            headers,
-            WEB_TOKEN_HEADER,
-            &state.config.web_internal_token,
-        ),
+        Transport::WebInternal => {
+            header_matches(headers, WEB_TOKEN_HEADER, &state.config.web_internal_token)
+        }
         Transport::AdminApi => {
             header_matches(headers, ADMIN_TOKEN_HEADER, &state.config.admin_demo_token)
         }
@@ -1004,8 +965,10 @@ fn authorize_principal(
     }
 
     let self_owned = scope.owner_user_id == Some(actor_user_id);
-    if matches!(capability, Capability::AccountRead | Capability::ManageOverview)
-        && self_owned
+    if matches!(
+        capability,
+        Capability::AccountRead | Capability::ManageOverview
+    ) && self_owned
     {
         return (true, "resource_owner");
     }
@@ -1135,11 +1098,21 @@ async fn resolve_first_editable_organization(
 }
 
 async fn organization_for_pageant(pool: &PgPool, id: Uuid) -> Result<Uuid, ApiError> {
-    scalar_uuid(pool, "SELECT organization_id FROM pageants WHERE id = $1", id).await
+    scalar_uuid(
+        pool,
+        "SELECT organization_id FROM pageants WHERE id = $1",
+        id,
+    )
+    .await
 }
 
 async fn organization_for_media(pool: &PgPool, id: Uuid) -> Result<Uuid, ApiError> {
-    scalar_uuid(pool, "SELECT organization_id FROM media_assets WHERE id = $1", id).await
+    scalar_uuid(
+        pool,
+        "SELECT organization_id FROM media_assets WHERE id = $1",
+        id,
+    )
+    .await
 }
 
 async fn organization_for_collection(pool: &PgPool, id: Uuid) -> Result<Uuid, ApiError> {
@@ -1152,7 +1125,12 @@ async fn organization_for_collection(pool: &PgPool, id: Uuid) -> Result<Uuid, Ap
 }
 
 async fn organization_for_product(pool: &PgPool, id: Uuid) -> Result<Uuid, ApiError> {
-    scalar_uuid(pool, "SELECT organization_id FROM products WHERE id = $1", id).await
+    scalar_uuid(
+        pool,
+        "SELECT organization_id FROM products WHERE id = $1",
+        id,
+    )
+    .await
 }
 
 async fn scalar_uuid(pool: &PgPool, query: &str, id: Uuid) -> Result<Uuid, ApiError> {
@@ -1164,10 +1142,7 @@ async fn scalar_uuid(pool: &PgPool, query: &str, id: Uuid) -> Result<Uuid, ApiEr
         .ok_or(ApiError::NotFound)
 }
 
-async fn organization_for_pageant_contestant(
-    pool: &PgPool,
-    id: Uuid,
-) -> Result<Uuid, ApiError> {
+async fn organization_for_pageant_contestant(pool: &PgPool, id: Uuid) -> Result<Uuid, ApiError> {
     sqlx::query_scalar::<_, Uuid>(
         "SELECT p.organization_id FROM pageant_contestants pc JOIN pageants p ON p.id = pc.pageant_id WHERE pc.id = $1",
     )
@@ -1298,73 +1273,81 @@ mod tests {
         let actor = Uuid::new_v4();
         let editor = principal(None, Some("editor"));
         assert!(authorize_principal(actor, &editor, Capability::PageantWrite, &scoped(None)).0);
-        assert!(!authorize_principal(
-            actor,
-            &editor,
-            Capability::OrganizationMembersManage,
-            &scoped(None)
-        )
-        .0);
+        assert!(
+            !authorize_principal(
+                actor,
+                &editor,
+                Capability::OrganizationMembersManage,
+                &scoped(None)
+            )
+            .0
+        );
     }
 
     #[test]
     fn operator_is_operational_not_editorial() {
         let actor = Uuid::new_v4();
         let operator = principal(None, Some("operator"));
-        assert!(authorize_principal(
-            actor,
-            &operator,
-            Capability::FulfillmentOperate,
-            &scoped(None)
-        )
-        .0);
-        assert!(!authorize_principal(
-            actor,
-            &operator,
-            Capability::CatalogueWrite,
-            &scoped(None)
-        )
-        .0);
+        assert!(
+            authorize_principal(
+                actor,
+                &operator,
+                Capability::FulfillmentOperate,
+                &scoped(None)
+            )
+            .0
+        );
+        assert!(
+            !authorize_principal(actor, &operator, Capability::CatalogueWrite, &scoped(None)).0
+        );
     }
 
     #[test]
     fn auditor_is_read_only() {
         let actor = Uuid::new_v4();
         let auditor = principal(Some("auditor"), None);
-        assert!(authorize_principal(
-            actor,
-            &auditor,
-            Capability::ReconciliationRead,
-            &Scope::site()
-        )
-        .0);
-        assert!(!authorize_principal(
-            actor,
-            &auditor,
-            Capability::ChainEvidenceWrite,
-            &Scope::site()
-        )
-        .0);
+        assert!(
+            authorize_principal(
+                actor,
+                &auditor,
+                Capability::ReconciliationRead,
+                &Scope::site()
+            )
+            .0
+        );
+        assert!(
+            !authorize_principal(
+                actor,
+                &auditor,
+                Capability::ChainEvidenceWrite,
+                &Scope::site()
+            )
+            .0
+        );
     }
 
     #[test]
     fn owner_reads_only_own_resource_without_role() {
         let actor = Uuid::new_v4();
         let public_user = principal(None, None);
-        assert!(authorize_principal(
-            actor,
-            &public_user,
-            Capability::OrderRead,
-            &scoped(Some(actor))
-        )
-        .0);
-        assert!(!authorize_principal(
-            actor,
-            &public_user,
-            Capability::OrderRead,
-            &scoped(Some(Uuid::new_v4()))
-        )
-        .0);
+        assert!(
+            authorize_principal(
+                actor,
+                &public_user,
+                Capability::OrderRead,
+                &scoped(Some(actor))
+            )
+            .0
+        );
+        assert!(
+            !authorize_principal(
+                actor,
+                &public_user,
+                Capability::OrderRead,
+                &scoped(Some(Uuid::new_v4()))
+            )
+            .0
+        );
     }
 
     #[test]
@@ -1375,13 +1358,15 @@ mod tests {
             site_role: Some("owner".into()),
             organization_role: Some("owner".into()),
         };
-        assert!(!authorize_principal(
-            actor,
-            &inactive,
-            Capability::SiteSettingsWrite,
-            &Scope::site()
-        )
-        .0);
+        assert!(
+            !authorize_principal(
+                actor,
+                &inactive,
+                Capability::SiteSettingsWrite,
+                &Scope::site()
+            )
+            .0
+        );
     }
 
     #[test]
