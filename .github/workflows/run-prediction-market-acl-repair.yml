@@ -1,0 +1,60 @@
+name: Build prediction market ACL repair artifact
+
+on:
+  pull_request:
+    branches:
+      - integration/platform-v1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  repair-artifact:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout prediction-market branch
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.head_ref || 'feat/prediction-market-foundation-v1' }}
+          persist-credentials: false
+      - name: Extract and run the temporary repair program
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+
+          workflow = Path('.github/workflows/repair-prediction-market-acl.yml').read_text(encoding='utf-8')
+          marker = "          python3 - <<'PY'\n"
+          start = workflow.index(marker) + len(marker)
+          end = workflow.index("\n          PY\n", start)
+          program = '\n'.join(
+              line[10:] if line.startswith('          ') else line
+              for line in workflow[start:end].splitlines()
+          ) + '\n'
+          Path('/tmp/repair_prediction_market_acl.py').write_text(program, encoding='utf-8')
+          subprocess.run(['python3', '/tmp/repair_prediction_market_acl.py'], check=True)
+          PY
+      - name: Setup Rust stable
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt
+          rustup default stable
+      - name: Format and test API
+        working-directory: services/api
+        run: |
+          cargo fmt
+          cargo test --locked
+      - name: Validate smoke script syntax
+        run: bash -n scripts/acceptance/prediction-market-foundation-smoke.sh
+      - name: Upload repaired sources
+        uses: actions/upload-artifact@v4
+        with:
+          name: crownfi-prediction-market-acl-repair
+          path: |
+            services/api/src/authorization_acl.rs
+            services/api/src/markets.rs
+            scripts/acceptance/prediction-market-foundation-smoke.sh
+            docs/security/AUTHORIZATION.md
+          if-no-files-found: error
+          retention-days: 1
