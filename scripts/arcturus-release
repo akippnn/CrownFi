@@ -9,4 +9,4 @@ for digest_file in "$api_digest_file" "$web_digest_file"; do
 done
 exec ./scripts/arcturus-tool project render .arcturus/project.json \
   --revision "$revision" --digest "api=$api_digest_file" --digest "web=$web_digest_file" \
-  --output release.json --request-output deployment-request.json
+  --output arcturus.release.json --request-output deployment-request.json
