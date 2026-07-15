@@ -3,7 +3,7 @@ name: Security checks
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, integration/platform-v1]
   schedule:
     # Weekly, Monday 02:00 Asia/Manila / Sunday 18:00 UTC.
     - cron: "0 18 * * 0"
