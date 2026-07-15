@@ -13,7 +13,7 @@ use sqlx::{FromRow, PgPool, Postgres, Transaction};
 use time::{format_description::well_known::Rfc3339, Duration, OffsetDateTime};
 use uuid::Uuid;
 
-use crate::{app::require_admin, error::ApiError, state::AppState};
+use crate::{error::ApiError, state::AppState};
 
 const STAKE_INTENT_TTL_MINUTES: i64 = 15;
 const PUBLIC_MARKET_STATUSES: &[&str] = &[
@@ -34,12 +34,15 @@ pub fn router() -> Router<AppState> {
         .route("/markets", get(list_markets))
         .route("/markets/:market_id", get(get_market))
         .route(
-            "/markets/:market_id/stake-intents",
+            "/internal/markets/:market_id/stake-intents",
             post(create_stake_intent),
         )
-        .route("/market-intents/:intent_id", get(get_market_intent))
         .route(
-            "/market-intents/:intent_id/submission",
+            "/internal/market-intents/:intent_id",
+            get(get_market_intent),
+        )
+        .route(
+            "/internal/market-intents/:intent_id/submission",
             post(record_submission),
         )
         .route("/internal/markets", post(create_market))
@@ -230,7 +233,6 @@ async fn create_market(
     headers: HeaderMap,
     Json(body): Json<CreateMarketRequest>,
 ) -> Result<(StatusCode, Json<MarketDetail>), ApiError> {
-    require_admin(&state, &headers)?;
     let actor_user_id = actor_user_id(&headers)?;
     let pool = database_pool(&state)?;
     require_organization_editor(pool, body.organization_id, actor_user_id).await?;
@@ -346,7 +348,6 @@ async fn record_policy_decision(
     Path(market_id): Path<Uuid>,
     Json(body): Json<PolicyDecisionRequest>,
 ) -> Result<(StatusCode, Json<PolicyDecisionRecord>), ApiError> {
-    require_admin(&state, &headers)?;
     let actor_user_id = actor_user_id(&headers)?;
     let pool = database_pool(&state)?;
     require_site_administrator(pool, actor_user_id).await?;
@@ -424,7 +425,6 @@ async fn transition_market(
     Path(market_id): Path<Uuid>,
     Json(body): Json<TransitionMarketRequest>,
 ) -> Result<Json<MarketDetail>, ApiError> {
-    require_admin(&state, &headers)?;
     let actor_user_id = actor_user_id(&headers)?;
     let pool = database_pool(&state)?;
     let market = fetch_market_record(pool, market_id).await?;
