@@ -4,6 +4,12 @@ on:
   push:
     branches: [integration/platform-v1]
   workflow_dispatch:
+    inputs:
+      acceptance:
+        description: Run the expected-502 automatic rollback probe after deployment
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -67,4 +73,10 @@ jobs:
           REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
           REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
           ARCTURUS_DEPLOY_TOKEN: ${{ secrets.ARCTURUS_DEPLOY_TOKEN }}
-        run: ./scripts/arcturus-ci "$GITHUB_SHA"
+        run: |
+          set -euo pipefail
+          args=("$GITHUB_SHA")
+          if [[ "${{ inputs.acceptance }}" == "true" ]]; then
+            args+=(--acceptance)
+          fi
+          ./scripts/arcturus-ci "${args[@]}"
