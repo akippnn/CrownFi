@@ -1,18 +1,21 @@
 import "./globals.css";
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { Fraunces, Manrope } from "next/font/google";
 import { SessionProvider } from "@/session/SessionProvider";
 import { AppShell } from "@/components/AppShell";
 
-// Display: Fraunces — a high-contrast "old style" serif with soft, editorial character.
-// Body: Manrope — a modern geometric sans that stays crisp at small sizes.
 const display = Fraunces({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
   style: ["normal", "italic"],
   variable: "--font-display",
 });
-const body = Manrope({ subsets: ["latin"], weight: ["300", "400", "500", "600", "700"], variable: "--font-body" });
+const body = Manrope({
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700"],
+  variable: "--font-body",
+});
 
 export const metadata: Metadata = {
   title: "CrownFi - Crown your queen, on-chain",
@@ -21,10 +24,12 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${display.variable} ${body.variable}`}>
-      <body className="font-sans antialiased">
+    <html lang="en" className={`${display.variable} ${body.variable} dark`}>
+      <body className="bg-[#070708] font-sans antialiased text-white">
         <SessionProvider>
-          <AppShell>{children}</AppShell>
+          <Suspense fallback={<main className="mx-auto max-w-7xl px-4 py-8 text-gold-soft/50">Loading CrownFi…</main>}>
+            <AppShell>{children}</AppShell>
+          </Suspense>
         </SessionProvider>
       </body>
     </html>

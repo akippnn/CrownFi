@@ -1,0 +1,183 @@
+#!/usr/bin/env python3
+"""Provision CrownFi host prerequisites for the first Arcturus manifest release."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+from urllib.parse import quote
+
+SECRET_VALUES = {
+    "stellar-postgres-password-20260713": "POSTGRES_PASSWORD",
+    "stellar-admin-session-20260712": "ADMIN_SESSION_SECRET",
+}
+DATABASE_SECRET = "stellar-database-url-20260712"
+DATABASE_HOST = "stellar-project-postgres"
+DATABASE_VOLUME = "crownfi-platform_crownfi_postgres"
+ROUTING_NETWORK = "internal_routing"
+REGISTRY_HOST = "git.u128.org"
+SERVICE = "stellar-project"
+
+
+def fail(message: str) -> None:
+    raise SystemExit(message)
+
+
+def read_dotenv(path: Path) -> dict[str, str]:
+    if not path.is_file():
+        fail(f"environment file not found: {path}")
+    values: dict[str, str] = {}
+    for number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[7:].lstrip()
+        key, separator, value = line.partition("=")
+        key = key.strip()
+        if not separator or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key):
+            fail(f"unsupported dotenv entry at {path}:{number}")
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+            value = value[1:-1]
+        values[key] = value
+    return values
+
+
+def run(command: list[str], *, input_value: str | None = None, check: bool = True) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        command,
+        input=input_value,
+        text=True,
+        capture_output=True,
+        check=check,
+    )
+
+
+def podman_exists(kind: str, name: str) -> bool:
+    result = run(["podman", kind, "inspect", name], check=False)
+    return result.returncode == 0
+
+
+def ensure_secret(name: str, value: str, *, replace: bool) -> str:
+    exists = podman_exists("secret", name)
+    if exists and not replace:
+        return "existing"
+    if exists:
+        run(["podman", "secret", "rm", name])
+    run(["podman", "secret", "create", name, "-"], input_value=value)
+    return "replaced" if exists else "created"
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--env-file", default="infra/.env")
+    parser.add_argument(
+        "--replace-secrets",
+        action="store_true",
+        help="explicitly replace existing Podman secrets from the env file",
+    )
+    parser.add_argument(
+        "--create-deploy-token",
+        action="store_true",
+        help="create the service-scoped Gitea deployment token when absent",
+    )
+    parser.add_argument(
+        "--token-output",
+        default=str(Path.home() / ".config/arcturus/stellar-project-gitea.token"),
+    )
+    args = parser.parse_args()
+
+    if os.geteuid() == 0:
+        fail("run this as the rootless Arcturus host user, not root")
+    if run(["podman", "version"], check=False).returncode != 0:
+        fail("Podman is unavailable for the current user")
+
+    values = read_dotenv(Path(args.env_file))
+    required = {"POSTGRES_DB", "POSTGRES_USER", "POSTGRES_PASSWORD", "ADMIN_SESSION_SECRET"}
+    missing = sorted(key for key in required if not values.get(key))
+    if missing:
+        fail(f"missing required values in {args.env_file}: {', '.join(missing)}")
+
+    if not podman_exists("volume", DATABASE_VOLUME):
+        fail(
+            f"required legacy database volume {DATABASE_VOLUME!r} does not exist; "
+            "do not create an empty replacement until the Compose volume name is verified"
+        )
+    if not podman_exists("network", ROUTING_NETWORK):
+        fail(
+            f"required external network {ROUTING_NETWORK!r} does not exist; "
+            "run the Arcturus host installer first"
+        )
+
+    database_url = (
+        "postgresql://"
+        f"{quote(values['POSTGRES_USER'], safe='')}:{quote(values['POSTGRES_PASSWORD'], safe='')}"
+        f"@{DATABASE_HOST}:5432/{quote(values['POSTGRES_DB'], safe='')}"
+    )
+    secret_payloads = {
+        name: values[env_name] for name, env_name in SECRET_VALUES.items()
+    }
+    secret_payloads[DATABASE_SECRET] = database_url
+
+    results = {
+        name: ensure_secret(name, value, replace=args.replace_secrets)
+        for name, value in secret_payloads.items()
+    }
+
+    registry_login = run(["podman", "login", "--get-login", REGISTRY_HOST], check=False)
+    registry_ready = registry_login.returncode == 0
+
+    token_output = Path(args.token_output).expanduser()
+    token_status = "not-requested"
+    if args.create_deploy_token:
+        if token_output.exists():
+            token_status = "existing"
+        else:
+            token_output.parent.mkdir(parents=True, exist_ok=True)
+            run(
+                [
+                    "arcturusctl",
+                    "token",
+                    "create",
+                    "--database",
+                    str(Path.home() / ".config/arcturus/tokens.json"),
+                    "--service",
+                    SERVICE,
+                    "--token-id",
+                    "stellar-project-gitea",
+                    "--output",
+                    str(token_output),
+                ]
+            )
+            token_status = "created"
+
+    report = {
+        "status": "ready" if registry_ready else "action-required",
+        "volume": DATABASE_VOLUME,
+        "network": ROUTING_NETWORK,
+        "secrets": results,
+        "registry": {
+            "host": REGISTRY_HOST,
+            "authenticated": registry_ready,
+            "action": None
+            if registry_ready
+            else f"run: podman login {REGISTRY_HOST} using a pull-only host credential",
+        },
+        "deploy_token": {
+            "status": token_status,
+            "path": str(token_output) if args.create_deploy_token else None,
+            "ci_secret": "ARCTURUS_DEPLOY_TOKEN",
+        },
+    }
+    print(json.dumps(report, indent=2, sort_keys=True))
+    return 0 if registry_ready else 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

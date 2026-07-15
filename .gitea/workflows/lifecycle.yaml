@@ -1,0 +1,28 @@
+name: Manage stellar-project
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "status, rollback, disable, enable, or remove"
+        required: true
+      confirm:
+        description: "Type stellar-project to confirm"
+        required: true
+concurrency:
+  group: arcturus-stellar-project
+  cancel-in-progress: false
+env:
+  ARCTURUS_REGISTRY_HOST: "git.u128.org"
+jobs:
+  lifecycle:
+    name: Run lifecycle operation
+    if: ${{ github.event.inputs.confirm == 'stellar-project' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Run lifecycle operation through arcturusctl
+        env:
+          REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
+          REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
+          ARCTURUS_DEPLOY_TOKEN: ${{ secrets.ARCTURUS_DEPLOY_TOKEN }}
+        run: ./scripts/arcturus-lifecycle '${{ github.event.inputs.operation }}'

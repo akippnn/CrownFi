@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+set -euo pipefail
+action="${1:-status}"
+shift || true
+[[ "$action" =~ ^(status|rollback|enable|disable|remove)$ ]] || {
+  echo "usage: $0 status|rollback|enable|disable|remove" >&2
+  exit 2
+}
+work_rel=".arcturus/build/lifecycle-$$"
+work="$PWD/$work_rel"
+mkdir -p "$work/storage" "$work/runroot"
+chmod 0700 "$work"
+umask 077
+token_file="$work_rel/deploy.token"
+printf '%s\n' "${ARCTURUS_DEPLOY_TOKEN:?ARCTURUS_DEPLOY_TOKEN is required}" >"$token_file"
+unset ARCTURUS_DEPLOY_TOKEN
+export ARCTURUS_TOKEN_FILE="$token_file"
+export ARCTURUS_BUILDAH_ROOT="$work/storage"
+export ARCTURUS_BUILDAH_RUNROOT="$work/runroot"
+export REGISTRY_AUTH_FILE="$work/auth.json"
+cleanup() {
+  buildah --root "$ARCTURUS_BUILDAH_ROOT" --runroot "$ARCTURUS_BUILDAH_RUNROOT" rm --all >/dev/null 2>&1 || true
+  rm -rf "$work"
+}
+trap cleanup EXIT INT TERM
+if ! command -v arcturusctl >/dev/null 2>&1; then
+  command -v buildah >/dev/null 2>&1 || {
+    echo "Buildah is required to pull the pinned Arcturus bundle." >&2
+    exit 2
+  }
+  registry_user="${REGISTRY_USER:-${GITHUB_ACTOR:-${GITEA_ACTOR:-}}}"
+  [[ -n "$registry_user" ]] || {
+    echo "Registry username is missing; set REGISTRY_USER or use a runner actor identity." >&2
+    exit 2
+  }
+  printf '%s' "${REGISTRY_TOKEN:?REGISTRY_TOKEN is required to pull the pinned Arcturus bundle}" | \
+    buildah --root "$ARCTURUS_BUILDAH_ROOT" --runroot "$ARCTURUS_BUILDAH_RUNROOT" \
+      login --authfile "$REGISTRY_AUTH_FILE" --username "$registry_user" \
+      --password-stdin "${ARCTURUS_REGISTRY_HOST:?ARCTURUS_REGISTRY_HOST is required}"
+  unset REGISTRY_TOKEN
+fi
+./scripts/arcturus-tool project "$action" .arcturus/project.json --token-file "$token_file" "$@"

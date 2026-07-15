@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "appliedAt": "2026-07-15T00:06:54Z",
+  "action": "apply",
+  "blueprintVersion": "0.99.0-rc.2",
+  "blueprintCommit": "7a08829b3f88233f350ebf198e1e7419146d1c67",
+  "blueprintDirty": false,
+  "blueprintFingerprintSha256": "3f68f82b947f2543e66529a80a515fc6d5fdcec86e369e209f1d2a1fb1b9b8cd",
+  "projectConfig": ".arcturus/project.env",
+  "setupCommand": [
+    "${ARCTURUS_BLUEPRINT_DIR}/scripts/arcturus-setup",
+    "init",
+    "--project-dir",
+    ".",
+    "--config",
+    ".arcturus/project.env",
+    "--non-interactive"
+  ],
+  "replayCommand": [
+    "./scripts/arcturus-update",
+    "apply"
+  ],
+  "updaterSha256": "5afbb6d99b057aa35840b547f067094c0babce1fe682b1d7a37eac32451e095b"
+}
