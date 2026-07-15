@@ -91,6 +91,15 @@ curl --fail --silent --show-error --request POST \
   >"$evidence_dir/bootstrap.json"
 owner_id=$(json_field "$evidence_dir/bootstrap.json" user.id)
 organization_id=$(json_field "$evidence_dir/bootstrap.json" organization.id)
+
+"${compose[@]}" exec -T postgres psql \
+  -U "${POSTGRES_USER:-crownfi}" \
+  -d "${POSTGRES_DB:-crownfi}" \
+  -v ON_ERROR_STOP=1 <<SQL
+INSERT INTO site_administrators (user_id, role, status, granted_by_user_id)
+VALUES ('$owner_id', 'owner', 'active', '$owner_id')
+ON CONFLICT (user_id) DO UPDATE SET role = EXCLUDED.role, status = EXCLUDED.status;
+SQL
 wallet_id=$(python3 -c 'import uuid; print(uuid.uuid4())')
 "${compose[@]}" exec -T postgres psql -U "${POSTGRES_USER:-crownfi}" -d "${POSTGRES_DB:-crownfi}" \
   -v ON_ERROR_STOP=1 \
