@@ -6,6 +6,7 @@ on:
     paths:
       - .github/workflows/regenerate-sustainable-tracking.yml
       - scripts/regenerate-sustainable-tracking.mjs
+      - scripts/create-tracking-labels.mjs
   workflow_dispatch:
 
 permissions:
@@ -23,7 +24,12 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Regenerate trackers and archive provenance
+      - name: Synchronize sustainable labels
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TARGET_REPO: ${{ github.repository }}
+        run: node scripts/create-tracking-labels.mjs
+      - name: Archive legacy tracking provenance
         env:
           GITHUB_TOKEN: ${{ github.token }}
           SOURCE_REPO: Web3Iloilo/CrownFi
