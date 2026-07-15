@@ -14,7 +14,7 @@ if [[ -z "$token_file" ]]; then
   cleanup=true
 fi
 trap '$cleanup && rm -f "$token_file"' EXIT
-./scripts/arcturus-tool project verify .arcturus/project.json --release release.json --token-file "$token_file"
+./scripts/arcturus-tool project verify .arcturus/project.json --release arcturus.release.json --token-file "$token_file"
 ./scripts/arcturus-tool project rollback-probe .arcturus/project.json \
   --request deployment-request.json --token-file "$token_file"
-./scripts/arcturus-tool project verify .arcturus/project.json --release release.json --token-file "$token_file"
+./scripts/arcturus-tool project verify .arcturus/project.json --release arcturus.release.json --token-file "$token_file"
