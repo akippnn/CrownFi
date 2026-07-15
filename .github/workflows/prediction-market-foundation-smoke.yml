@@ -1,0 +1,45 @@
+name: Prediction market foundation smoke
+
+on:
+  pull_request:
+    paths:
+      - "services/api/**"
+      - "scripts/acceptance/prediction-market-foundation-smoke.sh"
+      - ".github/workflows/prediction-market-foundation-smoke.yml"
+      - "infra/**"
+  push:
+    branches: [integration/platform-v1]
+    paths:
+      - "services/api/**"
+      - "scripts/acceptance/prediction-market-foundation-smoke.sh"
+      - ".github/workflows/prediction-market-foundation-smoke.yml"
+      - "infra/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prediction-market-foundation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  prediction-market-foundation:
+    name: prediction-market-foundation
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Run durable prediction-market lifecycle and stake-intent flow
+        run: bash scripts/acceptance/prediction-market-foundation-smoke.sh
+      - name: Upload prediction-market evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crownfi-prediction-market-foundation
+          path: .artifacts/acceptance/prediction-market-foundation
+          if-no-files-found: warn
+          retention-days: 7
