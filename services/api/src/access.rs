@@ -50,9 +50,9 @@ async fn list_members(
 ) -> Result<Json<Vec<MemberRecord>>, ApiError> {
     require_internal(&state, &headers)?;
     let pool = database_pool(&state)?;
-    require_organization_manager(pool, organization_id, actor_user_id).await?;
+    require_organization_members_viewer(pool, organization_id, actor_user_id).await?;
     let members = sqlx::query_as::<_, MemberRecord>(
-        "SELECT om.user_id, u.display_name, u.email, om.role, om.status, (SELECT sa.address FROM stellar_accounts sa WHERE sa.user_id = u.id AND sa.is_primary ORDER BY sa.created_at LIMIT 1) AS primary_wallet, om.created_at, om.updated_at FROM organization_members om JOIN users u ON u.id = om.user_id WHERE om.organization_id = $1 AND om.status <> 'removed' ORDER BY CASE om.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 WHEN 'editor' THEN 2 ELSE 3 END, u.display_name",
+        "SELECT om.user_id, u.display_name, u.email, om.role, om.status, (SELECT sa.address FROM stellar_accounts sa WHERE sa.user_id = u.id AND sa.is_primary ORDER BY sa.created_at LIMIT 1) AS primary_wallet, om.created_at, om.updated_at FROM organization_members om JOIN users u ON u.id = om.user_id WHERE om.organization_id = $1 AND om.status <> 'removed' ORDER BY CASE om.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 WHEN 'editor' THEN 2 WHEN 'operator' THEN 3 WHEN 'auditor' THEN 4 WHEN 'viewer' THEN 5 ELSE 6 END, u.display_name",
     )
     .bind(organization_id)
     .fetch_all(pool)
@@ -121,13 +121,33 @@ async fn grant_membership(
     Ok((StatusCode::CREATED, Json(member)))
 }
 
+async fn require_organization_members_viewer(
+    pool: &PgPool,
+    organization_id: Uuid,
+    user_id: Uuid,
+) -> Result<(), ApiError> {
+    let allowed = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS (SELECT 1 FROM site_administrators WHERE user_id = $2 AND status = 'active' AND role IN ('owner','admin','auditor')) OR EXISTS (SELECT 1 FROM organization_members WHERE organization_id = $1 AND user_id = $2 AND status = 'active' AND role IN ('owner','admin','auditor','viewer'))",
+    )
+    .bind(organization_id)
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+    .map_err(map_database_error)?;
+    if allowed {
+        Ok(())
+    } else {
+        Err(ApiError::Forbidden)
+    }
+}
+
 async fn require_organization_manager(
     pool: &PgPool,
     organization_id: Uuid,
     user_id: Uuid,
 ) -> Result<(), ApiError> {
     let allowed = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS (SELECT 1 FROM site_administrators WHERE user_id = $2 AND status = 'active') OR EXISTS (SELECT 1 FROM organization_members WHERE organization_id = $1 AND user_id = $2 AND status = 'active' AND role IN ('owner','admin'))",
+        "SELECT EXISTS (SELECT 1 FROM site_administrators WHERE user_id = $2 AND status = 'active' AND role IN ('owner','admin')) OR EXISTS (SELECT 1 FROM organization_members WHERE organization_id = $1 AND user_id = $2 AND status = 'active' AND role IN ('owner','admin'))",
     )
     .bind(organization_id)
     .bind(user_id)
@@ -186,7 +206,7 @@ fn validate_network(value: String) -> Result<String, ApiError> {
 
 fn validate_role(value: String) -> Result<String, ApiError> {
     let value = value.trim().to_ascii_lowercase();
-    if ["admin", "editor", "viewer"].contains(&value.as_str()) {
+    if ["admin", "editor", "operator", "auditor", "viewer"].contains(&value.as_str()) {
         Ok(value)
     } else {
         Err(ApiError::InvalidRequest("invalid_organization_role"))
