@@ -20,6 +20,8 @@ jobs:
           ref: ${{ github.head_ref || 'feat/prediction-market-foundation-v1' }}
           persist-credentials: false
       - name: Extract and run the temporary repair program
+        id: repair
+        continue-on-error: true
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -33,21 +35,34 @@ jobs:
               line[10:] if line.startswith('          ') else line
               for line in workflow[start:end].splitlines()
           ) + '\n'
-          Path('/tmp/repair_prediction_market_acl.py').write_text(program, encoding='utf-8')
-          subprocess.run(['python3', '/tmp/repair_prediction_market_acl.py'], check=True)
+          program_path = Path('/tmp/repair_prediction_market_acl.py')
+          program_path.write_text(program, encoding='utf-8')
+          result = subprocess.run(
+              ['python3', str(program_path)],
+              stdout=subprocess.PIPE,
+              stderr=subprocess.STDOUT,
+              text=True,
+          )
+          Path('/tmp/repair-output.log').write_text(result.stdout, encoding='utf-8')
+          print(result.stdout, end='')
+          raise SystemExit(result.returncode)
           PY
       - name: Setup Rust stable
+        if: steps.repair.outcome == 'success'
         run: |
           rustup toolchain install stable --profile minimal --component rustfmt
           rustup default stable
       - name: Format and test API
+        if: steps.repair.outcome == 'success'
         working-directory: services/api
         run: |
           cargo fmt
           cargo test --locked
       - name: Validate smoke script syntax
+        if: steps.repair.outcome == 'success'
         run: bash -n scripts/acceptance/prediction-market-foundation-smoke.sh
-      - name: Upload repaired sources
+      - name: Upload repaired sources and diagnostics
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: crownfi-prediction-market-acl-repair
@@ -56,5 +71,10 @@ jobs:
             services/api/src/markets.rs
             scripts/acceptance/prediction-market-foundation-smoke.sh
             docs/security/AUTHORIZATION.md
+            /tmp/repair_prediction_market_acl.py
+            /tmp/repair-output.log
           if-no-files-found: error
           retention-days: 1
+      - name: Require repair success
+        if: always()
+        run: test "${{ steps.repair.outcome }}" = "success"
