@@ -235,6 +235,8 @@ async fn create_market(
     let pool = database_pool(&state)?;
     require_organization_editor(pool, body.organization_id, actor_user_id).await?;
 
+    validate_limits(&body)?;
+
     let slug = validate_slug(body.slug)?;
     let question = validate_text(body.question, 8, 500, "invalid_market_question")?;
     let description = optional_text(body.description, 4000, "invalid_market_description")?;
@@ -250,7 +252,6 @@ async fn create_market(
         return Err(ApiError::InvalidRequest("market_close_must_be_future"));
     }
 
-    validate_limits(&body)?;
     let (asset_code, asset_issuer) = validate_asset(body.asset_code, body.asset_issuer)?;
     let outcomes = validate_outcomes(body.outcomes)?;
 
