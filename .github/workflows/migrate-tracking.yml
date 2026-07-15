@@ -1,0 +1,53 @@
+name: One-shot CrownFi tracking migration
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/migrate-tracking.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: crownfi-tracking-migration
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    name: Preserve issues, PRs, labels, and discussions
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out target repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Load reviewed migration script
+        run: |
+          git fetch origin ops/migrate-tracking-from-web3iloilo
+          git show origin/ops/migrate-tracking-from-web3iloilo:scripts/migrate-github-tracking.mjs > /tmp/migrate-github-tracking.mjs
+
+      - name: Migrate tracking in exact shared-number order
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SOURCE_REPO: Web3Iloilo/CrownFi
+          TARGET_REPO: akippnn/CrownFi
+          MIGRATION_REPORT: tracking-migration-report.json
+        run: node /tmp/migrate-github-tracking.mjs
+
+      - name: Upload migration report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crownfi-tracking-migration-report
+          path: tracking-migration-report.json
+          if-no-files-found: warn
+          retention-days: 30
