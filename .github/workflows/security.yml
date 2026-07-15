@@ -64,6 +64,8 @@ jobs:
         run: npm run typecheck
       - name: Test Merkle receipts
         run: npm run test:merkle
+      - name: Test forced dark theme
+        run: npm run test:theme
 
   api-security:
     name: Rust API checks

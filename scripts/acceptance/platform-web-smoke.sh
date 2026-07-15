@@ -142,12 +142,14 @@ assert_contains "$evidence_dir/contestant-first.html" "Advocacy"
 assert_contains "$evidence_dir/contestant-first.html" "Gallery"
 assert_contains "$evidence_dir/contestant-first.html" "Collectibles"
 assert_not_contains "$evidence_dir/contestant-first.html" "Second Contestant Spotlight"
-assert_order "$evidence_dir/contestant-first.html" "Overview" "Advocacy" "Gallery" "Collectibles"
+# Scope ordering to contestant-section anchors so the global pageant navigation
+# cannot satisfy or invalidate the section-order assertion accidentally.
+assert_order "$evidence_dir/contestant-first.html" 'href="#overview"' 'href="#advocacy"' 'href="#gallery"' 'href="#collectibles"'
 
 assert_contains "$evidence_dir/contestant-second.html" "Mika Tanaka"
 assert_contains "$evidence_dir/contestant-second.html" "Second Contestant Spotlight"
 assert_contains "$evidence_dir/contestant-second.html" "Only Mika has this organizer-configured section."
-assert_order "$evidence_dir/contestant-second.html" "Second Contestant Spotlight" "Overview" "Advocacy" "Gallery" "Collectibles"
+assert_order "$evidence_dir/contestant-second.html" 'href="#second-contestant-spotlight"' 'href="#overview"' 'href="#advocacy"' 'href="#gallery"' 'href="#collectibles"'
 
 "${compose[@]}" restart api
 wait_for_url "http://127.0.0.1:8080/ready"
@@ -158,7 +160,7 @@ curl --fail --silent --show-error \
   >"$evidence_dir/contestant-second-after-api-restart.html"
 assert_contains "$evidence_dir/platform-after-api-restart.html" "CrownFi International 2026"
 assert_contains "$evidence_dir/contestant-second-after-api-restart.html" "Second Contestant Spotlight"
-assert_order "$evidence_dir/contestant-second-after-api-restart.html" "Second Contestant Spotlight" "Overview"
+assert_order "$evidence_dir/contestant-second-after-api-restart.html" 'href="#second-contestant-spotlight"' 'href="#overview"'
 
 "${compose[@]}" ps --all | tee "$evidence_dir/compose-ps.txt"
 echo "CrownFi persistent platform web smoke test passed."
