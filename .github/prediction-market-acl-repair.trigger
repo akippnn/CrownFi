@@ -1,1 +1,1 @@
-Run the temporary ACL adoption workflow after synchronizing integration/platform-v1.
+Rebuild the ACL-adoption artifact after the read-only workflow was added to integration/platform-v1.
