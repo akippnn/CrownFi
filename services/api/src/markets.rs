@@ -198,9 +198,7 @@ struct SubmitMarketIntentRequest {
     tx_hash: String,
 }
 
-async fn list_markets(
-    State(state): State<AppState>,
-) -> Result<Json<Vec<MarketDetail>>, ApiError> {
+async fn list_markets(State(state): State<AppState>) -> Result<Json<Vec<MarketDetail>>, ApiError> {
     let pool = database_pool(&state)?;
     let records = sqlx::query_as::<_, MarketRecord>(
         "SELECT id, organization_id, pageant_id, slug, question, description, status, network, asset_code, asset_scale, asset_issuer, fee_bps, min_stake_minor, max_stake_minor, max_user_exposure_minor, max_market_exposure_minor, opens_at, closes_at, resolution_source, policy_version, winning_outcome_id, result_evidence, created_by_user_id, approved_by_user_id, approved_at, resolved_by_user_id, resolved_at, created_at, updated_at FROM prediction_markets WHERE status = ANY($1) ORDER BY CASE status WHEN 'open' THEN 0 WHEN 'approved' THEN 1 WHEN 'paused' THEN 2 ELSE 3 END, closes_at, created_at DESC",
@@ -240,12 +238,8 @@ async fn create_market(
     let slug = validate_slug(body.slug)?;
     let question = validate_text(body.question, 8, 500, "invalid_market_question")?;
     let description = optional_text(body.description, 4000, "invalid_market_description")?;
-    let resolution_source = validate_text(
-        body.resolution_source,
-        8,
-        1000,
-        "invalid_resolution_source",
-    )?;
+    let resolution_source =
+        validate_text(body.resolution_source, 8, 1000, "invalid_resolution_source")?;
     let policy_version = validate_text(body.policy_version, 1, 120, "invalid_policy_version")?;
     let opens_at = parse_timestamp(&body.opens_at, "invalid_opens_at")?;
     let closes_at = parse_timestamp(&body.closes_at, "invalid_closes_at")?;
@@ -465,7 +459,12 @@ async fn transition_market(
                 .winning_outcome_id
                 .ok_or(ApiError::InvalidRequest("winning_outcome_required"))?;
             require_outcome(pool, market_id, outcome_id).await?;
-            if !body.evidence.is_object() || body.evidence.as_object().is_some_and(|value| value.is_empty()) {
+            if !body.evidence.is_object()
+                || body
+                    .evidence
+                    .as_object()
+                    .is_some_and(|value| value.is_empty())
+            {
                 return Err(ApiError::InvalidRequest("resolution_evidence_required"));
             }
         }
@@ -478,7 +477,9 @@ async fn transition_market(
     } else if body.evidence.is_object() {
         body.evidence
     } else {
-        return Err(ApiError::InvalidRequest("transition_evidence_must_be_object"));
+        return Err(ApiError::InvalidRequest(
+            "transition_evidence_must_be_object",
+        ));
     };
 
     let mut tx = pool.begin().await.map_err(map_database_error)?;
@@ -673,7 +674,11 @@ async fn record_submission(
         return Err(ApiError::Conflict("stake_intent_not_submittable"));
     }
     let tx_hash = body.tx_hash.trim().to_ascii_lowercase();
-    if tx_hash.len() != 64 || !tx_hash.chars().all(|character| character.is_ascii_hexdigit()) {
+    if tx_hash.len() != 64
+        || !tx_hash
+            .chars()
+            .all(|character| character.is_ascii_hexdigit())
+    {
         return Err(ApiError::InvalidRequest("invalid_transaction_hash"));
     }
     if let Some(existing) = &intent.submitted_tx_hash {
@@ -729,10 +734,7 @@ async fn fetch_outcomes(pool: &PgPool, market_id: Uuid) -> Result<Vec<OutcomeRec
     .map_err(map_database_error)
 }
 
-async fn fetch_stake_intent(
-    pool: &PgPool,
-    intent_id: Uuid,
-) -> Result<StakeIntentRecord, ApiError> {
+async fn fetch_stake_intent(pool: &PgPool, intent_id: Uuid) -> Result<StakeIntentRecord, ApiError> {
     sqlx::query_as::<_, StakeIntentRecord>(
         "SELECT id, organization_id, market_id, outcome_id, user_id, stellar_account_id, amount_minor, idempotency_key, request_sha256, status, submitted_tx_hash, expires_at, submitted_at, confirmed_at, rejection_code, created_at, updated_at FROM prediction_market_stake_intents WHERE id = $1",
     )
@@ -985,12 +987,17 @@ fn validate_asset(
     let asset_code = asset_code.trim().to_ascii_uppercase();
     if asset_code.is_empty()
         || asset_code.len() > 12
-        || !asset_code.chars().all(|character| character.is_ascii_alphanumeric())
+        || !asset_code
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric())
     {
         return Err(ApiError::InvalidRequest("invalid_asset_code"));
     }
     if asset_code == "XLM" {
-        if asset_issuer.as_deref().is_some_and(|value| !value.trim().is_empty()) {
+        if asset_issuer
+            .as_deref()
+            .is_some_and(|value| !value.trim().is_empty())
+        {
             return Err(ApiError::InvalidRequest("xlm_must_not_have_issuer"));
         }
         Ok((asset_code, None))
@@ -1002,7 +1009,9 @@ fn validate_asset(
 
 fn validate_outcomes(outcomes: Vec<OutcomeInput>) -> Result<Vec<(String, String)>, ApiError> {
     if !(2..=32).contains(&outcomes.len()) {
-        return Err(ApiError::InvalidRequest("market_requires_two_to_thirty_two_outcomes"));
+        return Err(ApiError::InvalidRequest(
+            "market_requires_two_to_thirty_two_outcomes",
+        ));
     }
     let mut codes = HashSet::new();
     let mut result = Vec::with_capacity(outcomes.len());
@@ -1010,13 +1019,14 @@ fn validate_outcomes(outcomes: Vec<OutcomeInput>) -> Result<Vec<(String, String)
         let code = outcome.code.trim().to_ascii_uppercase();
         if code.is_empty()
             || code.len() > 32
-            || !code
-                .chars()
-                .all(|character| character.is_ascii_uppercase() || character.is_ascii_digit() || matches!(character, '_' | '-'))
-            || !code
-                .chars()
-                .next()
-                .is_some_and(|character| character.is_ascii_uppercase() || character.is_ascii_digit())
+            || !code.chars().all(|character| {
+                character.is_ascii_uppercase()
+                    || character.is_ascii_digit()
+                    || matches!(character, '_' | '-')
+            })
+            || !code.chars().next().is_some_and(|character| {
+                character.is_ascii_uppercase() || character.is_ascii_digit()
+            })
         {
             return Err(ApiError::InvalidRequest("invalid_market_outcome_code"));
         }
@@ -1054,9 +1064,9 @@ fn validate_slug(value: String) -> Result<String, ApiError> {
         && !value.starts_with('-')
         && !value.ends_with('-')
         && !value.contains("--")
-        && value
-            .chars()
-            .all(|character| character.is_ascii_lowercase() || character.is_ascii_digit() || character == '-');
+        && value.chars().all(|character| {
+            character.is_ascii_lowercase() || character.is_ascii_digit() || character == '-'
+        });
     if valid {
         Ok(value)
     } else {
