@@ -77,10 +77,10 @@ while IFS=$'\t' read -r name repository context containerfile validations releas
 done <"$plan"
 
 ./scripts/arcturus-tool project render .arcturus/project.json --revision "$revision" \
-  "${digest_args[@]}" --output release.json --request-output deployment-request.json
+  "${digest_args[@]}" --output arcturus.release.json --request-output deployment-request.json
 ./scripts/arcturus-tool project deploy .arcturus/project.json --request deployment-request.json \
   --token-file "$token_file"
-./scripts/arcturus-tool project verify .arcturus/project.json --release release.json \
+./scripts/arcturus-tool project verify .arcturus/project.json --release arcturus.release.json \
   --token-file "$token_file"
 if [[ "${2:-}" == "--acceptance" ]]; then
   ./scripts/arcturus-acceptance
