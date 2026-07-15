@@ -8,6 +8,7 @@ env_file="${CROWNFI_MARKETS_SMOKE_ENV_FILE:-infra/.env.prediction-market-smoke}"
 evidence_dir="${CROWNFI_MARKETS_EVIDENCE_DIR:-.artifacts/acceptance/prediction-market-foundation}"
 timeout_seconds="${CROWNFI_MARKETS_TIMEOUT_SECONDS:-1200}"
 admin_token="${CROWNFI_MARKETS_ADMIN_TOKEN:-local-admin-demo-token}"
+web_token="${CROWNFI_MARKETS_WEB_TOKEN:-local-web-to-api-token-change-before-sharing}"
 project_name="${CROWNFI_MARKETS_PROJECT:-crownfi-markets-${GITHUB_RUN_ID:-local}}"
 wallet_address="GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
 
@@ -73,7 +74,7 @@ admin_post() {
   curl --fail --silent --show-error \
     --request POST "$url" \
     --header 'content-type: application/json' \
-    --header "x-admin-demo-token: $admin_token" \
+    --header "x-crownfi-web-token: $web_token" \
     --header "x-crownfi-user-id: $actor_id" \
     --data "$body" >"$output"
 }
@@ -83,7 +84,7 @@ server_get() {
   local output=$2
   local actor_id=$3
   curl --fail --silent --show-error \
-    --header "x-admin-demo-token: $admin_token" \
+    --header "x-crownfi-web-token: $web_token" \
     --header "x-crownfi-user-id: $actor_id" \
     "$url" >"$output"
 }
@@ -156,14 +157,29 @@ cross_tenant_status=$(curl --silent --show-error \
   --write-out '%{http_code}' \
   --request POST "http://127.0.0.1:8080/internal/markets" \
   --header 'content-type: application/json' \
-  --header "x-admin-demo-token: $admin_token" \
+  --header "x-crownfi-web-token: $web_token" \
   --header "x-crownfi-user-id: $other_user_id" \
   --data "$market_body")
-if [[ "$cross_tenant_status" != "403" ]]; then
-  echo "Expected cross-tenant market creation to return 403, got $cross_tenant_status" >&2
+if [[ "$cross_tenant_status" != "404" ]]; then
+  echo "Expected cross-tenant market creation to be concealed with 404, got $cross_tenant_status" >&2
   exit 1
 fi
 printf '%s\n' "$cross_tenant_status" >"$evidence_dir/cross-tenant-create-status.txt"
+
+missing_transport_status=$(curl --silent --show-error \
+  --output "$evidence_dir/missing-web-transport.json" \
+  --write-out '%{http_code}' \
+  --request POST "http://127.0.0.1:8080/internal/markets" \
+  --header 'content-type: application/json' \
+  --header "x-admin-demo-token: $admin_token" \
+  --header "x-crownfi-user-id: $owner_id" \
+  --data "$market_body")
+if [[ "$missing_transport_status" != "401" ]]; then
+  echo "Expected internal market creation without the web transport token to return 401, got $missing_transport_status" >&2
+  exit 1
+fi
+printf '%s
+' "$missing_transport_status" >"$evidence_dir/missing-web-transport-status.txt"
 
 admin_post \
   "http://127.0.0.1:8080/internal/markets" \
@@ -198,7 +214,7 @@ stake_body="{\"outcome_id\":\"$yes_outcome_id\",\"wallet_address\":\"$wallet_add
 policy_denial_status=$(curl --silent --show-error \
   --output "$evidence_dir/stake-before-policy.json" \
   --write-out '%{http_code}' \
-  --request POST "http://127.0.0.1:8080/markets/$market_id/stake-intents" \
+  --request POST "http://127.0.0.1:8080/internal/markets/$market_id/stake-intents" \
   --header 'content-type: application/json' \
   --header "x-admin-demo-token: $admin_token" \
   --header "x-crownfi-user-id: $owner_id" \
@@ -218,20 +234,32 @@ admin_post \
   "$policy_body"
 
 curl --fail --silent --show-error \
-  --request POST "http://127.0.0.1:8080/markets/$market_id/stake-intents" \
+  --request POST "http://127.0.0.1:8080/internal/markets/$market_id/stake-intents" \
   --header 'content-type: application/json' \
   --header "x-admin-demo-token: $admin_token" \
   --header "x-crownfi-user-id: $owner_id" \
   --header 'idempotency-key: market-smoke-1' \
   --data "$stake_body" >"$evidence_dir/stake-intent-first.json"
 curl --fail --silent --show-error \
-  --request POST "http://127.0.0.1:8080/markets/$market_id/stake-intents" \
+  --request POST "http://127.0.0.1:8080/internal/markets/$market_id/stake-intents" \
   --header 'content-type: application/json' \
   --header "x-admin-demo-token: $admin_token" \
   --header "x-crownfi-user-id: $owner_id" \
   --header 'idempotency-key: market-smoke-1' \
   --data "$stake_body" >"$evidence_dir/stake-intent-replay.json"
 intent_id=$(json_field "$evidence_dir/stake-intent-first.json" id)
+foreign_intent_status=$(curl --silent --show-error \
+  --output "$evidence_dir/foreign-intent-read.json" \
+  --write-out '%{http_code}' \
+  --header "x-crownfi-web-token: $web_token" \
+  --header "x-crownfi-user-id: $other_user_id" \
+  "http://127.0.0.1:8080/internal/market-intents/$intent_id")
+if [[ "$foreign_intent_status" != "404" ]]; then
+  echo "Expected another tenant to receive concealed 404 for the stake intent, got $foreign_intent_status" >&2
+  exit 1
+fi
+printf '%s
+' "$foreign_intent_status" >"$evidence_dir/foreign-intent-read-status.txt"
 replay_intent_id=$(json_field "$evidence_dir/stake-intent-replay.json" id)
 if [[ "$intent_id" != "$replay_intent_id" ]]; then
   echo "Exact stake-intent replay created a different intent" >&2
@@ -241,7 +269,7 @@ fi
 changed_status=$(curl --silent --show-error \
   --output "$evidence_dir/stake-intent-changed.json" \
   --write-out '%{http_code}' \
-  --request POST "http://127.0.0.1:8080/markets/$market_id/stake-intents" \
+  --request POST "http://127.0.0.1:8080/internal/markets/$market_id/stake-intents" \
   --header 'content-type: application/json' \
   --header "x-admin-demo-token: $admin_token" \
   --header "x-crownfi-user-id: $owner_id" \
@@ -255,7 +283,7 @@ printf '%s\n' "$changed_status" >"$evidence_dir/stake-intent-changed-status.txt"
 
 transaction_hash=$(printf 'a%.0s' {1..64})
 admin_post \
-  "http://127.0.0.1:8080/market-intents/$intent_id/submission" \
+  "http://127.0.0.1:8080/internal/market-intents/$intent_id/submission" \
   "$evidence_dir/stake-intent-submitted.json" \
   "$owner_id" \
   "{\"tx_hash\":\"$transaction_hash\"}"
@@ -263,7 +291,7 @@ admin_post \
 "${compose[@]}" restart api
 wait_for_url "http://127.0.0.1:8080/ready"
 server_get \
-  "http://127.0.0.1:8080/market-intents/$intent_id" \
+  "http://127.0.0.1:8080/internal/market-intents/$intent_id" \
   "$evidence_dir/stake-intent-after-restart.json" \
   "$owner_id"
 curl --fail --silent --show-error \
@@ -298,6 +326,18 @@ if [[ "$(cat "$evidence_dir/durable-counts.txt")" != "1:0:7" ]]; then
   echo "Expected one durable submitted intent, zero active positions before reconciliation, and seven audit records" >&2
   exit 1
 fi
+
+"${compose[@]}" exec -T postgres psql \
+  -U "${POSTGRES_USER:-crownfi}" \
+  -d "${POSTGRES_DB:-crownfi}" \
+  -Atc "SELECT capability || ':' || decision FROM authorization_decisions WHERE capability LIKE 'prediction_market.%' ORDER BY created_at, id;" \
+  | tee "$evidence_dir/authorization-decisions.txt"
+grep -q '^prediction_market.create:allow$' "$evidence_dir/authorization-decisions.txt"
+grep -q '^prediction_market.create:deny$' "$evidence_dir/authorization-decisions.txt"
+grep -q '^prediction_market.policy.manage:allow$' "$evidence_dir/authorization-decisions.txt"
+grep -q '^prediction_market.stake:allow$' "$evidence_dir/authorization-decisions.txt"
+grep -q '^prediction_market.intent.read:deny$' "$evidence_dir/authorization-decisions.txt"
+grep -q '^prediction_market.intent.write:allow$' "$evidence_dir/authorization-decisions.txt"
 
 "${compose[@]}" ps --all | tee "$evidence_dir/compose-ps.txt"
 echo "CrownFi prediction-market foundation smoke test passed."

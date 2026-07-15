@@ -43,6 +43,13 @@ enum Capability {
     PayoutManage,
     PayoutRead,
     SnapshotWrite,
+    MarketCreate,
+    MarketSubmitReview,
+    MarketGovern,
+    MarketPolicyManage,
+    MarketStake,
+    MarketIntentRead,
+    MarketIntentWrite,
 }
 
 impl Capability {
@@ -72,6 +79,13 @@ impl Capability {
             Self::PayoutManage => "payout.manage",
             Self::PayoutRead => "payout.read",
             Self::SnapshotWrite => "voting.snapshot.write",
+            Self::MarketCreate => "prediction_market.create",
+            Self::MarketSubmitReview => "prediction_market.submit_review",
+            Self::MarketGovern => "prediction_market.govern",
+            Self::MarketPolicyManage => "prediction_market.policy.manage",
+            Self::MarketStake => "prediction_market.stake",
+            Self::MarketIntentRead => "prediction_market.intent.read",
+            Self::MarketIntentWrite => "prediction_market.intent.write",
         }
     }
 }
@@ -515,6 +529,68 @@ async fn classify_internal(
         ));
     }
 
+    if segments == ["internal", "markets"] && method == &Method::POST {
+        let organization_id = required_body_uuid(body, "organization_id")?;
+        return Ok(protected_web(
+            Capability::MarketCreate,
+            ScopeSource::Resolved(Scope::organization(
+                organization_id,
+                "organization",
+                Some(organization_id),
+            )),
+            None,
+        ));
+    }
+
+    if segments.len() == 4 && segments[1] == "markets" {
+        let market_id = parse_uuid(segments[2])?;
+        let organization_id = organization_for_market(pool, market_id).await?;
+        let capability = if segments[3] == "policy-decisions" && method == &Method::POST {
+            Capability::MarketPolicyManage
+        } else if segments[3] == "transitions" && method == &Method::POST {
+            if body_string(body, "target_status").as_deref() == Some("pending_review") {
+                Capability::MarketSubmitReview
+            } else {
+                Capability::MarketGovern
+            }
+        } else if segments[3] == "stake-intents" && method == &Method::POST {
+            Capability::MarketStake
+        } else {
+            return Ok(RequestClass::Deny(Transport::WebInternal));
+        };
+        return Ok(protected_web(
+            capability,
+            ScopeSource::Resolved(Scope::organization(
+                organization_id,
+                "prediction_market",
+                Some(market_id),
+            )),
+            None,
+        ));
+    }
+
+    if segments.len() >= 3 && segments[1] == "market-intents" {
+        let intent_id = parse_uuid(segments[2])?;
+        let (organization_id, user_id) = scope_for_market_intent(pool, intent_id).await?;
+        let capability = if segments.len() == 3 && method == &Method::GET {
+            Capability::MarketIntentRead
+        } else if segments.len() == 4 && segments[3] == "submission" && method == &Method::POST {
+            Capability::MarketIntentWrite
+        } else {
+            return Ok(RequestClass::Deny(Transport::WebInternal));
+        };
+        return Ok(protected_web(
+            capability,
+            ScopeSource::Resolved(Scope::owned(
+                organization_id,
+                user_id,
+                "prediction_market_stake_intent",
+                intent_id,
+            )),
+            None,
+        ));
+    }
+
     Ok(RequestClass::Deny(Transport::WebInternal))
 }
 
@@ -818,23 +894,16 @@ fn is_public_request(method: &Method, path: &str) -> bool {
             || path.starts_with("/snapshots/")
             || path == "/markets"
             || path.starts_with("/markets/")
-            || path.starts_with("/market-intents/")
             || path == "/platform/organizations"
             || path.starts_with("/platform/"))
     {
         return true;
     }
 
-    // Explicitly retain the legacy in-memory proof-of-flow routes until the
-    // durable Voting and Prediction Market slices replace them. Unknown
-    // /admin and /internal routes still fail closed.
-    (method == &Method::POST && path.starts_with("/events/") && path.ends_with("/vote"))
-        || (method == &Method::POST
-            && path.starts_with("/markets/")
-            && path.ends_with("/stake-intents"))
-        || (method == &Method::POST
-            && path.starts_with("/market-intents/")
-            && path.ends_with("/submission"))
+    // Explicitly retain only the legacy in-memory voting intake route until
+    // the durable Voting slice replaces it. Durable Prediction Market writes
+    // are classified through the centralized capability boundary above.
+    method == &Method::POST && path.starts_with("/events/") && path.ends_with("/vote")
 }
 
 fn split_path(path: &str) -> Vec<&str> {
@@ -973,6 +1042,16 @@ fn authorize_principal(
     if matches!(capability, Capability::OrderRead | Capability::IntentRead) && self_owned {
         return (true, "resource_owner");
     }
+    if capability == Capability::MarketStake {
+        return (true, "active_account");
+    }
+    if matches!(
+        capability,
+        Capability::MarketIntentRead | Capability::MarketIntentWrite
+    ) && self_owned
+    {
+        return (true, "resource_owner");
+    }
 
     if principal
         .site_role
@@ -1041,6 +1120,8 @@ fn organization_role_allows(role: &str, capability: Capability) -> bool {
                 | Capability::FulfillmentOperate
                 | Capability::PayoutManage
                 | Capability::PayoutRead
+                | Capability::MarketCreate
+                | Capability::MarketSubmitReview
         ),
         "editor" => matches!(
             capability,
@@ -1053,6 +1134,8 @@ fn organization_role_allows(role: &str, capability: Capability) -> bool {
                 | Capability::IntentRead
                 | Capability::FulfillmentCreate
                 | Capability::FulfillmentRead
+                | Capability::MarketCreate
+                | Capability::MarketSubmitReview
         ),
         "operator" => matches!(
             capability,
@@ -1131,6 +1214,15 @@ async fn organization_for_product(pool: &PgPool, id: Uuid) -> Result<Uuid, ApiEr
     .await
 }
 
+async fn organization_for_market(pool: &PgPool, id: Uuid) -> Result<Uuid, ApiError> {
+    scalar_uuid(
+        pool,
+        "SELECT organization_id FROM prediction_markets WHERE id = $1",
+        id,
+    )
+    .await
+}
+
 async fn scalar_uuid(pool: &PgPool, query: &str, id: Uuid) -> Result<Uuid, ApiError> {
     sqlx::query_scalar::<_, Uuid>(query)
         .bind(id)
@@ -1173,6 +1265,15 @@ async fn scope_for_intent(pool: &PgPool, id: Uuid) -> Result<(Uuid, Uuid), ApiEr
     tuple_scope(
         pool,
         "SELECT ti.organization_id, o.buyer_user_id FROM transaction_intents ti JOIN orders o ON o.id = ti.order_id WHERE ti.id = $1",
+        id,
+    )
+    .await
+}
+
+async fn scope_for_market_intent(pool: &PgPool, id: Uuid) -> Result<(Uuid, Uuid), ApiError> {
+    tuple_scope(
+        pool,
+        "SELECT organization_id, user_id FROM prediction_market_stake_intents WHERE id = $1",
         id,
     )
     .await
@@ -1362,6 +1463,43 @@ mod tests {
                 &inactive,
                 Capability::SiteSettingsWrite,
                 &Scope::site()
+            )
+            .0
+        );
+    }
+
+    #[test]
+    fn prediction_market_capabilities_are_fail_closed() {
+        let actor = Uuid::new_v4();
+        let editor = principal(None, Some("editor"));
+        let public_user = principal(None, None);
+        assert!(authorize_principal(actor, &editor, Capability::MarketCreate, &scoped(None)).0);
+        assert!(
+            authorize_principal(
+                actor,
+                &editor,
+                Capability::MarketSubmitReview,
+                &scoped(None)
+            )
+            .0
+        );
+        assert!(!authorize_principal(actor, &editor, Capability::MarketGovern, &scoped(None)).0);
+        assert!(authorize_principal(actor, &public_user, Capability::MarketStake, &scoped(None)).0);
+        assert!(
+            authorize_principal(
+                actor,
+                &public_user,
+                Capability::MarketIntentWrite,
+                &scoped(Some(actor))
+            )
+            .0
+        );
+        assert!(
+            !authorize_principal(
+                actor,
+                &public_user,
+                Capability::MarketIntentRead,
+                &scoped(Some(Uuid::new_v4()))
             )
             .0
         );
