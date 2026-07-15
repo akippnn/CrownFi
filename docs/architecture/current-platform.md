@@ -1,49 +1,157 @@
-# CrownFi architecture (decision log)
+# CrownFi current platform architecture
 
-Chain: Stellar (Soroban). Scope: MVP scaffold, runnable offline by default. Full user + admin sides.
+This document describes the repository as it exists during the platform consolidation. It is not a future-state diagram and it must not hide transitional or mock-only behavior.
 
-## Core decision
-Hybrid, off-chain first. Vote intake, dedup, tally run off-chain for speed. Stellar carries proof
-(Merkle root per round), ownership (NFT tickets, collectibles), value (USDC sale settlement).
-Never claim Stellar for vote throughput.
+## Architectural decision
 
-## Voting proof flow
-1. Fan votes -> row insert; unique(roundId,fanId) blocks duplicates; in-memory rate limit + quota.
-2. Admin closes round -> ordered leaf hashes -> Merkle root + tally hash.
-3. Root anchored via audit-anchor contract (mock tx hash unless STELLAR_MODE=live).
-4. Fan pulls receipt -> Merkle inclusion proof verified against published root. No PII on-chain.
+CrownFi is hybrid and Stellar-first where blockchain provides real utility:
 
-## Frontend + identity
-- Design: dark "stage" theme (midnight navy, gold spotlight, ivory). Playfair Display + Inter via next/font.
-- Signature element: spotlight contestant carousel (SpotlightCarousel), auto-advancing, swipe on mobile.
-- Mobile: top bar + slide-over drawer + fixed bottom tab bar. Responsive throughout. Reduced-motion respected.
-- Identity: SessionProvider (React context + localStorage). Sign in as a fan, create fans, admin-mode toggle.
-- Components: CountUp, Marquee, Portrait (gradient monogram + flag, no image assets), Toast.
+- vote intake, eligibility, deduplication, and tallying are off-chain for scale and privacy;
+- closed-round commitments can be anchored to Soroban;
+- tickets, collectibles, payments, ownership, and settlement use Stellar/Soroban where live Testnet integrations are configured;
+- raw voter identity and individual vote selections remain off-chain;
+- purchases and fan support do not increase vote power.
 
-## Pages
-- User: / (hero + carousel + stats + 3-step + marquee), /vote, /verify, /tickets, /contestants (collect), /me (dashboard).
-- Admin: /admin (gated by admin mode) with Overview (stats + leaderboard), Rounds (create/close+anchor), Contestants (create).
+## Current runtime
 
-## Backend routes (Next.js API)
-- fans GET/POST, contestants GET/POST (POST auto-creates a collectible), rounds GET/POST.
-- vote POST, rounds/[id]/close POST, rounds/[id]/results GET, rounds/[id]/receipt GET.
-- tickets GET/POST (mint), collectibles GET/POST (records Purchase, +10 points).
-- stats GET (home + admin), dashboard GET?fanId (per-fan votes/tickets/collectibles).
+```mermaid
+flowchart LR
+  Browser[Browser / Freighter] --> Web[Next.js web application]
+  Web --> API[Rust / Axum API skeleton]
+  Web -. legacy routes .-> NextAPI[Next.js API handlers]
+  API --> Memory[Process-local prototype state]
+  API -. configured, not yet repository-backed .-> Postgres[(PostgreSQL)]
+  API -. configured, not yet canonical .-> Redis[(Redis)]
+  NextAPI --> Prisma[Prisma compatibility layer]
+  Prisma --> Postgres
+  API -. mock / partial live paths .-> Stellar[Stellar Testnet / Soroban]
+  NextAPI -. legacy helpers .-> Stellar
+```
 
-## Data model additions
-- Purchase model links Fan <-> Collectible (ownership + minted token) for the user dashboard.
-- Collectible is now a catalog edition; tokenId/mintTx moved to Purchase.
+The Rust service exists and is part of the canonical direction, but it does not yet own durable organizations, pageants, contestants, votes, snapshots, markets, or transaction intents.
 
-## Contracts (unchanged this pass)
-- audit-anchor self-contained; ticket/collectible on OZ patterns; sale-splitter USDC split.
-- Deploy target target/wasm32v1-none/release. Deploy to testnet via stellar-cli, copy C... ids into web/.env.
+## Canonical responsibility boundaries
 
-## Runnable-by-default (all env-switchable)
-- DB SQLite; rate limit in-memory; STELLAR_MODE=mock; WALLET_PROVIDER=mock.
+### Next.js
 
-## Open threads
-- Live Stellar wiring in web/src/lib/stellar.ts (TODO(live)); Privy adapter in web/src/wallet (TODO(privy)).
-- sale-splitter cross-call to Collectible.mint (TODO).
-- OZ crate versions for ticket/collectible pinned from Contract Wizard.
-- Passkey Kit smart-wallet path deferred to v2.
-- Live contract-id wiring pending testnet deploy.
+Owns:
+
+- rendering and navigation;
+- forms and interaction state;
+- Freighter connection and signing approval;
+- loading, empty, failure, unauthorized, and retry UX;
+- generated API clients as domains migrate.
+
+Must not permanently own:
+
+- vote rules;
+- payment settlement;
+- order fulfillment;
+- mint authority;
+- KYC policy;
+- market accounting;
+- chain indexing or reconciliation.
+
+### Rust/Axum API
+
+Canonical owner for:
+
+- organizations and memberships;
+- pageants, categories, contestants, and sections;
+- voting and snapshots;
+- ticket and collectible commerce;
+- transaction intents;
+- provider webhooks;
+- audit logs;
+- Stellar indexing and reconciliation;
+- asynchronous jobs.
+
+Current limitation: most of this is not implemented durably yet.
+
+### PostgreSQL
+
+Will be authoritative for application and workflow state. SQLx migrations become the canonical schema authority in Milestone B.
+
+The current Compose bridge still runs Prisma `db push` and a demo seed so the existing web MVP remains testable.
+
+### Redis
+
+Will own distributed rate limits, short-lived coordination, locks, and job support where appropriate. The container and URL are present, but the Rust API does not yet use Redis as a durable platform dependency.
+
+### Stellar/Soroban
+
+Authoritative for confirmed ledger transactions, contract events, on-chain ownership, settlement, and audit commitments.
+
+The database must not declare a mint, payment, ownership transfer, or market settlement successful before chain confirmation and reconciliation.
+
+## Current service inventory
+
+| Service/capability | Current state |
+|---|---|
+| Next.js web | Working MVP and UI surface |
+| Next.js API routes | Legacy/compatibility business layer |
+| Rust API | Running skeleton with health/readiness and in-memory domain prototypes |
+| PostgreSQL | Available through Compose; canonical SQLx schema not created |
+| Redis | Available through Compose; canonical use incomplete |
+| Database initializer | Transitional Prisma `db push` plus demo seed |
+| Worker | Not a separate service yet |
+| Stellar adapter/indexer | Not a separate durable service yet |
+| Cloudflare R2 | Planned for Milestone B, not active |
+| KYC provider | Planned for Milestone C, not active |
+
+## Clean-clone path
+
+The canonical reproducibility command is:
+
+```bash
+bash scripts/acceptance/clean-clone-smoke.sh
+```
+
+It checks PostgreSQL, Redis, the Rust API, transitional database initialization, and the web application. See [`../setup/clean-clone.md`](../setup/clean-clone.md).
+
+The complete Milestone A gate remains open until the missing worker/Stellar processing boundaries and human clean-clone verification are resolved.
+
+## Data and migration authority
+
+See [`database-migration-ownership.md`](database-migration-ownership.md).
+
+Summary:
+
+- SQLx under `services/api/migrations/` becomes canonical;
+- Prisma remains temporary compatibility/reference material;
+- new domains must not be built only in Prisma;
+- seed data is separate from migrations;
+- migration files are serialized shared infrastructure.
+
+## Testnet deployment authority
+
+See [`../blockchain/testnet-contract-registry.md`](../blockchain/testnet-contract-registry.md).
+
+A configured contract ID is not considered verified until the network, WASM hash, source revision, deployment transaction, and independent Explorer check are recorded.
+
+## Known hardcoded/prototype state
+
+The following remain migration fixtures rather than product architecture:
+
+- seeded pageant/event data;
+- seeded contestants/categories/market;
+- in-memory votes, tallies, snapshots, markets, and intents in Rust;
+- Prisma floating-point commerce prices;
+- global/demo administrator assumptions;
+- mock Stellar transaction results;
+- direct server-side platform signer compatibility paths;
+- duplicated Next.js and Rust business routes.
+
+See [`../planning/CAPABILITY_AND_HARDCODING_INVENTORY.md`](../planning/CAPABILITY_AND_HARDCODING_INVENTORY.md).
+
+## Target transition order
+
+1. Finish Milestone A reproducibility, documentation, registry, and ownership decisions.
+2. Add SQLx, PostgreSQL repositories, organizations, pageants, contestants, sections, and R2 media.
+3. Migrate one vertical domain at a time from Next.js routes to Rust.
+4. Introduce persistent transaction intents, workers, indexers, and reconciliation.
+5. Remove legacy Prisma/Next.js business routes only after replacement acceptance tests pass.
+
+## Honest status statement
+
+CrownFi currently has a real multi-service platform path and preserved MVP behavior, but it is still transitional. It should not be described as a completed Rust platform, a fully persistent multi-tenant product, or production-ready Stellar infrastructure until the acceptance gates are met.

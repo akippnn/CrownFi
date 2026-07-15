@@ -2,8 +2,42 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * CrownFi is dark-only for the submission build. Keep the light palette below
+ * as an explicit opt-in so the implementation is preserved without allowing
+ * the operating-system theme to change the live site.
+ */
 :root {
-  color-scheme: light dark;
+  color-scheme: dark;
+  --text-ink: 245, 245, 247;
+  --bg-navy: #09090b;
+  --bg-navy-2: #141417;
+  --bg-cream: 18, 18, 21;
+  --color-line: rgba(212, 175, 55, 0.15);
+  --color-gold-soft: 243, 229, 171;
+  --color-gold-ink: #f3e5ab;
+  --color-emerald-ink: #34d399;
+  --color-emerald-soft: rgba(16, 185, 129, 0.15);
+  --color-ruby: #f43f5e;
+  --color-ruby-soft: rgba(244, 63, 94, 0.15);
+
+  --body-bg: radial-gradient(1200px 600px at 50% -10%, rgba(212, 175, 55, 0.18), transparent 70%), linear-gradient(180deg, #09090b 0%, #121215 100%);
+  --hero-bg: url('/assets/rewards/crown-token_two-hands_gold-ribbons_dark.webp');
+  --stage-bg: url('/assets/ticketing/venue_golden_pageant_stage_wide_v2-dark.webp');
+
+  --glass-bg: rgba(0, 0, 0, 0.4);
+  --glass-shadow: 0 12px 40px -15px rgba(0, 0, 0, 0.8), 0 0 50px rgba(212, 175, 55, 0.02);
+
+  --btn-gold-bg: linear-gradient(180deg, #f3e5ab 0%, #e7c858 55%, #d1ab2c 100%);
+  --btn-gold-bg-hover: linear-gradient(180deg, #f6eed0 0%, #f0d571 55%, #e1be49 100%);
+}
+
+/*
+ * Reserved for a future deliberate light-theme release. Activating it also
+ * requires removing the `dark` class from the root layout.
+ */
+:root[data-theme="light"] {
+  color-scheme: light;
   --text-ink: 35, 37, 47;
   --bg-navy: #faf7ef;
   --bg-navy-2: #eae5d8;
@@ -15,42 +49,20 @@
   --color-emerald-soft: #e1f5ee;
   --color-ruby: #e11d48;
   --color-ruby-soft: #fbe9ef;
-  
+
   --body-bg: radial-gradient(1200px 600px at 50% -10%, rgba(184, 145, 47, 0.12), transparent 70%), linear-gradient(180deg, #faf7ef 0%, #eae5d8 100%);
   --hero-bg: url('/assets/rewards/crown-token_two-hands_gold-ribbons.webp');
   --stage-bg: url('/assets/ticketing/venue_golden_pageant_stage_wide_v2.webp');
-  
+
   --glass-bg: rgba(255, 255, 255, 0.45);
   --glass-shadow: 0 12px 40px -15px rgba(80, 70, 40, 0.08), 0 0 50px rgba(184, 145, 47, 0.01);
-  
+
   --btn-gold-bg: linear-gradient(180deg, #f1df99 0%, #e3bd47 55%, #cca025 100%);
   --btn-gold-bg-hover: linear-gradient(180deg, #f7ebb8 0%, #eccd62 55%, #dbb23d 100%);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text-ink: 245, 245, 247;
-    --bg-navy: #09090b;
-    --bg-navy-2: #141417;
-    --bg-cream: 18, 18, 21;
-    --color-line: rgba(212, 175, 55, 0.15);
-    --color-gold-soft: 243, 229, 171;
-    --color-gold-ink: #f3e5ab;
-    --color-emerald-ink: #34d399;
-    --color-emerald-soft: rgba(16, 185, 129, 0.15);
-    --color-ruby: #f43f5e;
-    --color-ruby-soft: rgba(244, 63, 94, 0.15);
-    
-    --body-bg: radial-gradient(1200px 600px at 50% -10%, rgba(212, 175, 55, 0.18), transparent 70%), linear-gradient(180deg, #09090b 0%, #121215 100%);
-    --hero-bg: url('/assets/rewards/crown-token_two-hands_gold-ribbons_dark.webp');
-    --stage-bg: url('/assets/ticketing/venue_golden_pageant_stage_wide_v2-dark.webp');
-    
-    --glass-bg: rgba(0, 0, 0, 0.4);
-    --glass-shadow: 0 12px 40px -15px rgba(0, 0, 0, 0.8), 0 0 50px rgba(212, 175, 55, 0.02);
-    
-    --btn-gold-bg: linear-gradient(180deg, #f3e5ab 0%, #e7c858 55%, #d1ab2c 100%);
-    --btn-gold-bg-hover: linear-gradient(180deg, #f6eed0 0%, #f0d571 55%, #e1be49 100%);
-  }
+html {
+  background: #09090b;
 }
 
 body {

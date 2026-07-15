@@ -28,7 +28,10 @@ pub fn router(state: AppState) -> Router {
         .route("/events/:event_id/vote", post(submit_vote))
         .route("/events/:event_id/tally", get(get_tally))
         .route("/admin/events/:event_id/snapshot", post(create_snapshot))
-        .route("/admin/snapshots/:snapshot_id/anchor", post(anchor_snapshot))
+        .route(
+            "/admin/snapshots/:snapshot_id/anchor",
+            post(anchor_snapshot),
+        )
         .route("/snapshots/:snapshot_id", get(get_snapshot))
         .route("/snapshots/:snapshot_id/verify", get(verify_snapshot))
         .layer(CorsLayer::permissive())
@@ -45,13 +48,23 @@ async fn health(State(state): State<AppState>) -> Json<serde_json::Value> {
     }))
 }
 
-async fn ready(State(state): State<AppState>) -> Json<serde_json::Value> {
-    Json(json!({
+async fn ready(State(state): State<AppState>) -> Result<Json<serde_json::Value>, ApiError> {
+    let database_ok = match state.database.as_ref() {
+        Some(pool) => crate::database::ping(pool).await.is_ok(),
+        None => false,
+    };
+
+    if state.config.database_required && !database_ok {
+        return Err(ApiError::ServiceUnavailable("database_unavailable"));
+    }
+
+    Ok(Json(json!({
         "ok": true,
         "database_configured": state.config.has_database(),
+        "database_reachable": database_ok,
         "redis_configured": state.config.has_redis(),
-        "note": "Phase 0 API uses in-memory state; DB/Redis are wired by env for the next phase.",
-    }))
+        "note": "Platform data uses PostgreSQL; voting and market proof-of-flow state remains in memory during migration.",
+    })))
 }
 
 async fn list_events(State(state): State<AppState>) -> Json<Vec<crate::models::Event>> {
@@ -116,7 +129,11 @@ async fn submit_vote(
         return Err(ApiError::InvalidRequest("contestant_category_mismatch"));
     }
 
-    let key = (event_id.clone(), body.category_id.clone(), body.voter_id.clone());
+    let key = (
+        event_id.clone(),
+        body.category_id.clone(),
+        body.voter_id.clone(),
+    );
     let mut votes = state.votes.lock().expect("votes mutex poisoned");
     if !votes.insert(key) {
         return Err(ApiError::DuplicateVote);
@@ -209,7 +226,10 @@ async fn anchor_snapshot(
     let mut snapshots = state.snapshots.lock().expect("snapshots mutex poisoned");
     let snapshot = snapshots.get_mut(&snapshot_id).ok_or(ApiError::NotFound)?;
     let tx_hash = if state.config.stellar_mode == "live" {
-        format!("pending-live-stellar-submit-{}", &snapshot.snapshot_hash[..16])
+        format!(
+            "pending-live-stellar-submit-{}",
+            &snapshot.snapshot_hash[..16]
+        )
     } else {
         format!("mock-stellar-tx-{}", &snapshot.snapshot_hash[..16])
     };
@@ -267,9 +287,17 @@ fn build_tally(state: &AppState, event_id: &str, category_id: &str) -> TallyResp
         .cloned()
         .unwrap_or_default()
         .into_iter()
-        .map(|(contestant_id, votes)| TallyEntry { contestant_id, votes })
+        .map(|(contestant_id, votes)| TallyEntry {
+            contestant_id,
+            votes,
+        })
         .collect::<Vec<_>>();
-    entries.sort_by(|left, right| right.votes.cmp(&left.votes).then(left.contestant_id.cmp(&right.contestant_id)));
+    entries.sort_by(|left, right| {
+        right
+            .votes
+            .cmp(&left.votes)
+            .then(left.contestant_id.cmp(&right.contestant_id))
+    });
     let total_votes = entries.iter().map(|entry| entry.votes).sum();
 
     TallyResponse {
@@ -280,7 +308,7 @@ fn build_tally(state: &AppState, event_id: &str, category_id: &str) -> TallyResp
     }
 }
 
-fn require_admin(state: &AppState, headers: &HeaderMap) -> Result<(), ApiError> {
+pub(crate) fn require_admin(state: &AppState, headers: &HeaderMap) -> Result<(), ApiError> {
     let provided = headers
         .get("x-admin-demo-token")
         .and_then(|value| value.to_str().ok())
