@@ -5,14 +5,16 @@ import { crownfiInternalFetch, responseJson } from "@/lib/crownfi-internal";
 async function requireSiteAdministrator(request: NextRequest) {
   const session = readAccountSession(request);
   if (!session) return { error: "account_session_required", status: 401 } as const;
+  const actorHeaders = { "x-crownfi-user-id": session.userId };
   const profileResponse = await crownfiInternalFetch(
     `/internal/identity/users/${encodeURIComponent(session.userId)}`,
+    { headers: actorHeaders },
   );
   const profile = await responseJson(profileResponse);
   if (!profileResponse.ok || !["owner", "admin"].includes(profile.site_role)) {
     return { error: "site_administrator_required", status: 403 } as const;
   }
-  return { session } as const;
+  return { session, actorHeaders } as const;
 }
 
 export async function GET(request: NextRequest) {
@@ -20,7 +22,9 @@ export async function GET(request: NextRequest) {
   if ("error" in authorization) {
     return NextResponse.json({ error: authorization.error }, { status: authorization.status });
   }
-  const response = await crownfiInternalFetch("/internal/site-settings");
+  const response = await crownfiInternalFetch("/internal/site-settings", {
+    headers: authorization.actorHeaders,
+  });
   return NextResponse.json(await responseJson(response), { status: response.status });
 }
 
@@ -32,6 +36,7 @@ export async function PATCH(request: NextRequest) {
   const body = await request.json().catch(() => null);
   const response = await crownfiInternalFetch("/internal/site-settings", {
     method: "PATCH",
+    headers: authorization.actorHeaders,
     body: JSON.stringify({
       ...body,
       actor_user_id: authorization.session.userId,
