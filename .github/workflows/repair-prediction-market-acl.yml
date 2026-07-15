@@ -1,0 +1,449 @@
+name: Repair prediction market ACL adoption
+
+on:
+  push:
+    branches:
+      - feat/prediction-market-foundation-v1
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout prediction-market branch
+        uses: actions/checkout@v5
+        with:
+          ref: feat/prediction-market-foundation-v1
+          persist-credentials: true
+      - name: Apply centralized market capability boundary
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              if old not in text:
+                  raise SystemExit(f"missing expected source block: {label}")
+              return text.replace(old, new, 1)
+
+          auth_path = Path("services/api/src/authorization_acl.rs")
+          auth = auth_path.read_text(encoding="utf-8")
+
+          auth = replace_once(
+              auth,
+              "    PayoutRead,\n    SnapshotWrite,\n}",
+              "    PayoutRead,\n    SnapshotWrite,\n    MarketCreate,\n    MarketSubmitReview,\n    MarketGovern,\n    MarketPolicyManage,\n    MarketStake,\n    MarketIntentRead,\n    MarketIntentWrite,\n}",
+              "capability enum",
+          )
+          auth = replace_once(
+              auth,
+              '            Self::PayoutRead => "payout.read",\n            Self::SnapshotWrite => "voting.snapshot.write",',
+              '            Self::PayoutRead => "payout.read",\n            Self::SnapshotWrite => "voting.snapshot.write",\n            Self::MarketCreate => "prediction_market.create",\n            Self::MarketSubmitReview => "prediction_market.submit_review",\n            Self::MarketGovern => "prediction_market.govern",\n            Self::MarketPolicyManage => "prediction_market.policy.manage",\n            Self::MarketStake => "prediction_market.stake",\n            Self::MarketIntentRead => "prediction_market.intent.read",\n            Self::MarketIntentWrite => "prediction_market.intent.write",',
+              "capability names",
+          )
+
+          internal_tail = """    Ok(RequestClass::Deny(Transport::WebInternal))
+}
+
+async fn classify_admin("""
+          internal_market_block = """    if segments == ["internal", "markets"] && method == &Method::POST {
+        let organization_id = required_body_uuid(body, "organization_id")?;
+        return Ok(protected_web(
+            Capability::MarketCreate,
+            ScopeSource::Resolved(Scope::organization(
+                organization_id,
+                "organization",
+                Some(organization_id),
+            )),
+            None,
+        ));
+    }
+
+    if segments.len() == 4 && segments[1] == "markets" {
+        let market_id = parse_uuid(segments[2])?;
+        let organization_id = organization_for_market(pool, market_id).await?;
+        let capability = if segments[3] == "policy-decisions" && method == &Method::POST {
+            Capability::MarketPolicyManage
+        } else if segments[3] == "transitions" && method == &Method::POST {
+            if body_string(body, "target_status").as_deref() == Some("pending_review") {
+                Capability::MarketSubmitReview
+            } else {
+                Capability::MarketGovern
+            }
+        } else if segments[3] == "stake-intents" && method == &Method::POST {
+            Capability::MarketStake
+        } else {
+            return Ok(RequestClass::Deny(Transport::WebInternal));
+        };
+        return Ok(protected_web(
+            capability,
+            ScopeSource::Resolved(Scope::organization(
+                organization_id,
+                "prediction_market",
+                Some(market_id),
+            )),
+            None,
+        ));
+    }
+
+    if segments.len() >= 3 && segments[1] == "market-intents" {
+        let intent_id = parse_uuid(segments[2])?;
+        let (organization_id, user_id) = scope_for_market_intent(pool, intent_id).await?;
+        let capability = if segments.len() == 3 && method == &Method::GET {
+            Capability::MarketIntentRead
+        } else if segments.len() == 4
+            && segments[3] == "submission"
+            && method == &Method::POST
+        {
+            Capability::MarketIntentWrite
+        } else {
+            return Ok(RequestClass::Deny(Transport::WebInternal));
+        };
+        return Ok(protected_web(
+            capability,
+            ScopeSource::Resolved(Scope::owned(
+                organization_id,
+                user_id,
+                "prediction_market_stake_intent",
+                intent_id,
+            )),
+            None,
+        ));
+    }
+
+    Ok(RequestClass::Deny(Transport::WebInternal))
+}
+
+async fn classify_admin("""
+          auth = replace_once(auth, internal_tail, internal_market_block, "internal market classification")
+
+          auth = replace_once(
+              auth,
+              '            || path.starts_with("/markets/")\n            || path.starts_with("/market-intents/")\n            || path == "/platform/organizations"',
+              '            || path.starts_with("/markets/")\n            || path == "/platform/organizations"',
+              "public market intent removal",
+          )
+          auth = replace_once(
+              auth,
+              """    // Explicitly retain the legacy in-memory proof-of-flow routes until the
+    // durable Voting and Prediction Market slices replace them. Unknown
+    // /admin and /internal routes still fail closed.
+    (method == &Method::POST && path.starts_with("/events/") && path.ends_with("/vote"))
+        || (method == &Method::POST
+            && path.starts_with("/markets/")
+            && path.ends_with("/stake-intents"))
+        || (method == &Method::POST
+            && path.starts_with("/market-intents/")
+            && path.ends_with("/submission"))
+""",
+              """    // Explicitly retain only the legacy in-memory voting intake route until
+    // the durable Voting slice replaces it. Durable Prediction Market writes
+    // are classified through the centralized capability boundary above.
+    method == &Method::POST && path.starts_with("/events/") && path.ends_with("/vote")
+""",
+              "legacy public market routes",
+          )
+
+          auth = replace_once(
+              auth,
+              """    if matches!(capability, Capability::OrderRead | Capability::IntentRead) && self_owned {
+        return (true, "resource_owner");
+    }
+
+    if principal
+""",
+              """    if matches!(capability, Capability::OrderRead | Capability::IntentRead) && self_owned {
+        return (true, "resource_owner");
+    }
+    if capability == Capability::MarketStake {
+        return (true, "active_account");
+    }
+    if matches!(
+        capability,
+        Capability::MarketIntentRead | Capability::MarketIntentWrite
+    ) && self_owned
+    {
+        return (true, "resource_owner");
+    }
+
+    if principal
+""",
+              "market owner authorization",
+          )
+
+          auth = replace_once(
+              auth,
+              """                | Capability::PayoutManage
+                | Capability::PayoutRead
+        ),
+        "editor" => matches!(
+""",
+              """                | Capability::PayoutManage
+                | Capability::PayoutRead
+                | Capability::MarketCreate
+                | Capability::MarketSubmitReview
+        ),
+        "editor" => matches!(
+""",
+              "organization owner market capabilities",
+          )
+          auth = replace_once(
+              auth,
+              """                | Capability::FulfillmentCreate
+                | Capability::FulfillmentRead
+        ),
+        "operator" => matches!(
+""",
+              """                | Capability::FulfillmentCreate
+                | Capability::FulfillmentRead
+                | Capability::MarketCreate
+                | Capability::MarketSubmitReview
+        ),
+        "operator" => matches!(
+""",
+              "organization editor market capabilities",
+          )
+
+          auth = replace_once(
+              auth,
+              """async fn organization_for_product(pool: &PgPool, id: Uuid) -> Result<Uuid, ApiError> {
+    scalar_uuid(
+        pool,
+        "SELECT organization_id FROM products WHERE id = $1",
+        id,
+    )
+    .await
+}
+
+async fn scalar_uuid""",
+              """async fn organization_for_product(pool: &PgPool, id: Uuid) -> Result<Uuid, ApiError> {
+    scalar_uuid(
+        pool,
+        "SELECT organization_id FROM products WHERE id = $1",
+        id,
+    )
+    .await
+}
+
+async fn organization_for_market(pool: &PgPool, id: Uuid) -> Result<Uuid, ApiError> {
+    scalar_uuid(
+        pool,
+        "SELECT organization_id FROM prediction_markets WHERE id = $1",
+        id,
+    )
+    .await
+}
+
+async fn scalar_uuid""",
+              "market organization resolver",
+          )
+          auth = replace_once(
+              auth,
+              """async fn scope_for_intent(pool: &PgPool, id: Uuid) -> Result<(Uuid, Uuid), ApiError> {
+    tuple_scope(
+        pool,
+        "SELECT ti.organization_id, o.buyer_user_id FROM transaction_intents ti JOIN orders o ON o.id = ti.order_id WHERE ti.id = $1",
+        id,
+    )
+    .await
+}
+
+async fn scope_for_fulfillment_job""",
+              """async fn scope_for_intent(pool: &PgPool, id: Uuid) -> Result<(Uuid, Uuid), ApiError> {
+    tuple_scope(
+        pool,
+        "SELECT ti.organization_id, o.buyer_user_id FROM transaction_intents ti JOIN orders o ON o.id = ti.order_id WHERE ti.id = $1",
+        id,
+    )
+    .await
+}
+
+async fn scope_for_market_intent(pool: &PgPool, id: Uuid) -> Result<(Uuid, Uuid), ApiError> {
+    tuple_scope(
+        pool,
+        "SELECT organization_id, user_id FROM prediction_market_stake_intents WHERE id = $1",
+        id,
+    )
+    .await
+}
+
+async fn scope_for_fulfillment_job""",
+              "market intent scope resolver",
+          )
+
+          auth = replace_once(
+              auth,
+              """    #[test]
+    fn unknown_protected_paths_are_not_public() {
+""",
+              """    #[test]
+    fn prediction_market_capabilities_are_fail_closed() {
+        let actor = Uuid::new_v4();
+        let editor = principal(None, Some("editor"));
+        let public_user = principal(None, None);
+        assert!(authorize_principal(actor, &editor, Capability::MarketCreate, &scoped(None)).0);
+        assert!(authorize_principal(actor, &editor, Capability::MarketSubmitReview, &scoped(None)).0);
+        assert!(!authorize_principal(actor, &editor, Capability::MarketGovern, &scoped(None)).0);
+        assert!(authorize_principal(actor, &public_user, Capability::MarketStake, &scoped(None)).0);
+        assert!(authorize_principal(
+            actor,
+            &public_user,
+            Capability::MarketIntentWrite,
+            &scoped(Some(actor))
+        )
+        .0);
+        assert!(!authorize_principal(
+            actor,
+            &public_user,
+            Capability::MarketIntentRead,
+            &scoped(Some(Uuid::new_v4()))
+        )
+        .0);
+    }
+
+    #[test]
+    fn unknown_protected_paths_are_not_public() {
+""",
+              "authorization tests",
+          )
+          auth_path.write_text(auth, encoding="utf-8")
+
+          markets_path = Path("services/api/src/markets.rs")
+          markets = markets_path.read_text(encoding="utf-8")
+          markets = replace_once(
+              markets,
+              "use crate::{app::require_admin, error::ApiError, state::AppState};",
+              "use crate::{error::ApiError, state::AppState};",
+              "market imports",
+          )
+          markets = markets.replace(
+              '"/markets/:market_id/stake-intents"',
+              '"/internal/markets/:market_id/stake-intents"',
+          )
+          markets = markets.replace(
+              '"/market-intents/:intent_id"',
+              '"/internal/market-intents/:intent_id"',
+          )
+          markets = markets.replace(
+              '"/market-intents/:intent_id/submission"',
+              '"/internal/market-intents/:intent_id/submission"',
+          )
+          if markets.count("    require_admin(&state, &headers)?;\n") != 3:
+              raise SystemExit("unexpected require_admin call count in markets.rs")
+          markets = markets.replace("    require_admin(&state, &headers)?;\n", "")
+          markets_path.write_text(markets, encoding="utf-8")
+
+          smoke_path = Path("scripts/acceptance/prediction-market-foundation-smoke.sh")
+          smoke = smoke_path.read_text(encoding="utf-8")
+          smoke = replace_once(
+              smoke,
+              'admin_token="${CROWNFI_MARKETS_ADMIN_TOKEN:-local-admin-demo-token}"\n',
+              'admin_token="${CROWNFI_MARKETS_ADMIN_TOKEN:-local-admin-demo-token}"\nweb_token="${CROWNFI_MARKETS_WEB_TOKEN:-local-web-to-api-token-change-before-sharing}"\n',
+              "smoke web token",
+          )
+          smoke = smoke.replace('    --header "x-admin-demo-token: $admin_token" \\\n    --header "x-crownfi-user-id: $actor_id"', '    --header "x-crownfi-web-token: $web_token" \\\n    --header "x-crownfi-user-id: $actor_id"')
+          smoke = smoke.replace('http://127.0.0.1:8080/markets/$market_id/stake-intents', 'http://127.0.0.1:8080/internal/markets/$market_id/stake-intents')
+          smoke = smoke.replace('http://127.0.0.1:8080/market-intents/$intent_id', 'http://127.0.0.1:8080/internal/market-intents/$intent_id')
+          smoke = smoke.replace('  --header "x-admin-demo-token: $admin_token" \\\n  --header "x-crownfi-user-id: $other_user_id"', '  --header "x-crownfi-web-token: $web_token" \\\n  --header "x-crownfi-user-id: $other_user_id"')
+          smoke = replace_once(
+              smoke,
+              'if [[ "$cross_tenant_status" != "403" ]]; then\n  echo "Expected cross-tenant market creation to return 403, got $cross_tenant_status" >&2',
+              'if [[ "$cross_tenant_status" != "404" ]]; then\n  echo "Expected cross-tenant market creation to be concealed with 404, got $cross_tenant_status" >&2',
+              "cross-tenant concealment",
+          )
+
+          marker = 'printf \'%s\\n\' "$cross_tenant_status" >"$evidence_dir/cross-tenant-create-status.txt"\n\n'
+          denial = '''missing_transport_status=$(curl --silent --show-error \\
+  --output "$evidence_dir/missing-web-transport.json" \\
+  --write-out '%{http_code}' \\
+  --request POST "http://127.0.0.1:8080/internal/markets" \\
+  --header 'content-type: application/json' \\
+  --header "x-admin-demo-token: $admin_token" \\
+  --header "x-crownfi-user-id: $owner_id" \\
+  --data "$market_body")
+if [[ "$missing_transport_status" != "401" ]]; then
+  echo "Expected internal market creation without the web transport token to return 401, got $missing_transport_status" >&2
+  exit 1
+fi
+printf '%s\n' "$missing_transport_status" >"$evidence_dir/missing-web-transport-status.txt"
+
+'''
+          smoke = replace_once(smoke, marker, marker + denial, "missing transport smoke")
+
+          marker = 'intent_id=$(json_field "$evidence_dir/stake-intent-first.json" id)\n'
+          owner_check = '''intent_id=$(json_field "$evidence_dir/stake-intent-first.json" id)
+foreign_intent_status=$(curl --silent --show-error \\
+  --output "$evidence_dir/foreign-intent-read.json" \\
+  --write-out '%{http_code}' \\
+  --header "x-crownfi-web-token: $web_token" \\
+  --header "x-crownfi-user-id: $other_user_id" \\
+  "http://127.0.0.1:8080/internal/market-intents/$intent_id")
+if [[ "$foreign_intent_status" != "404" ]]; then
+  echo "Expected another tenant to receive concealed 404 for the stake intent, got $foreign_intent_status" >&2
+  exit 1
+fi
+printf '%s\n' "$foreign_intent_status" >"$evidence_dir/foreign-intent-read-status.txt"
+'''
+          smoke = replace_once(smoke, marker, owner_check, "stake intent owner isolation")
+
+          count_marker = '''if [[ "$(cat "$evidence_dir/durable-counts.txt")" != "1:0:7" ]]; then
+  echo "Expected one durable submitted intent, zero active positions before reconciliation, and seven audit records" >&2
+  exit 1
+fi
+
+'''
+          decision_check = '''if [[ "$(cat "$evidence_dir/durable-counts.txt")" != "1:0:7" ]]; then
+  echo "Expected one durable submitted intent, zero active positions before reconciliation, and seven audit records" >&2
+  exit 1
+fi
+
+"${compose[@]}" exec -T postgres psql \\
+  -U "${POSTGRES_USER:-crownfi}" \\
+  -d "${POSTGRES_DB:-crownfi}" \\
+  -Atc "SELECT capability || ':' || decision FROM authorization_decisions WHERE capability LIKE 'prediction_market.%' ORDER BY created_at, id;" \\
+  | tee "$evidence_dir/authorization-decisions.txt"
+grep -q '^prediction_market.create:allow$' "$evidence_dir/authorization-decisions.txt"
+grep -q '^prediction_market.create:deny$' "$evidence_dir/authorization-decisions.txt"
+grep -q '^prediction_market.policy.manage:allow$' "$evidence_dir/authorization-decisions.txt"
+grep -q '^prediction_market.stake:allow$' "$evidence_dir/authorization-decisions.txt"
+grep -q '^prediction_market.intent.read:deny$' "$evidence_dir/authorization-decisions.txt"
+grep -q '^prediction_market.intent.write:allow$' "$evidence_dir/authorization-decisions.txt"
+
+'''
+          smoke = replace_once(smoke, count_marker, decision_check, "authorization decision evidence")
+          smoke_path.write_text(smoke, encoding="utf-8")
+
+          docs_path = Path("docs/security/AUTHORIZATION.md")
+          docs = docs_path.read_text(encoding="utf-8")
+          docs = replace_once(
+              docs,
+              "The durable internal and administrative platform routes use the centralized capability middleware. The existing in-memory voting and prediction-market proof-of-flow routes remain explicitly classified as legacy until their durable replacements adopt the same boundary. Their presence does not satisfy the full authorization acceptance gate.",
+              "The durable internal and administrative platform routes use the centralized capability middleware. Durable Prediction Market creation, review submission, governance, policy, staking, and stake-intent access now use named capabilities and tenant/resource scopes. The existing in-memory voting intake route remains explicitly classified as legacy until its durable replacement adopts the same boundary.",
+              "authorization migration boundary docs",
+          )
+          docs_path.write_text(docs, encoding="utf-8")
+          PY
+      - name: Setup Rust stable
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt
+          rustup default stable
+      - name: Format and test API
+        working-directory: services/api
+        run: |
+          cargo fmt
+          cargo test --locked
+      - name: Validate smoke script syntax
+        run: bash -n scripts/acceptance/prediction-market-foundation-smoke.sh
+      - name: Commit ACL adoption
+        run: |
+          if git diff --quiet; then
+            echo "Prediction-market ACL adoption is already applied."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add services/api/src/authorization_acl.rs services/api/src/markets.rs scripts/acceptance/prediction-market-foundation-smoke.sh docs/security/AUTHORIZATION.md
+          git commit -m "fix(markets): adopt centralized ACL capabilities"
+          git push origin HEAD:feat/prediction-market-foundation-v1
