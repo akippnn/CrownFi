@@ -1,0 +1,57 @@
+name: Repair market foundation source
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/fix-market-foundation.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout pull request branch
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+          persist-credentials: true
+      - name: Repair validation order
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("services/api/src/markets.rs")
+          text = path.read_text(encoding="utf-8")
+          before = "    let slug = validate_slug(body.slug)?;\n"
+          after = "    validate_limits(&body)?;\n\n    let slug = validate_slug(body.slug)?;\n"
+          if before in text and after not in text:
+              text = text.replace(before, after, 1)
+          duplicate = "\n    validate_limits(&body)?;\n    let (asset_code, asset_issuer) = validate_asset(body.asset_code, body.asset_issuer)?;"
+          replacement = "\n    let (asset_code, asset_issuer) = validate_asset(body.asset_code, body.asset_issuer)?;"
+          text = text.replace(duplicate, replacement, 1)
+          path.write_text(text, encoding="utf-8")
+          PY
+      - name: Setup Rust stable
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt
+          rustup default stable
+      - name: Format and test API
+        working-directory: services/api
+        run: |
+          cargo fmt
+          cargo test --locked
+      - name: Commit repair when needed
+        run: |
+          if git diff --quiet -- services/api/src/markets.rs; then
+            echo "Market source already repaired."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add services/api/src/markets.rs
+          git commit -m "fix(markets): validate limits before consuming request fields"
+          git push origin HEAD:${{ github.head_ref || github.ref_name }}
