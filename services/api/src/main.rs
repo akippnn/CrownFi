@@ -1,5 +1,6 @@
 mod access;
 mod app;
+mod authorization_acl;
 mod commerce;
 mod config;
 mod database;
@@ -94,7 +95,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .merge(stellar_intents::router().with_state(state.clone()))
         .merge(stellar_reconciliation::router().with_state(state.clone()))
         .merge(fulfillment::router().with_state(state.clone()))
-        .merge(payouts::router().with_state(state));
+        .merge(payouts::router().with_state(state.clone()))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            authorization_acl::enforce,
+        ));
 
     tracing::info!(%addr, "starting CrownFi API");
     let listener = TcpListener::bind(addr).await?;
