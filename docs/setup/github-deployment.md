@@ -34,3 +34,8 @@ The GitHub workflow calls `scripts/arcturus-ci <full-commit>` and does not add a
 second release mechanism. The same guard, validation targets, digest capture,
 canonical `arcturus.release.json`, `arcturusctl project deploy`, transactional
 legacy handoff, routing receipt, and post-deploy verification remain mandatory.
+
+After a normal deployment succeeds, manually dispatch the same workflow from
+`integration/platform-v1` with `acceptance` enabled. This runs the required
+expected-502 rollback probe and verifies that Arcturus restores the same active
+revision, image digests, health, and route receipt.
