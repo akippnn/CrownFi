@@ -4,8 +4,8 @@ Stable IDs remain canonical across repository transfers. GitHub numbers below ar
 
 ## Active pull requests
 
-- [#1 — prediction-market durable foundation](https://github.com/akippnn/CrownFi/pull/1)
-- [#2 — release/promotion draft](https://github.com/akippnn/CrownFi/pull/2)
+- [#1 — prediction-market durable foundation](https://github.com/akippnn/CrownFi/pull/1) — tracks #9, #23, #24, #25, #16, and #18.
+- [#2 — release/promotion draft](https://github.com/akippnn/CrownFi/pull/2) — tracks #4, #5, #6, #11, and #13.
 
 ## Trackers
 
