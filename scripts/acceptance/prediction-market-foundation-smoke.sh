@@ -178,8 +178,7 @@ if [[ "$missing_transport_status" != "401" ]]; then
   echo "Expected internal market creation without the web transport token to return 401, got $missing_transport_status" >&2
   exit 1
 fi
-printf '%s
-' "$missing_transport_status" >"$evidence_dir/missing-web-transport-status.txt"
+printf '%s\n' "$missing_transport_status" >"$evidence_dir/missing-web-transport-status.txt"
 
 admin_post \
   "http://127.0.0.1:8080/internal/markets" \
@@ -216,7 +215,7 @@ policy_denial_status=$(curl --silent --show-error \
   --write-out '%{http_code}' \
   --request POST "http://127.0.0.1:8080/internal/markets/$market_id/stake-intents" \
   --header 'content-type: application/json' \
-  --header "x-admin-demo-token: $admin_token" \
+  --header "x-crownfi-web-token: $web_token" \
   --header "x-crownfi-user-id: $owner_id" \
   --header 'idempotency-key: market-smoke-denied' \
   --data "$stake_body")
@@ -236,14 +235,14 @@ admin_post \
 curl --fail --silent --show-error \
   --request POST "http://127.0.0.1:8080/internal/markets/$market_id/stake-intents" \
   --header 'content-type: application/json' \
-  --header "x-admin-demo-token: $admin_token" \
+  --header "x-crownfi-web-token: $web_token" \
   --header "x-crownfi-user-id: $owner_id" \
   --header 'idempotency-key: market-smoke-1' \
   --data "$stake_body" >"$evidence_dir/stake-intent-first.json"
 curl --fail --silent --show-error \
   --request POST "http://127.0.0.1:8080/internal/markets/$market_id/stake-intents" \
   --header 'content-type: application/json' \
-  --header "x-admin-demo-token: $admin_token" \
+  --header "x-crownfi-web-token: $web_token" \
   --header "x-crownfi-user-id: $owner_id" \
   --header 'idempotency-key: market-smoke-1' \
   --data "$stake_body" >"$evidence_dir/stake-intent-replay.json"
@@ -258,8 +257,7 @@ if [[ "$foreign_intent_status" != "404" ]]; then
   echo "Expected another tenant to receive concealed 404 for the stake intent, got $foreign_intent_status" >&2
   exit 1
 fi
-printf '%s
-' "$foreign_intent_status" >"$evidence_dir/foreign-intent-read-status.txt"
+printf '%s\n' "$foreign_intent_status" >"$evidence_dir/foreign-intent-read-status.txt"
 replay_intent_id=$(json_field "$evidence_dir/stake-intent-replay.json" id)
 if [[ "$intent_id" != "$replay_intent_id" ]]; then
   echo "Exact stake-intent replay created a different intent" >&2
@@ -271,7 +269,7 @@ changed_status=$(curl --silent --show-error \
   --write-out '%{http_code}' \
   --request POST "http://127.0.0.1:8080/internal/markets/$market_id/stake-intents" \
   --header 'content-type: application/json' \
-  --header "x-admin-demo-token: $admin_token" \
+  --header "x-crownfi-web-token: $web_token" \
   --header "x-crownfi-user-id: $owner_id" \
   --header 'idempotency-key: market-smoke-1' \
   --data "{\"outcome_id\":\"$yes_outcome_id\",\"wallet_address\":\"$wallet_address\",\"amount_minor\":3000}")
