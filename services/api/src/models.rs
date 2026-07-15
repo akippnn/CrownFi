@@ -91,3 +91,46 @@ pub struct VerifyResponse {
     pub snapshot: Snapshot,
     pub message: String,
 }
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PredictionMarketProjection {
+    pub id: String,
+    pub event_id: String,
+    pub question: String,
+    pub options: Vec<String>,
+    pub option_pools: Vec<i128>,
+    pub total_pool: i128,
+    pub closes_at_unix: u64,
+    pub status: String,
+    pub winning_option: Option<u32>,
+    pub contract_id: Option<String>,
+    pub ledger_sequence: Option<u32>,
+    pub source: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CreateStakeIntentRequest {
+    pub wallet_address: String,
+    pub option: u32,
+    pub amount: i128,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MarketTransactionIntent {
+    pub id: String,
+    pub market_id: String,
+    pub wallet_address: String,
+    pub option: u32,
+    pub amount: i128,
+    pub idempotency_key: String,
+    pub status: String,
+    pub created_at_unix: u64,
+    pub expires_at_unix: u64,
+    pub submitted_tx_hash: Option<String>,
+    pub network: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SubmitMarketIntentRequest {
+    pub tx_hash: String,
+}

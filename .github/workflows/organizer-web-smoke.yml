@@ -1,0 +1,41 @@
+name: Organizer web write smoke
+
+on:
+  pull_request:
+    paths:
+      - "web/**"
+      - "services/api/**"
+      - "infra/**"
+      - "scripts/acceptance/organizer-web-smoke.sh"
+      - ".github/workflows/organizer-web-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: organizer-web-smoke-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  organizer-web-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Run organizer write flow
+        env:
+          CROWNFI_ORGANIZER_WEB_SMOKE_TIMEOUT_SECONDS: "1500"
+        run: bash scripts/acceptance/organizer-web-smoke.sh
+      - name: Upload organizer evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crownfi-organizer-web-smoke
+          path: .artifacts/acceptance/organizer-web
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7

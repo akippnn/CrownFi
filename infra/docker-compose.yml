@@ -10,7 +10,7 @@ services:
     volumes:
       - crownfi_postgres:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U crownfi -d crownfi"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -23,41 +23,75 @@ services:
       timeout: 5s
       retries: 10
 
+  db-init:
+    build:
+      context: ..
+      dockerfile: services/api/Dockerfile
+    command: ["crownfi-api", "migrate"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      CROWNFI_DATABASE_REQUIRED: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  legacy-db-init:
+    build:
+      context: ..
+      dockerfile: web/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=legacy
+      DIRECT_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=legacy
+    command: ["sh", "-c", "npx prisma db push && npm run seed"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   api:
     build:
       context: ..
       dockerfile: services/api/Dockerfile
     environment:
       CROWNFI_API_BIND: 0.0.0.0:8080
-      CROWNFI_API_MODE: ${CROWNFI_API_MODE:-testnet}
-      STELLAR_MODE: ${STELLAR_MODE:-mock}
-      STELLAR_PLATFORM_SECRET: ${STELLAR_PLATFORM_SECRET}
-      AUDIT_ANCHOR_CONTRACT_ID: ${AUDIT_ANCHOR_CONTRACT_ID}
-      TICKET_CONTRACT_ID: ${TICKET_CONTRACT_ID}
-      COLLECTIBLE_CONTRACT_ID: ${COLLECTIBLE_CONTRACT_ID}
-      SALE_SPLITTER_CONTRACT_ID: ${SALE_SPLITTER_CONTRACT_ID}
-      USDC_TEST_CONTRACT_ID: ${USDC_TEST_CONTRACT_ID}
-      DEMO_CONTESTANT_PAYOUT: ${DEMO_CONTESTANT_PAYOUT}
-      EVENT_TREASURY_PAYOUT: ${EVENT_TREASURY_PAYOUT}
+      CROWNFI_API_MODE: ${CROWNFI_API_MODE:-local}
+      CROWNFI_DATABASE_REQUIRED: "true"
+      CROWNFI_DATABASE_MAX_CONNECTIONS: ${CROWNFI_DATABASE_MAX_CONNECTIONS:-10}
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       REDIS_URL: redis://redis:6379
+      ADMIN_DEMO_TOKEN: ${ADMIN_DEMO_TOKEN:-local-admin-demo-token}
+      CROWNFI_PAYOUT_WORKER_TOKEN: ${CROWNFI_PAYOUT_WORKER_TOKEN:-}
+      R2_ENDPOINT: ${R2_ENDPOINT:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_BUCKET: ${R2_BUCKET:-}
+      R2_PUBLIC_BASE_URL: ${R2_PUBLIC_BASE_URL:-}
+      R2_UPLOAD_TTL_SECONDS: ${R2_UPLOAD_TTL_SECONDS:-300}
+      R2_MAX_IMAGE_BYTES: ${R2_MAX_IMAGE_BYTES:-15728640}
+      STELLAR_MODE: ${STELLAR_MODE:-mock}
+      STELLAR_PLATFORM_SECRET: ${STELLAR_PLATFORM_SECRET:-}
+      AUDIT_ANCHOR_CONTRACT_ID: ${AUDIT_ANCHOR_CONTRACT_ID:-}
+      TICKET_CONTRACT_ID: ${TICKET_CONTRACT_ID:-}
+      COLLECTIBLE_CONTRACT_ID: ${COLLECTIBLE_CONTRACT_ID:-}
+      SALE_SPLITTER_CONTRACT_ID: ${SALE_SPLITTER_CONTRACT_ID:-}
+      USDC_TEST_CONTRACT_ID: ${USDC_TEST_CONTRACT_ID:-}
+      DEMO_CONTESTANT_PAYOUT: ${DEMO_CONTESTANT_PAYOUT:-}
+      EVENT_TREASURY_PAYOUT: ${EVENT_TREASURY_PAYOUT:-}
+    ports:
+      - "127.0.0.1:8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-
-  db-init:
-    build:
-      context: ..
-      dockerfile: web/Dockerfile
-    environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      DIRECT_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-    command: ["sh", "-c", "npx prisma db push && npm run seed"]
-    depends_on:
-      postgres:
-        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
   web:
     build:
@@ -65,18 +99,24 @@ services:
       dockerfile: web/Dockerfile
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      DIRECT_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      CROWNFI_API_MODE: ${CROWNFI_API_MODE:-local}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=legacy
+      DIRECT_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=legacy
+      CROWNFI_API_INTERNAL_URL: http://api:8080
+      NEXT_PUBLIC_API_BASE_URL: http://api:8080
+      CROWNFI_API_ADMIN_TOKEN: ${ADMIN_DEMO_TOKEN:-local-admin-demo-token}
+      CROWNFI_ORGANIZER_REVIEW_ENABLED: ${CROWNFI_ORGANIZER_REVIEW_ENABLED:-false}
+      CROWNFI_ORGANIZER_ACTOR_USER_ID: ${CROWNFI_ORGANIZER_ACTOR_USER_ID:-}
       STELLAR_MODE: ${STELLAR_MODE:-mock}
       WALLET_PROVIDER: ${WALLET_PROVIDER:-mock}
-      STELLAR_PLATFORM_SECRET: ${STELLAR_PLATFORM_SECRET}
-      AUDIT_ANCHOR_CONTRACT_ID: ${AUDIT_ANCHOR_CONTRACT_ID}
-      TICKET_CONTRACT_ID: ${TICKET_CONTRACT_ID}
-      COLLECTIBLE_CONTRACT_ID: ${COLLECTIBLE_CONTRACT_ID}
-      SALE_SPLITTER_CONTRACT_ID: ${SALE_SPLITTER_CONTRACT_ID}
-      USDC_TEST_CONTRACT_ID: ${USDC_TEST_CONTRACT_ID}
-      DEMO_CONTESTANT_PAYOUT: ${DEMO_CONTESTANT_PAYOUT}
-      EVENT_TREASURY_PAYOUT: ${EVENT_TREASURY_PAYOUT}
+      STELLAR_PLATFORM_SECRET: ${STELLAR_PLATFORM_SECRET:-}
+      AUDIT_ANCHOR_CONTRACT_ID: ${AUDIT_ANCHOR_CONTRACT_ID:-}
+      TICKET_CONTRACT_ID: ${TICKET_CONTRACT_ID:-}
+      COLLECTIBLE_CONTRACT_ID: ${COLLECTIBLE_CONTRACT_ID:-}
+      SALE_SPLITTER_CONTRACT_ID: ${SALE_SPLITTER_CONTRACT_ID:-}
+      USDC_TEST_CONTRACT_ID: ${USDC_TEST_CONTRACT_ID:-}
+      DEMO_CONTESTANT_PAYOUT: ${DEMO_CONTESTANT_PAYOUT:-}
+      EVENT_TREASURY_PAYOUT: ${EVENT_TREASURY_PAYOUT:-}
       NEXT_PUBLIC_STELLAR_NETWORK: testnet
       NEXT_PUBLIC_STELLAR_NETWORK_PASSPHRASE: Test SDF Network ; September 2015
       ADMIN_WALLETS: ""
@@ -87,10 +127,17 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      api:
-        condition: service_started
       db-init:
         condition: service_completed_successfully
+      legacy-db-init:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
 volumes:
   crownfi_postgres:
