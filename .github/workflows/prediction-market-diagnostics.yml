@@ -1,0 +1,91 @@
+name: Prediction market diagnostics
+
+on:
+  pull_request:
+    paths:
+      - "services/api/**"
+      - "contracts/prediction-market/**"
+      - ".github/workflows/prediction-market-diagnostics.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostics:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: crownfi
+          POSTGRES_USER: crownfi
+          POSTGRES_PASSWORD: crownfi-diagnostics-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U crownfi -d crownfi"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://crownfi:crownfi-diagnostics-only@127.0.0.1:5432/crownfi
+      CROWNFI_DATABASE_REQUIRED: "true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Setup Rust stable
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt
+          rustup default stable
+      - name: Capture API test output
+        continue-on-error: true
+        working-directory: services/api
+        run: |
+          set +e
+          cargo fmt -- --check > api-diagnostics.log 2>&1
+          format_status=$?
+          cargo test --locked >> api-diagnostics.log 2>&1
+          test_status=$?
+          printf '%s:%s\n' "$format_status" "$test_status" > api-diagnostics.status
+          exit $(( format_status != 0 || test_status != 0 ))
+      - name: Capture migration output
+        continue-on-error: true
+        working-directory: services/api
+        run: |
+          set +e
+          cargo run --locked -- migrate > migration-diagnostics.log 2>&1
+          status=$?
+          printf '%s\n' "$status" > migration-diagnostics.status
+          exit "$status"
+      - name: Capture prediction contract output
+        continue-on-error: true
+        working-directory: contracts
+        run: |
+          set +e
+          cargo test --manifest-path prediction-market/Cargo.toml --locked > prediction-contract-diagnostics.log 2>&1
+          status=$?
+          printf '%s\n' "$status" > prediction-contract-diagnostics.status
+          exit "$status"
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crownfi-prediction-market-diagnostics
+          path: |
+            services/api/api-diagnostics.log
+            services/api/api-diagnostics.status
+            services/api/migration-diagnostics.log
+            services/api/migration-diagnostics.status
+            contracts/prediction-contract-diagnostics.log
+            contracts/prediction-contract-diagnostics.status
+          if-no-files-found: error
+          retention-days: 3
+      - name: Require diagnostics success
+        if: always()
+        run: |
+          test "$(cat services/api/api-diagnostics.status)" = "0:0"
+          test "$(cat services/api/migration-diagnostics.status)" = "0"
+          test "$(cat contracts/prediction-contract-diagnostics.status)" = "0"
