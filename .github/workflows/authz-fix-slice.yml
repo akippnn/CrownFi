@@ -1,0 +1,39 @@
+name: One-shot authorization slice fix
+
+on:
+  push:
+    branches:
+      - fix/authorization-acl-v1
+    paths:
+      - .github/workflows/authz-fix-slice.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: fix/authorization-acl-v1
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Patch slice comparisons
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('services/api/src/authorization_acl.rs')
+          text = path.read_text()
+          text = text.replace('segments.as_slice() ==', 'segments ==')
+          path.write_text(text)
+          PY
+          cargo fmt --manifest-path services/api/Cargo.toml
+      - name: Commit patch
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add services/api/src/authorization_acl.rs
+          git commit -m "fix(authz): compare route slices without unstable API"
+          git push origin HEAD:fix/authorization-acl-v1
