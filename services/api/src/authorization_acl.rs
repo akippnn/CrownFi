@@ -302,7 +302,7 @@ async fn classify_request(
         return Ok(RequestClass::Public);
     }
 
-    if segments.as_slice() == ["internal", "identity", "challenges"] && method == &Method::POST {
+    if segments == ["internal", "identity", "challenges"] && method == &Method::POST {
         let requested_user_id = body_uuid(body, "requested_user_id");
         let link = body_string(body, "purpose").as_deref() == Some("link");
         return Ok(RequestClass::TokenOnly(TokenGate {
@@ -329,7 +329,7 @@ async fn classify_request(
         }));
     }
 
-    if segments.as_slice() == ["internal", "setup", "complete"] && method == &Method::POST {
+    if segments == ["internal", "setup", "complete"] && method == &Method::POST {
         return Ok(RequestClass::TokenOnly(TokenGate {
             transport: Transport::WebInternal,
             actor_required: true,
@@ -338,7 +338,7 @@ async fn classify_request(
         }));
     }
 
-    if segments.as_slice() == ["admin", "platform", "bootstrap"] && method == &Method::POST {
+    if segments == ["admin", "platform", "bootstrap"] && method == &Method::POST {
         return Ok(RequestClass::TokenOnly(TokenGate {
             transport: Transport::AdminApi,
             actor_required: false,
@@ -393,7 +393,7 @@ async fn classify_internal(
         ));
     }
 
-    if segments.as_slice() == ["internal", "site-settings"] {
+    if segments == ["internal", "site-settings"] {
         let capability = if method == &Method::GET {
             Capability::SiteSettingsRead
         } else if method == &Method::PATCH {
@@ -458,7 +458,7 @@ async fn classify_internal(
         ));
     }
 
-    if segments.as_slice() == ["internal", "manage", "pageants"] && method == &Method::POST {
+    if segments == ["internal", "manage", "pageants"] && method == &Method::POST {
         let organization_id = required_body_uuid(body, "organization_id")?;
         return Ok(protected_web(
             Capability::PageantWrite,
@@ -471,7 +471,7 @@ async fn classify_internal(
         ));
     }
 
-    if segments.as_slice() == ["internal", "manage", "categories"] && method == &Method::POST {
+    if segments == ["internal", "manage", "categories"] && method == &Method::POST {
         let pageant_id = required_body_uuid(body, "pageant_id")?;
         let organization_id = organization_for_pageant(pool, pageant_id).await?;
         return Ok(protected_web(
@@ -485,7 +485,7 @@ async fn classify_internal(
         ));
     }
 
-    if segments.as_slice() == ["internal", "manage", "contestants"] && method == &Method::POST {
+    if segments == ["internal", "manage", "contestants"] && method == &Method::POST {
         let pageant_id = required_body_uuid(body, "pageant_id")?;
         let organization_id = organization_for_pageant(pool, pageant_id).await?;
         return Ok(protected_web(
@@ -499,9 +499,7 @@ async fn classify_internal(
         ));
     }
 
-    if segments.as_slice() == ["internal", "manage", "seed-miss-stellarverse"]
-        && method == &Method::POST
-    {
+    if segments == ["internal", "manage", "seed-miss-stellarverse"] && method == &Method::POST {
         let scope = match body_uuid(body, "organization_id") {
             Some(organization_id) => ScopeSource::Resolved(Scope::organization(
                 organization_id,
