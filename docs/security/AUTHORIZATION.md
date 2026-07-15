@@ -37,7 +37,7 @@ Authorization decisions are recorded in the append-only `authorization_decisions
 
 ## Current migration boundary
 
-The durable internal and administrative platform routes use the centralized capability middleware. The existing in-memory voting and prediction-market proof-of-flow routes remain explicitly classified as legacy until their durable replacements adopt the same boundary. Their presence does not satisfy the full authorization acceptance gate.
+The durable internal and administrative platform routes use the centralized capability middleware. Durable Prediction Market creation, review submission, governance, policy, staking, and stake-intent access now use named capabilities and tenant/resource scopes. The existing in-memory voting intake route remains explicitly classified as legacy until its durable replacement adopts the same boundary.
 
 ## Acceptance
 
