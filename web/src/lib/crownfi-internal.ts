@@ -19,6 +19,34 @@ function internalToken(): string {
   return "local-web-to-api-token-change-before-sharing";
 }
 
+function actorFromBody(body: BodyInit | null | undefined): string | null {
+  if (typeof body !== "string") return null;
+  try {
+    const value = JSON.parse(body);
+    for (const key of ["actor_user_id", "user_id", "requested_user_id"]) {
+      if (typeof value?.[key] === "string" && value[key].trim()) {
+        return value[key].trim();
+      }
+    }
+  } catch {
+    // The API handler remains responsible for malformed JSON responses.
+  }
+  return null;
+}
+
+function actorFromPath(path: string): string | null {
+  const patterns = [
+    /^\/internal\/identity\/users\/([^/?]+)\/?$/,
+    /^\/internal\/manage\/overview\/([^/?]+)\/?$/,
+    /^\/internal\/access\/organizations\/[^/]+\/members\/([^/?]+)\/?$/,
+  ];
+  for (const pattern of patterns) {
+    const match = path.match(pattern);
+    if (match?.[1]) return decodeURIComponent(match[1]);
+  }
+  return null;
+}
+
 export async function crownfiInternalFetch(
   path: string,
   init: RequestInit = {},
@@ -26,6 +54,10 @@ export async function crownfiInternalFetch(
   const headers = new Headers(init.headers);
   headers.set("accept", "application/json");
   headers.set("x-crownfi-web-token", internalToken());
+  if (!headers.has("x-crownfi-user-id")) {
+    const actor = actorFromBody(init.body) ?? actorFromPath(path);
+    if (actor) headers.set("x-crownfi-user-id", actor);
+  }
   if (init.body && !headers.has("content-type")) {
     headers.set("content-type", "application/json");
   }
