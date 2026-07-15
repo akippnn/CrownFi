@@ -1,7 +1,9 @@
 import type { Config } from "tailwindcss";
 
-// CrownFi light theme tokens. White background, gold accent.
+// CrownFi is dark-only for the submission build. The light token palette remains
+// preserved in globals.css for a future explicit theme switch.
 export default {
+  darkMode: "class",
   content: ["./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
