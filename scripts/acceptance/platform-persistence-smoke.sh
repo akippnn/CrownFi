@@ -151,8 +151,8 @@ outsider_status=$(curl --silent --show-error \
   --header "x-admin-demo-token: $admin_token" \
   --header "x-crownfi-user-id: $outsider_id" \
   --data '{"name":"Forbidden Pageant","slug":"forbidden-pageant"}')
-if [[ "$outsider_status" != "403" ]]; then
-  echo "Expected outsider mutation to return 403, got $outsider_status" >&2
+if [[ "$outsider_status" != "404" ]]; then
+  echo "Expected cross-tenant mutation to be concealed as 404, got $outsider_status" >&2
   exit 1
 fi
 printf '%s\n' "$outsider_status" >"$evidence_dir/outsider-status.txt"
