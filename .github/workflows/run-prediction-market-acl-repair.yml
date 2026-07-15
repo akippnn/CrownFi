@@ -31,10 +31,17 @@ jobs:
           marker = "          python3 - <<'PY'\n"
           start = workflow.index(marker) + len(marker)
           end = workflow.index("\n          PY\n", start)
-          program = '\n'.join(
-              line[10:] if line.startswith('          ') else line
-              for line in workflow[start:end].splitlines()
-          ) + '\n'
+          raw_lines = workflow[start:end].splitlines()
+          lines = []
+          in_triple_string = False
+          for raw_line in raw_lines:
+              line = raw_line
+              if not in_triple_string and line.startswith('          '):
+                  line = line[10:]
+              lines.append(line)
+              if line.count('"""') % 2 == 1:
+                  in_triple_string = not in_triple_string
+          program = '\n'.join(lines) + '\n'
           program_path = Path('/tmp/repair_prediction_market_acl.py')
           program_path.write_text(program, encoding='utf-8')
           result = subprocess.run(
