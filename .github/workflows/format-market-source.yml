@@ -1,4 +1,4 @@
-name: Format market source artifact
+name: Auto-format market source
 
 on:
   pull_request:
@@ -8,16 +8,18 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  rustfmt-artifact:
+  rustfmt:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout pull request branch
         uses: actions/checkout@v5
         with:
-          persist-credentials: false
+          ref: ${{ github.head_ref || github.ref_name }}
+          persist-credentials: true
       - name: Setup Rust stable
         run: |
           rustup toolchain install stable --profile minimal --component rustfmt
@@ -25,9 +27,14 @@ jobs:
       - name: Format API source
         working-directory: services/api
         run: cargo fmt
-      - name: Upload formatted market source
-        uses: actions/upload-artifact@v4
-        with:
-          name: crownfi-formatted-market-source
-          path: services/api/src/markets.rs
-          retention-days: 1
+      - name: Commit formatting when needed
+        run: |
+          if git diff --quiet -- services/api/src/markets.rs; then
+            echo "Market source is already formatted."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add services/api/src/markets.rs
+          git commit -m "style(markets): apply rustfmt"
+          git push origin HEAD:${{ github.head_ref || github.ref_name }}
