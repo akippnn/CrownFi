@@ -1,0 +1,41 @@
+name: Stellar chain reconciliation smoke
+
+on:
+  pull_request:
+    paths:
+      - "services/api/**"
+      - "infra/**"
+      - "scripts/acceptance/stellar-chain-reconciliation-smoke.sh"
+      - "scripts/stellar/reconcile-testnet-payment.sh"
+      - ".github/workflows/stellar-chain-reconciliation-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stellar-reconciliation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  stellar-chain-reconciliation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Run offline chain-evidence reconciliation validation
+        env:
+          CROWNFI_STELLAR_RECONCILIATION_TIMEOUT_SECONDS: "1500"
+        run: bash scripts/acceptance/stellar-chain-reconciliation-smoke.sh
+      - name: Upload reconciliation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crownfi-stellar-chain-reconciliation
+          path: .artifacts/acceptance/stellar-chain-reconciliation
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7

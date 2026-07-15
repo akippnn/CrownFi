@@ -1,0 +1,41 @@
+name: Payout reconciliation smoke
+
+on:
+  pull_request:
+    paths:
+      - "services/api/**"
+      - "infra/**"
+      - "scripts/acceptance/payout-reconciliation-smoke.sh"
+      - ".github/workflows/payout-reconciliation-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: payout-reconciliation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  payout-reconciliation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Run deterministic payout reconciliation flow
+        env:
+          CROWNFI_PAYOUT_TIMEOUT_SECONDS: "1500"
+          CROWNFI_PAYOUT_WORKER_TOKEN: local-payout-worker-token
+        run: bash scripts/acceptance/payout-reconciliation-smoke.sh
+      - name: Upload payout evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crownfi-payout-reconciliation
+          path: .artifacts/acceptance/payout-reconciliation
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7

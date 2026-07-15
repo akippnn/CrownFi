@@ -1,0 +1,82 @@
+name: Deploy unified CrownFi through Arcturus
+
+on:
+  push:
+    branches: [integration/platform-v1]
+  workflow_dispatch:
+    inputs:
+      acceptance:
+        description: Run the expected-502 automatic rollback probe after deployment
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: crownfi-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.repository == 'akippnn/CrownFi' && github.ref == 'refs/heads/integration/platform-v1'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    environment:
+      name: crownfi-production
+      url: https://crownfi.u128.org
+    env:
+      ARCTURUS_REGISTRY_HOST: git.u128.org
+    steps:
+      - name: Checkout immutable revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Verify unified deployment ref
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "akippnn/CrownFi"
+          test "$GITHUB_REF" = "refs/heads/integration/platform-v1"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+
+      - name: Join the deployment tailnet
+        uses: tailscale/github-action@6cae46e2d796f265265cfcf628b72a32b4d7cade # v3.3.0
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:crownfi-ci
+          version: 1.98.9
+          sha256sum: 11be30ad301d48f84ff52fec34f8a2f78eb3e3dee1be4e9624d19fccc8df5540
+          hostname: crownfi-gh-${{ github.run_id }}
+          targets: 100.108.225.27
+          timeout: 2m
+          retry: 3
+          use-cache: "false"
+
+      - name: Install isolated image builder
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends buildah fuse-overlayfs
+          buildah version
+          buildah info >/dev/null
+
+      - name: Build, publish, deploy, and verify immutable release
+        shell: bash
+        env:
+          REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
+          REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
+          ARCTURUS_DEPLOY_TOKEN: ${{ secrets.ARCTURUS_DEPLOY_TOKEN }}
+        run: |
+          set -euo pipefail
+          args=("$GITHUB_SHA")
+          if [[ "${{ inputs.acceptance }}" == "true" ]]; then
+            args+=(--acceptance)
+          fi
+          ./scripts/arcturus-ci "${args[@]}"

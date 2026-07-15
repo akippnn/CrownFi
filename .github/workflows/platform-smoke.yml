@@ -1,0 +1,44 @@
+name: Platform clean-clone smoke
+
+on:
+  pull_request:
+    branches: [main, integration/platform-v1]
+    paths:
+      - "infra/**"
+      - "services/api/**"
+      - "web/**"
+      - "scripts/acceptance/**"
+      - ".github/workflows/platform-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: platform-smoke-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  clean-clone-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Run canonical platform smoke test
+        env:
+          CROWNFI_SMOKE_CLEANUP: "1"
+          CROWNFI_SMOKE_TIMEOUT_SECONDS: "600"
+        run: bash scripts/acceptance/clean-clone-smoke.sh
+
+      - name: Upload smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crownfi-clean-clone-smoke
+          path: .artifacts/acceptance/clean-clone
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7

@@ -1,129 +1,153 @@
-# Local MVP testing path
+# Local MVP compatibility testing
 
-This document defines the minimum path CrownFi must pass before the platform architecture refactor is considered demoable.
+This document covers the **prototype behavior check** for the transitional Rust API. The canonical clean-clone/platform test is [`clean-clone.md`](clean-clone.md) and should be run first.
 
-The current branch adds a Rust/Axum API skeleton and Docker Compose infra while keeping the existing Next.js app intact. This avoids a big-bang rewrite.
+The routes below use seeded process-local fixtures. Passing them proves that the current Rust skeleton still behaves as expected; it does not prove database durability, multi-pageant support, or live Stellar settlement.
 
-## Goal
+## Start the canonical local stack
 
-A local developer should be able to prove that the platform path works:
-
-1. Start Postgres and Redis.
-2. Start the Rust API.
-3. Verify API health.
-4. Submit a mock vote.
-5. Confirm duplicate vote rejection.
-6. Create a tally snapshot.
-7. Anchor the snapshot in mock mode.
-8. Start the web app.
-9. Continue using the existing web MVP while API migration proceeds.
-
-## Quick path: local services only
-
-From repo root:
+From the repository root:
 
 ```bash
-docker compose -f infra/docker-compose.yml up -d postgres redis
+cp infra/.env.example infra/.env
+
+docker compose \
+  --env-file infra/.env \
+  -f infra/docker-compose.yml \
+  up --build --detach
 ```
 
-Start the Rust API locally:
+Or run the evidence-producing smoke script:
 
 ```bash
-cd services/api
-CROWNFI_API_BIND=127.0.0.1:8080 \
-DATABASE_URL=postgresql://crownfi:crownfi@localhost:5432/crownfi \
-REDIS_URL=redis://localhost:6379 \
-ADMIN_DEMO_TOKEN=local-admin-demo-token \
-STELLAR_MODE=mock \
-cargo run
+bash scripts/acceptance/clean-clone-smoke.sh
 ```
 
-In another terminal:
+Expected host endpoints:
+
+- Web: `http://127.0.0.1:3000`
+- Web health: `http://127.0.0.1:3000/api/health`
+- Rust API: `http://127.0.0.1:8080`
+- API health: `http://127.0.0.1:8080/health`
+- API readiness: `http://127.0.0.1:8080/ready`
+
+PostgreSQL and Redis are intentionally internal to the Compose network in this path. Check them through Compose rather than assuming host ports `5432` and `6379` are published.
 
 ```bash
-curl http://localhost:8080/health
-curl http://localhost:8080/ready
-curl http://localhost:8080/events
+docker compose --env-file infra/.env -f infra/docker-compose.yml \
+  exec -T postgres sh -c 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+
+docker compose --env-file infra/.env -f infra/docker-compose.yml \
+  exec -T redis redis-cli ping
+```
+
+## Check API health
+
+```bash
+curl --fail http://127.0.0.1:8080/health
+curl --fail http://127.0.0.1:8080/ready
+curl --fail http://127.0.0.1:8080/events
+```
+
+The readiness endpoint currently reports configuration presence. PostgreSQL and Redis connectivity are checked independently by their Compose health checks until SQLx/Redis clients are added in Milestone B.
+
+## Exercise the seeded voting prototype
+
+The following IDs are temporary local fixtures, not platform data:
+
+```text
+event: coronation-night-2026
+category: fan-choice
+contestant: phl
 ```
 
 Submit a vote:
 
 ```bash
-curl -sS -X POST http://localhost:8080/events/coronation-night-2026/vote \
-  -H 'content-type: application/json' \
-  -d '{"category_id":"fan-choice","voter_id":"demo-voter-1","contestant_id":"phl"}'
+curl --fail-with-body --silent --show-error \
+  --request POST \
+  http://127.0.0.1:8080/events/coronation-night-2026/vote \
+  --header 'content-type: application/json' \
+  --data '{"category_id":"fan-choice","voter_id":"demo-voter-1","contestant_id":"phl"}'
 ```
 
-Submit the same vote again. Expected result: `duplicate_vote` with HTTP 409.
+Submit the same vote again. Expected result: HTTP `409` with `duplicate_vote`.
 
 ```bash
-curl -i -X POST http://localhost:8080/events/coronation-night-2026/vote \
-  -H 'content-type: application/json' \
-  -d '{"category_id":"fan-choice","voter_id":"demo-voter-1","contestant_id":"phl"}'
+curl --include --silent --show-error \
+  --request POST \
+  http://127.0.0.1:8080/events/coronation-night-2026/vote \
+  --header 'content-type: application/json' \
+  --data '{"category_id":"fan-choice","voter_id":"demo-voter-1","contestant_id":"phl"}'
 ```
 
 Read the tally:
 
 ```bash
-curl http://localhost:8080/events/coronation-night-2026/tally
+curl --fail http://127.0.0.1:8080/events/coronation-night-2026/tally
 ```
 
 Create a snapshot:
 
 ```bash
-curl -sS -X POST http://localhost:8080/admin/events/coronation-night-2026/snapshot \
-  -H 'content-type: application/json' \
-  -H 'x-admin-demo-token: local-admin-demo-token' \
-  -d '{"category_id":"fan-choice"}'
+curl --fail-with-body --silent --show-error \
+  --request POST \
+  http://127.0.0.1:8080/admin/events/coronation-night-2026/snapshot \
+  --header 'content-type: application/json' \
+  --header 'x-admin-demo-token: local-admin-demo-token' \
+  --data '{"category_id":"fan-choice"}'
 ```
 
-Anchor the snapshot using the `id` returned from the previous command:
+Use the returned snapshot ID:
 
 ```bash
 SNAPSHOT_ID="paste-snapshot-id-here"
 
-curl -sS -X POST "http://localhost:8080/admin/snapshots/$SNAPSHOT_ID/anchor" \
-  -H 'x-admin-demo-token: local-admin-demo-token'
+curl --fail-with-body --silent --show-error \
+  --request POST \
+  "http://127.0.0.1:8080/admin/snapshots/$SNAPSHOT_ID/anchor" \
+  --header 'x-admin-demo-token: local-admin-demo-token'
 
-curl "http://localhost:8080/snapshots/$SNAPSHOT_ID/verify"
+curl --fail "http://127.0.0.1:8080/snapshots/$SNAPSHOT_ID/verify"
 ```
 
-## Web app checks
+In the default local profile, the anchor is simulated. It must not be presented as a real Stellar transaction and will not exist in Stellar Explorer.
 
-The current web app still runs from `web/`.
+## Restart test
+
+Restart the API:
+
+```bash
+docker compose --env-file infra/.env -f infra/docker-compose.yml restart api
+```
+
+The seeded event returns, but submitted votes, tallies, snapshots, and transaction intents are lost because they remain process-local. That loss is an expected **failure of durability** and is the primary reason Milestone B is required.
+
+## Web checks
+
+```bash
+curl --fail http://127.0.0.1:3000/api/health
+```
+
+Then open `http://127.0.0.1:3000` and use browser DevTools to check for fatal console errors, failed requests, and obsolete API calls.
+
+For local source checks without Compose:
 
 ```bash
 cd web
 npm ci
-npx prisma generate
 npm run typecheck
 npm run test:merkle
-npm run dev
+npm run test:ticketing
+npm run build
 ```
 
-Open:
-
-```text
-http://localhost:3000
-```
-
-## Docker Compose path
-
-This branch also includes a full Compose file:
+## Stop the stack
 
 ```bash
-docker compose -f infra/docker-compose.yml up --build
+docker compose --env-file infra/.env -f infra/docker-compose.yml down
 ```
 
-Expected ports:
+## Interpretation
 
-- Web: `http://localhost:3000`
-- Rust API: `http://localhost:8080`
-- Postgres: `localhost:5432`
-- Redis: `localhost:6379`
-
-## Current limitation
-
-The Rust API currently uses in-memory state for voting/tally/snapshot proof-of-flow. Postgres and Redis are included in the compose topology so the next phase can replace in-memory state with persistent storage and Redis-backed rate limiting.
-
-Do not present the Rust API as the final backend yet. It is the working skeleton that lets the team migrate safely.
+This compatibility test passes when the current seeded skeleton behaves consistently. CrownFi does **not** pass the durable platform acceptance gate until organizations, pageants, contestants, votes, snapshots, and intents are stored through canonical Rust/PostgreSQL repositories and survive restart.

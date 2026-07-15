@@ -1,10 +1,26 @@
+mod access;
 mod app;
+mod authorization_acl;
+mod commerce;
 mod config;
+mod database;
 mod error;
+mod fulfillment;
+mod identity;
+mod manage;
+mod markets;
+mod media;
 mod models;
+mod orders;
+mod payouts;
+mod platform;
+mod seed;
 mod state;
+mod stellar_intents;
+mod stellar_reconciliation;
+mod storage;
 
-use std::net::SocketAddr;
+use std::{io, net::SocketAddr};
 
 use app::router;
 use config::Config;
@@ -23,9 +39,67 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     let config = Config::from_env();
+    let mut args = std::env::args().skip(1);
+    let command = args.next().unwrap_or_else(|| "serve".to_string());
+
+    match command.as_str() {
+        "migrate" => {
+            database::migrate(&config).await?;
+            tracing::info!("SQLx migrations applied successfully");
+            return Ok(());
+        }
+        "seed" => {
+            let profile = args.next().ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "seed profile is required; expected: crownfi-api seed demo",
+                )
+            })?;
+            if profile != "demo" {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("unknown seed profile: {profile}; expected demo"),
+                )
+                .into());
+            }
+            seed::seed_demo(&config).await?;
+            tracing::info!(
+                profile = "demo",
+                "explicit CrownFi seed applied successfully"
+            );
+            return Ok(());
+        }
+        "serve" => {}
+        _ => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "unknown crownfi-api command: {command}; expected serve, migrate, or seed demo"
+                ),
+            )
+            .into());
+        }
+    }
+
     let addr: SocketAddr = config.bind_addr.parse()?;
-    let state = AppState::new(config);
-    let app = router(state);
+    let state = AppState::new(config).await?;
+    let app = router(state.clone())
+        .merge(identity::router().with_state(state.clone()))
+        .merge(access::router().with_state(state.clone()))
+        .merge(manage::router().with_state(state.clone()))
+        .merge(markets::router().with_state(state.clone()))
+        .merge(platform::router().with_state(state.clone()))
+        .merge(media::router().with_state(state.clone()))
+        .merge(commerce::router().with_state(state.clone()))
+        .merge(orders::router().with_state(state.clone()))
+        .merge(stellar_intents::router().with_state(state.clone()))
+        .merge(stellar_reconciliation::router().with_state(state.clone()))
+        .merge(fulfillment::router().with_state(state.clone()))
+        .merge(payouts::router().with_state(state.clone()))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            authorization_acl::enforce,
+        ));
 
     tracing::info!(%addr, "starting CrownFi API");
     let listener = TcpListener::bind(addr).await?;

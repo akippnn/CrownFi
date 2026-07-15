@@ -1,0 +1,41 @@
+name: Persistent platform web smoke
+
+on:
+  pull_request:
+    paths:
+      - "web/**"
+      - "services/api/**"
+      - "infra/**"
+      - "scripts/acceptance/platform-web-smoke.sh"
+      - ".github/workflows/platform-web-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: platform-web-smoke-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  platform-web-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Run persistent platform rendering flow
+        env:
+          CROWNFI_PLATFORM_WEB_SMOKE_TIMEOUT_SECONDS: "1500"
+        run: bash scripts/acceptance/platform-web-smoke.sh
+      - name: Upload platform web evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crownfi-platform-web-smoke
+          path: .artifacts/acceptance/platform-web
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7

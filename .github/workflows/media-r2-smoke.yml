@@ -1,0 +1,39 @@
+name: R2-compatible media smoke
+
+on:
+  pull_request:
+    branches: [integration/platform-v1]
+    paths:
+      - "services/api/**"
+      - "infra/**"
+      - "scripts/acceptance/media-r2-smoke.sh"
+      - ".github/workflows/media-r2-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: media-r2-smoke-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  media-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Run R2-compatible media lifecycle
+        env:
+          CROWNFI_MEDIA_SMOKE_TIMEOUT_SECONDS: "900"
+        run: bash scripts/acceptance/media-r2-smoke.sh
+      - name: Upload media evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crownfi-media-r2-smoke
+          path: .artifacts/acceptance/media-r2
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7
