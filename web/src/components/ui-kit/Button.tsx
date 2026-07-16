@@ -6,12 +6,12 @@ import type { Size } from "./types";
 type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "embossed";
 
 const base =
-  "inline-flex items-center justify-center gap-2.5 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-soft disabled:pointer-events-none disabled:opacity-45";
+  "inline-flex items-center justify-center gap-2.5 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-soft disabled:pointer-events-none disabled:opacity-45 motion-reduce:transform-none motion-reduce:transition-none";
 
 const sizes: Record<Size, string> = {
-  sm: "h-[36px] px-4 text-xs font-display font-semibold rounded-xl",
-  md: "h-[44px] px-6 text-sm font-display font-semibold rounded-2xl",
-  lg: "h-[52px] px-8 text-base font-display font-bold rounded-2xl",
+  sm: "min-h-10 px-4 py-2 text-xs font-display font-semibold rounded-xl",
+  md: "min-h-11 px-6 py-2.5 text-sm font-display font-semibold rounded-2xl",
+  lg: "min-h-[52px] px-8 py-3 text-base font-display font-bold rounded-2xl",
 };
 
 const variants: Record<ButtonVariant, string> = {
