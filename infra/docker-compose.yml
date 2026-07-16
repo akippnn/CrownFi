@@ -40,6 +40,7 @@ services:
     build:
       context: ..
       dockerfile: web/Dockerfile
+      target: builder
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=legacy
       DIRECT_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=legacy

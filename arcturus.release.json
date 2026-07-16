@@ -107,7 +107,7 @@
         "restart": "always"
       },
       "db-init": {
-        "image": "git.u128.org/mprojects/stellar-project/web@sha256:c9ba632da4b9d581fee8a0c2ae8434c205cc123b7919eff608a0aa7d1c49f8eb",
+        "image": "git.u128.org/mprojects/stellar-project/api@sha256:d752f702c23b49c2ab71349fbe75f8f31a92f21f228008b21969a299950faff0",
         "containerName": "stellar-project-db-init",
         "mode": "oneshot",
         "command": [
