@@ -1,6 +1,18 @@
 "use client";
 
-import { Link2, ShieldCheck, UserRound, Wallet } from "lucide-react";
+import { Link2, LogOut, ShieldCheck, UserRound, Wallet } from "lucide-react";
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  EmptyState,
+  Notice,
+  PageHeader,
+} from "@/components/ui-kit";
 import { useSession } from "@/session/SessionProvider";
 
 function short(address: string) {
@@ -21,99 +33,134 @@ export default function AccountPage() {
   } = useSession();
 
   if (!ready) {
-    return <div className="rounded-3xl border border-line bg-black/35 p-8 text-gold-soft/55">Loading account…</div>;
+    return <EmptyState title="Loading your account" description="Checking the active session and linked wallets…" />;
   }
 
   if (!account) {
     return (
-      <section className="mx-auto max-w-2xl rounded-[2rem] border border-gold/25 bg-black/40 p-8 text-center sm:p-12">
-        <span className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-gold/10 text-gold"><UserRound size={25} /></span>
-        <h1 className="mt-5 font-display text-3xl font-semibold text-white">Your CrownFi account</h1>
-        <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-gold-soft/55">
-          Sign in by proving ownership of a Freighter wallet. CrownFi creates one persistent account that may hold multiple linked wallets and role memberships.
-        </p>
-        <button onClick={connect} disabled={connecting} className="mt-6 rounded-xl bg-gold px-5 py-3 text-sm font-bold text-black disabled:opacity-50">
-          {connecting ? "Waiting for Freighter…" : "Sign in with Freighter"}
-        </button>
-        {error && <p className="mt-4 text-sm text-red-300">{error}</p>}
-      </section>
+      <div className="mx-auto max-w-2xl">
+        <Card className="border-gold/25">
+          <CardContent className="flex flex-col items-center px-6 py-10 text-center sm:px-10 sm:py-14">
+            <span className="grid h-14 w-14 place-items-center rounded-2xl border border-gold/20 bg-gold/10 text-gold">
+              <UserRound size={25} />
+            </span>
+            <h1 className="mt-5 text-balance font-display text-3xl font-semibold text-white">Your CrownFi account</h1>
+            <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-gold-soft/55">
+              Sign in by proving ownership of a Freighter wallet. CrownFi creates one persistent account that may hold multiple linked wallets and organization roles.
+            </p>
+            <Button onClick={connect} disabled={connecting} className="mt-6 w-full sm:w-auto">
+              {connecting ? "Waiting for Freighter…" : "Sign in with Freighter"}
+            </Button>
+            {error && <Notice tone="danger" className="mt-5 w-full text-left">{error}</Notice>}
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <section className="rounded-[2rem] border border-gold/25 bg-[radial-gradient(circle_at_top_left,rgba(212,175,55,0.16),transparent_45%),rgba(7,7,9,0.94)] p-7 sm:p-10">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-gold-soft/45">CrownFi account</div>
-            <h1 className="mt-2 font-display text-4xl font-semibold text-white">{account.display_name}</h1>
-            <p className="mt-2 text-sm text-gold-soft/55">Account ID {account.id}</p>
-          </div>
-          <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-100/80">
-            <ShieldCheck className="mr-2 inline" size={17} /> Wallet-authenticated session
-          </div>
-        </div>
-      </section>
+    <div className="mx-auto max-w-5xl space-y-5 sm:space-y-6">
+      <PageHeader
+        eyebrow="Identity & access"
+        title={account.display_name}
+        description="Review the account, verified wallets, and organization access that CrownFi uses for server-side authorization."
+        meta={
+          <>
+            <Badge tone="success"><ShieldCheck size={13} /> Wallet-authenticated</Badge>
+            <Badge tone="neutral">Stellar {stellarNetwork === "public" ? "Mainnet" : "Testnet"}</Badge>
+            <Badge tone="gold">{account.site_role || "Public user"}</Badge>
+          </>
+        }
+      />
 
-      <section className="rounded-3xl border border-line bg-black/35 p-6 sm:p-8">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h2 className="font-display text-2xl font-semibold text-white">Linked wallets</h2>
-            <p className="mt-1 text-sm text-gold-soft/50">
-              A wallet can belong to only one CrownFi account per Stellar network. Linking requires a fresh signed message.
-            </p>
-          </div>
-          <button onClick={linkWallet} disabled={connecting} className="rounded-xl border border-gold/30 bg-gold/10 px-4 py-2.5 text-sm font-semibold text-gold-soft disabled:opacity-50">
-            <Link2 className="mr-2 inline" size={16} /> {connecting ? "Waiting…" : "Link another wallet"}
-          </button>
-        </div>
-        <div className="mt-6 grid gap-3">
-          {account.wallets.map((wallet) => (
-            <div key={wallet.id} className="flex flex-col gap-3 rounded-2xl border border-line bg-black/25 p-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-3">
-                <span className="grid h-10 w-10 place-items-center rounded-full bg-gold/10 text-gold"><Wallet size={18} /></span>
-                <div>
-                  <div className="font-mono text-sm text-white" title={wallet.address}>{short(wallet.address)}</div>
-                  <div className="mt-1 text-xs uppercase tracking-[0.14em] text-gold-soft/40">{wallet.network}</div>
-                </div>
-              </div>
-              <div className="flex gap-2 text-[11px] font-semibold uppercase tracking-[0.12em]">
-                {wallet.address === address && <span className="rounded-full bg-emerald-400/10 px-2.5 py-1 text-emerald-200">Current</span>}
-                {wallet.is_primary && <span className="rounded-full bg-gold/10 px-2.5 py-1 text-gold-soft">Primary</span>}
-                {wallet.verified_at && <span className="rounded-full bg-white/5 px-2.5 py-1 text-gold-soft/55">Verified</span>}
-              </div>
+      {error && <Notice tone="danger">{error}</Notice>}
+
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(260px,0.7fr)]">
+        <Card>
+          <CardHeader className="flex-row items-start justify-between gap-4 space-y-0">
+            <div>
+              <CardTitle>Linked wallets</CardTitle>
+              <CardDescription>A wallet can belong to only one CrownFi account per Stellar network. Linking requires a fresh signed message.</CardDescription>
             </div>
-          ))}
-        </div>
-        {error && <p className="mt-4 text-sm text-red-300">{error}</p>}
-      </section>
-
-      <section className="grid gap-4 sm:grid-cols-2">
-        <div className="rounded-3xl border border-line bg-black/35 p-6">
-          <div className="text-xs font-semibold uppercase tracking-[0.15em] text-gold-soft/40">Site role</div>
-          <div className="mt-2 text-lg font-semibold text-white">{account.site_role || "Public user"}</div>
-          <div className="mt-1 text-sm text-gold-soft/50">Current network: {stellarNetwork === "public" ? "Stellar Mainnet" : "Stellar Testnet"}</div>
-        </div>
-        <div className="rounded-3xl border border-line bg-black/35 p-6">
-          <div className="text-xs font-semibold uppercase tracking-[0.15em] text-gold-soft/40">Organization roles</div>
-          {account.organization_roles.length === 0 ? (
-            <div className="mt-2 text-sm text-gold-soft/50">No organizer memberships.</div>
-          ) : (
-            <div className="mt-3 grid gap-2">
-              {account.organization_roles.map((membership) => (
-                <div key={membership.organization_id} className="flex justify-between gap-3 text-sm">
-                  <span className="text-white">{membership.organization_name}</span>
-                  <span className="capitalize text-gold-soft/60">{membership.role === "editor" ? "organizer" : membership.role}</span>
+            <Button size="sm" variant="secondary" onClick={linkWallet} disabled={connecting} className="hidden shrink-0 sm:inline-flex">
+              <Link2 size={16} /> {connecting ? "Waiting…" : "Link wallet"}
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <Button size="sm" variant="secondary" onClick={linkWallet} disabled={connecting} className="mb-4 w-full sm:hidden">
+              <Link2 size={16} /> {connecting ? "Waiting for Freighter…" : "Link another wallet"}
+            </Button>
+            <div className="grid gap-3">
+              {account.wallets.map((wallet) => (
+                <div key={wallet.id} className="rounded-2xl border border-line bg-black/25 p-4">
+                  <div className="flex items-start gap-3">
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-gold/20 bg-gold/10 text-gold">
+                      <Wallet size={18} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-mono text-sm text-white" title={wallet.address}>{short(wallet.address)}</div>
+                      <div className="mt-1 text-xs uppercase tracking-[0.14em] text-gold-soft/40">{wallet.network}</div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {wallet.address === address && <Badge tone="success">Current</Badge>}
+                        {wallet.is_primary && <Badge tone="gold">Primary</Badge>}
+                        {wallet.verified_at && <Badge tone="neutral">Verified</Badge>}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
-          )}
-        </div>
-      </section>
+          </CardContent>
+        </Card>
 
-      <button onClick={disconnect} className="rounded-xl border border-red-400/25 bg-red-400/10 px-4 py-2.5 text-sm font-semibold text-red-200">
-        Sign out of CrownFi
-      </button>
+        <div className="space-y-5">
+          <Card>
+            <CardHeader>
+              <CardTitle>Account details</CardTitle>
+              <CardDescription>Stable identity shared by linked wallets.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <dl className="grid gap-4 text-sm">
+                <div>
+                  <dt className="text-xs uppercase tracking-[0.14em] text-gold-soft/35">Account ID</dt>
+                  <dd className="mt-1 break-all font-mono text-xs text-gold-soft/65">{account.id}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs uppercase tracking-[0.14em] text-gold-soft/35">Site role</dt>
+                  <dd className="mt-1 font-semibold capitalize text-white">{account.site_role || "Public user"}</dd>
+                </div>
+              </dl>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Organization roles</CardTitle>
+              <CardDescription>Roles grant access only inside the named organization.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {account.organization_roles.length === 0 ? (
+                <p className="text-sm leading-6 text-gold-soft/50">No organizer memberships.</p>
+              ) : (
+                <div className="grid gap-3">
+                  {account.organization_roles.map((membership) => (
+                    <div key={membership.organization_id} className="rounded-2xl border border-line bg-black/25 p-3">
+                      <div className="font-semibold text-white">{membership.organization_name}</div>
+                      <Badge tone="gold" className="mt-2 capitalize">{membership.role === "editor" ? "organizer" : membership.role}</Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      <div className="flex justify-end border-t border-line pt-5">
+        <Button variant="danger" onClick={disconnect} className="w-full sm:w-auto">
+          <LogOut size={16} /> Sign out of CrownFi
+        </Button>
+      </div>
     </div>
   );
 }
