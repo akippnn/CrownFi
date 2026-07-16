@@ -23,7 +23,8 @@
       ],
       "releaseTarget": "runtime",
       "components": [
-        "api"
+        "api",
+        "db-init"
       ]
     },
     "web": {
@@ -35,8 +36,7 @@
       ],
       "releaseTarget": "runtime",
       "components": [
-        "web",
-        "db-init"
+        "web"
       ]
     }
   },
