@@ -1,0 +1,47 @@
+name: UI contract checks
+
+on:
+  pull_request:
+    paths:
+      - "web/**"
+      - "docs/ui/**"
+      - ".github/workflows/ui-contract.yml"
+  push:
+    branches: [main, integration/platform-v1]
+    paths:
+      - "web/**"
+      - "docs/ui/**"
+      - ".github/workflows/ui-contract.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ui-contract-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ui-contract:
+    name: UI kit and module contract
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Typecheck web
+        run: npm run typecheck
+      - name: Test UI kit adoption and module boundaries
+        run: npm run test:ui
