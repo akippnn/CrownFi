@@ -13,23 +13,20 @@ COPY web ./
 RUN npx prisma generate
 RUN npm run build
 
-FROM rust:1-bookworm AS api-migrator-builder
-WORKDIR /api
-COPY services/api/Cargo.toml services/api/Cargo.lock ./
-COPY services/api/migrations ./migrations
-COPY services/api/src ./src
-RUN cargo build --release --locked
-
 FROM node:22-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/prisma ./prisma
-COPY --from=api-migrator-builder /api/target/release/crownfi-api /usr/local/bin/crownfi-api
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl \
+  && rm -rf /var/lib/apt/lists/* \
+  && groupadd --gid 1001 crownfi \
+  && useradd --uid 1001 --gid crownfi --system --create-home crownfi
+COPY --from=builder --chown=crownfi:crownfi /app/public ./public
+COPY --from=builder --chown=crownfi:crownfi /app/.next/standalone ./
+COPY --from=builder --chown=crownfi:crownfi /app/.next/static ./.next/static
+USER crownfi
 EXPOSE 3000
-CMD ["npm", "run", "start"]
+CMD ["node", "server.js"]
