@@ -18,6 +18,15 @@ command -v buildah >/dev/null 2>&1 || {
   echo "Buildah is required; application language toolchains are not required on the runner." >&2
   exit 2
 }
+command -v python3 >/dev/null 2>&1 || {
+  echo "Python 3 is required to enforce the pre-push image-size policy." >&2
+  exit 2
+}
+max_image_size_bytes="${ARCTURUS_MAX_IMAGE_SIZE_BYTES:-805306368}"
+[[ "$max_image_size_bytes" =~ ^[1-9][0-9]*$ ]] || {
+  echo "ARCTURUS_MAX_IMAGE_SIZE_BYTES must be a positive integer." >&2
+  exit 2
+}
 
 run_id="${GITHUB_RUN_ID:-${CI_RUN_NUMBER:-$$}}-${GITHUB_RUN_ATTEMPT:-1}"
 work_rel=".arcturus/build/$run_id"
@@ -38,9 +47,26 @@ export ARCTURUS_BUILDAH_ROOT="$graph"
 export ARCTURUS_BUILDAH_RUNROOT="$runroot"
 cleanup() {
   buildah --root "$graph" --runroot "$runroot" rm --all >/dev/null 2>&1 || true
-  rm -rf "$work"
+  buildah unshare rm -rf "$work" >/dev/null 2>&1 || rm -rf "$work" || true
 }
 trap cleanup EXIT INT TERM
+
+image_size_bytes() {
+  local image="$1"
+  buildah --root "$graph" --runroot "$runroot" images --json "$image" |
+    python3 -c '
+import json
+import sys
+rows = json.load(sys.stdin)
+if len(rows) != 1:
+    raise SystemExit(f"expected one local image for {sys.argv[1]}, found {len(rows)}")
+row = rows[0]
+size = row.get("size", row.get("Size"))
+if not isinstance(size, int) or size < 0:
+    raise SystemExit(f"local image size is unavailable for {sys.argv[1]}")
+print(size)
+' "$image"
+}
 
 printf '%s' "$REGISTRY_TOKEN" | buildah --root "$graph" --runroot "$runroot" \
   login --authfile "$authfile" --username "$registry_user" --password-stdin \
@@ -68,11 +94,19 @@ while IFS=$'\t' read -r name repository context containerfile validations releas
   fi
   target_args=()
   [[ "$release_target" == "-" ]] || target_args=(--target "$release_target")
+  image="$repository:$revision"
   buildah --root "$graph" --runroot "$runroot" bud --authfile "$authfile" \
-    --file "$containerfile" "${target_args[@]}" --tag "$repository:$revision" "$context"
+    --file "$containerfile" "${target_args[@]}" --tag "$image" "$context"
+  size_bytes="$(image_size_bytes "$image")"
+  printf 'Built %s: %s bytes; pre-push limit: %s bytes\n' \
+    "$image" "$size_bytes" "$max_image_size_bytes"
+  if (( size_bytes > max_image_size_bytes )); then
+    echo "Refusing to upload oversized image $image ($size_bytes bytes > $max_image_size_bytes bytes)." >&2
+    exit 3
+  fi
   digest_file="$work_rel/$name.digest"
   buildah --root "$graph" --runroot "$runroot" push --authfile "$authfile" \
-    --digestfile "$digest_file" "$repository:$revision" "docker://$repository:$revision"
+    --digestfile "$digest_file" "$image" "docker://$image"
   digest_args+=(--digest "$name=$digest_file")
 done <"$plan"
 
