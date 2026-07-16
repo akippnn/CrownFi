@@ -1,8 +1,21 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Cloud, Crown, LockKeyhole, ShieldCheck, Wallet } from "lucide-react";
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  EmptyState,
+  Notice,
+  PageHeader,
+  TextField,
+} from "@/components/ui-kit";
 import { useSession } from "@/session/SessionProvider";
 
 function slugify(value: string) {
@@ -34,11 +47,6 @@ export default function SetupPage() {
     siteName: "CrownFi",
     organizationName: "",
     organizationSlug: "",
-    stellarNetwork: "testnet",
-    r2Endpoint: "",
-    r2Bucket: "",
-    r2AccessKeyId: "",
-    r2SecretAccessKey: "",
   });
 
   useEffect(() => {
@@ -54,6 +62,11 @@ export default function SetupPage() {
   useEffect(() => {
     if (ready && !setupRequired) router.replace("/manage");
   }, [ready, setupRequired, router]);
+
+  const completedSteps = useMemo(
+    () => [Boolean(account), Boolean(form.bootstrapToken && form.displayName), Boolean(form.organizationName && form.organizationSlug)],
+    [account, form.bootstrapToken, form.displayName, form.organizationName, form.organizationSlug],
+  );
 
   function setField(name: keyof typeof form, value: string) {
     setForm((current) => ({ ...current, [name]: value }));
@@ -79,12 +92,6 @@ export default function SetupPage() {
           organizationName: form.organizationName,
           organizationSlug: form.organizationSlug,
           stellarNetwork: "testnet",
-          r2: {
-            endpoint: form.r2Endpoint,
-            bucket: form.r2Bucket,
-            accessKeyId: form.r2AccessKeyId,
-            secretAccessKey: form.r2SecretAccessKey,
-          },
         }),
       });
       const data = await response.json().catch(() => ({}));
@@ -102,168 +109,140 @@ export default function SetupPage() {
   }
 
   if (!ready || !setupRequired) {
-    return (
-      <div className="mx-auto max-w-xl rounded-3xl border border-gold/20 bg-black/40 p-10 text-center text-gold-soft/60">
-        Loading CrownFi setup…
-      </div>
-    );
+    return <EmptyState title="Loading CrownFi setup" description="Checking whether first-administrator setup is still required…" />;
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <section className="overflow-hidden rounded-[2rem] border border-gold/25 bg-[radial-gradient(circle_at_top_left,rgba(212,175,55,0.2),transparent_48%),rgba(7,7,9,0.96)] p-7 sm:p-10">
-        <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
-          <div className="max-w-2xl">
-            <div className="inline-flex items-center gap-2 rounded-full border border-gold/25 bg-gold/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-gold-soft">
-              <Crown size={14} /> First-run setup
-            </div>
-            <h1 className="mt-5 font-display text-4xl font-semibold text-white">
-              Initialize CrownFi without editing SQL or hidden environment allowlists.
-            </h1>
-            <p className="mt-4 text-sm leading-7 text-gold-soft/60">
-              Authorize the first administrator wallet, create the initial organization, choose the Stellar network, and optionally save integration configuration.
-            </p>
-          </div>
-          <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-xs leading-5 text-emerald-100/80">
-            <ShieldCheck className="mb-2" size={20} />
-            CrownFi requests only signed messages and public wallet addresses. Never enter a seed phrase or private key.
-          </div>
-        </div>
-      </section>
+    <div className="mx-auto max-w-5xl space-y-5 sm:space-y-6">
+      <PageHeader
+        eyebrow="First-run setup"
+        title="Initialize CrownFi safely"
+        description="Authorize the first administrator, create the initial organization, and keep deployment integrations outside the browser setup flow."
+        meta={
+          <>
+            <Badge tone="gold">Stellar Testnet</Badge>
+            <Badge tone="neutral">Mainnet disabled</Badge>
+          </>
+        }
+      />
 
-      <form onSubmit={submit} className="space-y-6">
-        <section className="rounded-3xl border border-line bg-black/35 p-6 sm:p-8">
-          <div className="flex items-center gap-3">
-            <span className="grid h-10 w-10 place-items-center rounded-full bg-gold/10 text-gold"><Wallet size={19} /></span>
-            <div>
-              <h2 className="font-display text-2xl font-semibold text-white">Administrator identity</h2>
-              <p className="text-sm text-gold-soft/50">One CrownFi account may link multiple verified wallets.</p>
-            </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        {[
+          ["1", "Verify wallet", completedSteps[0]],
+          ["2", "Administrator", completedSteps[1]],
+          ["3", "Organization", completedSteps[2]],
+        ].map(([number, label, complete]) => (
+          <div key={String(number)} className={`flex items-center gap-3 rounded-2xl border p-3 ${complete ? "border-emerald/30 bg-emerald/10" : "border-line bg-black/25"}`}>
+            <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl text-sm font-bold ${complete ? "bg-emerald text-black" : "bg-gold/10 text-gold"}`}>
+              {complete ? <CheckCircle2 size={18} /> : number}
+            </span>
+            <span className="text-sm font-semibold text-white">{label}</span>
           </div>
+        ))}
+      </div>
 
-          {!account ? (
-            <button
-              type="button"
-              onClick={connect}
-              disabled={connecting}
-              className="mt-6 rounded-xl bg-gold px-5 py-3 text-sm font-bold text-black transition hover:brightness-110 disabled:opacity-60"
-            >
-              {connecting ? "Waiting for Freighter…" : "Connect and authorize Freighter"}
-            </button>
-          ) : (
-            <div className="mt-6 flex items-start gap-3 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4">
-              <CheckCircle2 className="mt-0.5 shrink-0 text-emerald-300" size={18} />
+      <Notice tone="info" title="Protected integration boundary">
+        Cloudflare R2 credentials are provisioned as deployment or Arcturus host secrets, not entered into this browser form. After rotation, new uploads automatically use the active server-side configuration.
+      </Notice>
+
+      <form onSubmit={submit} className="space-y-5">
+        <Card>
+          <CardHeader>
+            <div className="flex items-start gap-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-gold/20 bg-gold/10 text-gold"><Wallet size={19} /></span>
               <div>
-                <div className="font-semibold text-emerald-100">Wallet ownership verified</div>
-                <div className="mt-1 break-all font-mono text-xs text-emerald-100/60">{address}</div>
+                <CardTitle>1. Verify the administrator wallet</CardTitle>
+                <CardDescription>CrownFi requests only a signed message and public address. Never enter a private key or seed phrase.</CardDescription>
               </div>
             </div>
-          )}
-          {walletError && <p className="mt-3 text-sm text-red-300">{walletError}</p>}
+          </CardHeader>
+          <CardContent>
+            {!account ? (
+              <Button type="button" onClick={connect} disabled={connecting} className="w-full sm:w-auto">
+                {connecting ? "Waiting for Freighter…" : "Connect and authorize Freighter"}
+              </Button>
+            ) : (
+              <Notice tone="success" title="Wallet ownership verified">
+                <span className="break-all font-mono text-xs">{address}</span>
+              </Notice>
+            )}
+            {walletError && <Notice tone="danger" className="mt-4">{walletError}</Notice>}
+          </CardContent>
+        </Card>
 
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            <Field label="Display name" value={form.displayName} onChange={(value) => setField("displayName", value)} required />
-            <Field label="Email (optional)" type="email" value={form.email} onChange={(value) => setField("email", value)} />
-          </div>
-        </section>
-
-        <section className="rounded-3xl border border-line bg-black/35 p-6 sm:p-8">
-          <div className="flex items-center gap-3">
-            <span className="grid h-10 w-10 place-items-center rounded-full bg-gold/10 text-gold"><LockKeyhole size={19} /></span>
-            <div>
-              <h2 className="font-display text-2xl font-semibold text-white">Site and organization</h2>
-              <p className="text-sm text-gold-soft/50">The bootstrap token is read from the deployment’s protected setup configuration.</p>
+        <Card>
+          <CardHeader>
+            <div className="flex items-start gap-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-gold/20 bg-gold/10 text-gold"><LockKeyhole size={19} /></span>
+              <div>
+                <CardTitle>2. Create the site administrator</CardTitle>
+                <CardDescription>The one-time bootstrap token comes from protected deployment configuration.</CardDescription>
+              </div>
             </div>
-          </div>
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            <Field label="Site name" value={form.siteName} onChange={(value) => setField("siteName", value)} required />
-            <Field label="Bootstrap token" type="password" value={form.bootstrapToken} onChange={(value) => setField("bootstrapToken", value)} required autoComplete="off" />
-            <Field
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
+            <TextField id="setup-display-name" label="Display name" value={form.displayName} onChange={(event) => setField("displayName", event.target.value)} required />
+            <TextField id="setup-email" label="Email (optional)" type="email" value={form.email} onChange={(event) => setField("email", event.target.value)} />
+            <TextField id="setup-site-name" label="Site name" value={form.siteName} onChange={(event) => setField("siteName", event.target.value)} required />
+            <TextField id="setup-bootstrap-token" label="Bootstrap token" type="password" value={form.bootstrapToken} onChange={(event) => setField("bootstrapToken", event.target.value)} required autoComplete="off" />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-start gap-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-gold/20 bg-gold/10 text-gold"><Crown size={19} /></span>
+              <div>
+                <CardTitle>3. Create the initial organization</CardTitle>
+                <CardDescription>The first administrator becomes the initial organization owner.</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
+            <TextField
+              id="setup-organization-name"
               label="Organization name"
               value={form.organizationName}
-              onChange={(value) => {
-                setField("organizationName", value);
-                if (!form.organizationSlug) setField("organizationSlug", slugify(value));
+              onChange={(event) => {
+                const value = event.target.value;
+                setForm((current) => ({
+                  ...current,
+                  organizationName: value,
+                  organizationSlug: current.organizationSlug || slugify(value),
+                }));
               }}
               required
             />
-            <Field label="Organization slug" value={form.organizationSlug} onChange={(value) => setField("organizationSlug", slugify(value))} required />
-          </div>
-        </section>
+            <TextField id="setup-organization-slug" label="Organization slug" value={form.organizationSlug} onChange={(event) => setField("organizationSlug", slugify(event.target.value))} required />
+          </CardContent>
+        </Card>
 
-        <section className="rounded-3xl border border-line bg-black/35 p-6 sm:p-8">
-          <h2 className="font-display text-2xl font-semibold text-white">Stellar network</h2>
-          <p className="mt-2 text-sm text-gold-soft/50">Network selection is stored as site configuration. Mainnet remains double-gated in code and deployment configuration.</p>
-          <div className="mt-5 grid gap-3 sm:grid-cols-2">
-            <label className="rounded-2xl border border-gold/40 bg-gold/10 p-4">
-              <input type="radio" checked readOnly className="mr-3 accent-[#d4af37]" />
-              <span className="font-semibold text-white">Stellar Testnet</span>
-              <span className="mt-1 block pl-6 text-xs text-gold-soft/55">Enabled for hackathon testing and browser acceptance.</span>
-            </label>
-            <label className="cursor-not-allowed rounded-2xl border border-line bg-white/[0.02] p-4 opacity-45">
-              <input type="radio" disabled className="mr-3" />
-              <span className="font-semibold text-white">Stellar Mainnet</span>
-              <span className="mt-1 block pl-6 text-xs text-gold-soft/55">Unavailable until a future production-readiness gate is explicitly enabled.</span>
-            </label>
-          </div>
-        </section>
-
-        <details className="rounded-3xl border border-line bg-black/35 p-6 sm:p-8">
-          <summary className="flex cursor-pointer list-none items-center gap-3">
-            <span className="grid h-10 w-10 place-items-center rounded-full bg-gold/10 text-gold"><Cloud size={19} /></span>
-            <div>
-              <h2 className="font-display text-2xl font-semibold text-white">Optional Cloudflare R2 configuration</h2>
-              <p className="text-sm text-gold-soft/50">Saved as protected configuration. Provider validation remains a separate acceptance step.</p>
+        <Card>
+          <CardHeader>
+            <div className="flex items-start gap-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-gold/20 bg-gold/10 text-gold"><Cloud size={19} /></span>
+              <div>
+                <CardTitle>Deployment integrations</CardTitle>
+                <CardDescription>R2, RPC, and future provider credentials stay server-side. Setup records no secret values in the browser.</CardDescription>
+              </div>
             </div>
-          </summary>
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            <Field label="S3 endpoint" value={form.r2Endpoint} onChange={(value) => setField("r2Endpoint", value)} />
-            <Field label="Bucket" value={form.r2Bucket} onChange={(value) => setField("r2Bucket", value)} />
-            <Field label="Access key ID" value={form.r2AccessKeyId} onChange={(value) => setField("r2AccessKeyId", value)} autoComplete="off" />
-            <Field label="Secret access key" type="password" value={form.r2SecretAccessKey} onChange={(value) => setField("r2SecretAccessKey", value)} autoComplete="off" />
-          </div>
-        </details>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Notice tone="gold" title="Cloudflare R2">Configured and rotated through reviewed deployment configuration. Browser uploads receive short-lived presigned requests only.</Notice>
+              <Notice tone="success" title="Stellar Testnet"><ShieldCheck className="mr-1 inline" size={16} /> Enabled for hackathon acceptance. Mainnet remains fail-closed.</Notice>
+            </div>
+          </CardContent>
+        </Card>
 
-        {message && <div className="rounded-2xl border border-red-400/25 bg-red-400/10 px-4 py-3 text-sm text-red-200">{message}</div>}
+        {message && <Notice tone="danger">{message}</Notice>}
 
-        <button
-          type="submit"
-          disabled={busy || !account}
-          className="w-full rounded-2xl bg-gold px-6 py-4 text-sm font-bold text-black transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-45"
-        >
-          {busy ? "Initializing CrownFi…" : "Complete first-administrator setup"}
-        </button>
+        <div className="sticky bottom-20 z-20 rounded-2xl border border-line bg-black/90 p-3 backdrop-blur-xl md:static md:border-0 md:bg-transparent md:p-0">
+          <Button type="submit" disabled={busy || !account} size="lg" className="w-full">
+            {busy ? "Initializing CrownFi…" : "Complete first-administrator setup"}
+          </Button>
+        </div>
       </form>
     </div>
-  );
-}
-
-function Field({
-  label,
-  value,
-  onChange,
-  type = "text",
-  required = false,
-  autoComplete,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  type?: string;
-  required?: boolean;
-  autoComplete?: string;
-}) {
-  return (
-    <label className="grid gap-2 text-sm text-gold-soft/70">
-      <span className="font-medium">{label}</span>
-      <input
-        type={type}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        required={required}
-        autoComplete={autoComplete}
-        className="rounded-xl border border-line bg-black/50 px-3 py-2.5 text-white outline-none transition placeholder:text-gold-soft/25 focus:border-gold/60"
-      />
-    </label>
   );
 }
