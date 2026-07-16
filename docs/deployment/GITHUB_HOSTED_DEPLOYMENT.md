@@ -12,18 +12,29 @@ Create a protected environment named `crownfi-production` and restrict it to
 
 Store these values as **environment secrets**:
 
-- `TS_OAUTH_CLIENT_ID` and `TS_OAUTH_SECRET`: a dedicated Tailscale OAuth
-  client with only the scope needed to create ephemeral auth keys and permission
-  to create `tag:crownfi-ci` nodes.
+- `TS_AUTHKEY`: an ephemeral, reusable, pre-signed Tailscale auth key carrying
+  `tag:crownfi-ci`. This is required because the tailnet uses Tailnet Lock. The
+  workflow supplies a state directory so the runner can store Tailnet Key
+  Authority data while it is connected.
 - `REGISTRY_USER` and `REGISTRY_TOKEN`: a dedicated registry automation
   identity limited to publishing the CrownFi API and web repositories.
 - `ARCTURUS_DEPLOY_TOKEN`: a unique Arcturus token scoped only to
   `stellar-project`. Do not reuse the registry or Gitea runner token.
 
+`TS_OAUTH_CLIENT_ID` and `TS_OAUTH_SECRET` are not used by the locked-tailnet
+workflow. Keep or remove them according to the repository's credential-retention
+policy, but do not substitute them for `TS_AUTHKEY` while Tailnet Lock is
+enabled.
+
 The tailnet policy must allow `tag:crownfi-ci` to reach only the Arcturus
 listener on `silent-tiger` at TCP port `9090`. Do not expose that listener to
 the public Internet. The Tailscale action creates an ephemeral node and removes
 its in-memory identity when the GitHub job ends.
+
+Rotate `TS_AUTHKEY` before its configured expiry. Generate a replacement as an
+ephemeral reusable key with `tag:crownfi-ci`, pre-sign it from a trusted Tailnet
+Lock signing node, replace the GitHub environment secret, then revoke the old
+key after a deployment succeeds with the replacement.
 
 Store these as **environment variables**, not secrets:
 
