@@ -7,6 +7,7 @@ import {
   Gem,
   Images,
   LayoutDashboard,
+  PanelsTopLeft,
   Settings2,
   Tags,
   Ticket,
@@ -30,6 +31,7 @@ const groupLabels: Record<ManageModule["group"], string> = {
 
 const icons = {
   overview: LayoutDashboard,
+  home: PanelsTopLeft,
   pageants: Building2,
   contestants: UsersRound,
   categories: Tags,
@@ -54,7 +56,7 @@ export function ManageNavigation({
   canManageMembers,
 }: {
   activeModule: ManageModuleId;
-  onSelect: (module: ManageModuleId) => void;
+  onSelect?: (module: ManageModuleId) => void;
   isSiteAdmin: boolean;
   canManageMembers: boolean;
 }) {
@@ -76,7 +78,7 @@ export function ManageNavigation({
         <CardContent className="pt-5">
           <SelectField
             id="manage-module-mobile"
-            label="Workspace section"
+            label="Control-panel section"
             value={activeModule}
             onChange={(event) => select(event.target.value as ManageModuleId)}
           >
@@ -90,52 +92,54 @@ export function ManageNavigation({
         </CardContent>
       </Card>
 
-      <aside className="hidden h-fit rounded-3xl border border-line bg-black/35 p-3 lg:block" aria-label="Manage modules">
-        {groups.map(({ group, modules: groupModules }, groupIndex) => (
-          <div key={group} className={groupIndex === 0 ? "" : "mt-5"}>
-            <div className="px-3 pb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-gold-soft/30">
-              {groupLabels[group]}
-            </div>
-            <div className="space-y-1">
-              {groupModules.map((module) => {
-                const Icon = icons[module.id];
-                const selected = module.id === activeModule;
-                const stateLabel = availabilityLabel(module);
-                return (
-                  <button
-                    key={module.id}
-                    type="button"
-                    onClick={() => select(module.id)}
-                    aria-current={selected ? "page" : undefined}
-                    className={`w-full rounded-2xl px-3 py-3 text-left transition ${
-                      selected
-                        ? "bg-gold text-black shadow-[0_10px_30px_-18px_rgba(212,175,55,0.8)]"
-                        : "text-gold-soft/65 hover:bg-gold/10 hover:text-white"
-                    }`}
-                  >
-                    <span className="flex items-center gap-3">
-                      <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${selected ? "bg-black/10" : "bg-white/[0.04]"}`}>
-                        <Icon size={17} />
+      <aside className="hidden h-full min-h-[calc(100vh-86px)] border-r border-line bg-[#09090b] px-3 py-5 lg:block" aria-label="Manage modules">
+        <div className="sticky top-[102px] space-y-5">
+          {groups.map(({ group, modules: groupModules }) => (
+            <div key={group}>
+              <div className="px-3 pb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-gold-soft/30">
+                {groupLabels[group]}
+              </div>
+              <div className="space-y-1">
+                {groupModules.map((module) => {
+                  const Icon = icons[module.id];
+                  const selected = module.id === activeModule;
+                  const stateLabel = availabilityLabel(module);
+                  return (
+                    <button
+                      key={module.id}
+                      type="button"
+                      onClick={() => select(module.id)}
+                      aria-current={selected ? "page" : undefined}
+                      className={`w-full rounded-2xl px-3 py-3 text-left transition ${
+                        selected
+                          ? "bg-gold text-black shadow-[0_10px_30px_-18px_rgba(212,175,55,0.8)]"
+                          : "text-gold-soft/65 hover:bg-gold/10 hover:text-white"
+                      }`}
+                    >
+                      <span className="flex items-center gap-3">
+                        <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${selected ? "bg-black/10" : "bg-white/[0.04]"}`}>
+                          <Icon size={17} />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-semibold">{module.shortLabel}</span>
+                          {stateLabel && (
+                            <Badge
+                              tone={selected ? "neutral" : module.availability === "preview" ? "gold" : "neutral"}
+                              emphasis="soft"
+                              className={`mt-1.5 ${selected ? "bg-black/10 text-black" : ""}`}
+                            >
+                              {stateLabel}
+                            </Badge>
+                          )}
+                        </span>
                       </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-semibold">{module.shortLabel}</span>
-                        {stateLabel && (
-                          <Badge
-                            tone={selected ? "neutral" : module.availability === "preview" ? "gold" : "neutral"}
-                            emphasis="soft"
-                            className={`mt-1.5 ${selected ? "bg-black/10 text-black" : ""}`}
-                          >
-                            {stateLabel}
-                          </Badge>
-                        )}
-                      </span>
-                    </span>
-                  </button>
-                );
-              })}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </aside>
     </>
   );
