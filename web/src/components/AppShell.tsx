@@ -3,11 +3,27 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import {
+  BarChart3,
+  LayoutDashboard,
+  Sparkles,
+  Ticket,
+  Trophy,
+  UsersRound,
+  Vote,
+  type LucideIcon,
+} from "lucide-react";
 import { useSession } from "@/session/SessionProvider";
+import { publicPageantModules, type PublicPageantModuleId } from "@/lib/crownfiModules";
 import { Icons } from "./icons";
 
+function routePath(href: string) {
+  return href.split(/[?#]/)[0] || "/";
+}
+
 function isActivePath(path: string, href: string) {
-  return path === href || (href !== "/" && path.startsWith(`${href}/`));
+  const target = routePath(href);
+  return path === target || (target !== "/" && path.startsWith(`${target}/`));
 }
 
 function short(address: string, count = 5) {
@@ -26,6 +42,15 @@ type SiteContext = {
   pageants: PublicPageant[];
   default_pageant_id?: string | null;
   pageant_selector_enabled: boolean;
+};
+
+const contextIcons: Record<PublicPageantModuleId, LucideIcon> = {
+  overview: LayoutDashboard,
+  contestants: UsersRound,
+  vote: Vote,
+  tickets: Ticket,
+  predict: Sparkles,
+  results: BarChart3,
 };
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -63,6 +88,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       .catch(() => undefined);
   }, [setupRequired, account?.id]);
 
+  useEffect(() => setDrawer(false), [path]);
+
   const pathPageantId = path.match(/^\/platform\/pageants\/([^/]+)/)?.[1] ?? null;
   const queryPageantId = search.get("pageant");
   const activePageantId =
@@ -82,22 +109,24 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [setupRequired, isOrganizer]);
 
   const contextLinks = activePageantId
-    ? [
-        { href: `/platform/pageants/${activePageantId}`, label: "Overview" },
-        { href: `/platform/pageants/${activePageantId}#contestants`, label: "Contestants" },
-        { href: `/vote?pageant=${activePageantId}`, label: "Vote" },
-        { href: `/tickets?pageant=${activePageantId}`, label: "Tickets" },
-        { href: `/pageants/${activePageantId}/predict`, label: "Predict" },
-        { href: `/pageants/${activePageantId}/results`, label: "Results" },
-      ]
+    ? publicPageantModules.map((module) => ({
+        ...module,
+        href: module.href(activePageantId),
+        Icon: contextIcons[module.id],
+      }))
     : [];
 
+  function changePageant(pageantId: string) {
+    router.push(`/platform/pageants/${pageantId}`);
+    setDrawer(false);
+  }
+
   return (
-    <div className="min-h-screen bg-[#070708] pb-20 text-white sm:pb-0">
-      <header className="sticky top-0 z-40 border-b border-line bg-black/85 backdrop-blur-xl">
+    <div className="min-h-screen bg-[#070708] pb-20 text-white md:pb-0">
+      <header className="sticky top-0 z-40 border-b border-line bg-black/90 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
-            <button className="btn-ghost h-9 w-9 shrink-0 !px-0 md:hidden" onClick={() => setDrawer(true)} aria-label="Open menu">
+            <button className="btn-ghost h-10 w-10 shrink-0 !px-0 md:hidden" onClick={() => setDrawer(true)} aria-label="Open navigation">
               <Icons.Menu size={18} strokeWidth={1.75} />
             </button>
             <Link href="/" className="flex shrink-0 items-center gap-2" aria-label="CrownFi home">
@@ -106,24 +135,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </Link>
 
             {activePageant && (
-              <div className="hidden min-w-0 items-center gap-2 border-l border-line pl-3 lg:flex">
-                {siteContext.pageant_selector_enabled && siteContext.pageants.length > 1 ? (
-                  <select
-                    value={activePageant.id}
-                    onChange={(event) => router.push(`/platform/pageants/${event.target.value}`)}
-                    aria-label="Active pageant"
-                    className="max-w-[220px] rounded-xl border border-line bg-black/60 px-3 py-2 text-sm text-gold-soft outline-none focus:border-gold/50"
-                  >
-                    {siteContext.pageants.map((pageant) => (
-                      <option key={pageant.id} value={pageant.id}>{pageant.name}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <Link href={`/platform/pageants/${activePageant.id}`} className="max-w-[220px] truncate text-sm font-semibold text-gold-soft/80 hover:text-white">
-                    {activePageant.name}
-                  </Link>
-                )}
-              </div>
+              <>
+                <Link
+                  href={`/platform/pageants/${activePageant.id}`}
+                  className="min-w-0 max-w-[45vw] truncate border-l border-line pl-3 text-sm font-semibold text-gold-soft/80 sm:hidden"
+                >
+                  {activePageant.name}
+                </Link>
+                <div className="hidden min-w-0 items-center gap-2 border-l border-line pl-3 lg:flex">
+                  {siteContext.pageant_selector_enabled && siteContext.pageants.length > 1 ? (
+                    <select
+                      value={activePageant.id}
+                      onChange={(event) => changePageant(event.target.value)}
+                      aria-label="Active pageant"
+                      className="max-w-[220px] rounded-xl border border-line bg-black/60 px-3 py-2 text-sm text-gold-soft outline-none focus:border-gold/50"
+                    >
+                      {siteContext.pageants.map((pageant) => (
+                        <option key={pageant.id} value={pageant.id}>{pageant.name}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <Link href={`/platform/pageants/${activePageant.id}`} className="max-w-[220px] truncate text-sm font-semibold text-gold-soft/80 hover:text-white">
+                      {activePageant.name}
+                    </Link>
+                  )}
+                </div>
+              </>
             )}
           </div>
 
@@ -132,7 +169,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Link
                 key={link.href}
                 href={link.href}
-                className={`rounded-full px-3.5 py-1.5 transition ${isActivePath(path, link.href) ? "bg-gold text-black font-semibold" : "text-gold-soft/70 hover:bg-gold/10 hover:text-white"}`}
+                className={`rounded-full px-3.5 py-1.5 transition ${isActivePath(path, link.href) ? "bg-gold font-semibold text-black" : "text-gold-soft/70 hover:bg-gold/10 hover:text-white"}`}
               >
                 {link.label}
               </Link>
@@ -143,10 +180,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <button
               onClick={() => (address ? setMenu((current) => !current) : connect())}
               disabled={connecting}
-              className="flex items-center gap-2 rounded-full border border-gold/20 bg-black/50 px-2.5 py-1.5 text-sm transition hover:border-gold disabled:opacity-60"
+              className="flex min-h-10 items-center gap-2 rounded-full border border-gold/20 bg-black/50 px-2.5 py-1.5 text-sm transition hover:border-gold disabled:opacity-60"
               aria-label={address ? "Open account menu" : "Sign in with Freighter"}
+              aria-expanded={address ? menu : undefined}
             >
-              <span className="grid h-6 w-6 place-items-center rounded-full bg-gold text-black">
+              <span className="grid h-7 w-7 place-items-center rounded-full bg-gold text-black">
                 <Icons.Wallet size={14} strokeWidth={2} />
               </span>
               <span className="hidden max-w-[130px] truncate text-gold-soft sm:inline">
@@ -157,7 +195,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {menu && address && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setMenu(false)} />
-                <div className="absolute right-0 z-50 mt-2 w-72 rounded-2xl border border-line bg-[#0b0b0d]/98 p-3 text-sm shadow-2xl">
+                <div className="absolute right-0 z-50 mt-2 w-[min(18rem,calc(100vw-2rem))] rounded-2xl border border-line bg-[#0b0b0d]/98 p-3 text-sm shadow-2xl">
                   <div className="mb-2 rounded-xl border border-gold/10 bg-gold/10 px-3 py-3">
                     <div className="font-semibold text-white">{account?.display_name || "CrownFi account"}</div>
                     <div className="mt-1 font-mono text-xs text-gold-soft/55">{short(address, 7)}</div>
@@ -183,12 +221,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         {contextLinks.length > 0 && (
-          <nav className="border-t border-line/70" aria-label="Active pageant navigation">
+          <nav className="hidden border-t border-line/70 md:block" aria-label="Active pageant navigation">
             <div className="mx-auto flex max-w-7xl items-center gap-1 overflow-x-auto px-4 py-2 sm:px-6">
-              <span className="mr-2 hidden shrink-0 text-[10px] font-bold uppercase tracking-[0.15em] text-gold-soft/30 sm:inline">{activePageant?.name}</span>
-              {contextLinks.map((link) => (
-                <Link key={link.label} href={link.href} className="shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold text-gold-soft/60 hover:bg-gold/10 hover:text-white">
-                  {link.label}
+              <span className="mr-2 hidden shrink-0 text-[10px] font-bold uppercase tracking-[0.15em] text-gold-soft/30 lg:inline">{activePageant?.name}</span>
+              {contextLinks.map(({ id, label, href, Icon }) => (
+                <Link
+                  key={id}
+                  href={href}
+                  className={`flex shrink-0 items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${isActivePath(path, href) ? "bg-gold/15 text-gold-soft" : "text-gold-soft/60 hover:bg-gold/10 hover:text-white"}`}
+                >
+                  <Icon size={14} /> {label}
                 </Link>
               ))}
             </div>
@@ -212,42 +254,74 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {drawer && (
         <div className="fixed inset-0 z-50 md:hidden">
-          <div className="absolute inset-0 bg-black/70" onClick={() => setDrawer(false)} />
-          <aside className="absolute left-0 top-0 h-full w-80 max-w-[88vw] border-r border-line bg-[#08080a] p-5">
-            <div className="mb-6 flex items-center gap-2">
-              <img src="/assets/brand/crownfi_log_crown-chain_gold_transparency-fixed.webp" alt="" className="h-7 w-7" />
-              <span className="font-display text-xl font-semibold text-gold">CrownFi</span>
+          <div className="absolute inset-0 bg-black/75" onClick={() => setDrawer(false)} />
+          <aside className="absolute left-0 top-0 h-full w-80 max-w-[88vw] overflow-y-auto border-r border-line bg-[#08080a] p-5 shadow-2xl">
+            <div className="mb-6 flex items-center justify-between gap-3">
+              <Link href="/" onClick={() => setDrawer(false)} className="flex items-center gap-2">
+                <img src="/assets/brand/crownfi_log_crown-chain_gold_transparency-fixed.webp" alt="" className="h-7 w-7" />
+                <span className="font-display text-xl font-semibold text-gold">CrownFi</span>
+              </Link>
+              <button onClick={() => setDrawer(false)} className="grid h-9 w-9 place-items-center rounded-full border border-line text-gold-soft/60" aria-label="Close navigation">
+                <Icons.X size={17} />
+              </button>
             </div>
+
             {activePageant && (
-              <div className="mb-5 rounded-2xl border border-line bg-white/[0.03] p-3">
+              <div className="mb-6 rounded-2xl border border-gold/20 bg-gold/[0.07] p-4">
                 <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-gold-soft/35">Active pageant</div>
-                <div className="mt-1 font-semibold text-white">{activePageant.name}</div>
+                {siteContext.pageant_selector_enabled && siteContext.pageants.length > 1 ? (
+                  <select
+                    value={activePageant.id}
+                    onChange={(event) => changePageant(event.target.value)}
+                    className="mt-2 w-full rounded-xl border border-line bg-black/60 px-3 py-2.5 text-sm text-white"
+                    aria-label="Choose active pageant"
+                  >
+                    {siteContext.pageants.map((pageant) => <option key={pageant.id} value={pageant.id}>{pageant.name}</option>)}
+                  </select>
+                ) : (
+                  <Link href={`/platform/pageants/${activePageant.id}`} onClick={() => setDrawer(false)} className="mt-1 block font-semibold text-white">
+                    {activePageant.name}
+                  </Link>
+                )}
+                <div className="mt-1 text-xs text-gold-soft/45">{activePageant.organization_name}</div>
               </div>
             )}
-            <nav className="grid gap-1">
+
+            <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-gold-soft/30">Primary</div>
+            <nav className="mt-2 grid gap-1">
               {globalLinks.map((link) => (
                 <Link key={link.href} href={link.href} onClick={() => setDrawer(false)} className={`rounded-xl px-3 py-2.5 text-sm ${isActivePath(path, link.href) ? "bg-gold font-semibold text-black" : "text-gold-soft/75 hover:bg-gold/10"}`}>
                   {link.label}
                 </Link>
               ))}
             </nav>
+
             {contextLinks.length > 0 && (
               <div className="mt-6 border-t border-line pt-5">
-                <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.14em] text-gold-soft/35">Pageant</div>
+                <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.14em] text-gold-soft/30">Pageant experience</div>
                 <nav className="grid gap-1">
-                  {contextLinks.map((link) => <Link key={link.label} href={link.href} onClick={() => setDrawer(false)} className="rounded-xl px-3 py-2.5 text-sm text-gold-soft/70 hover:bg-gold/10">{link.label}</Link>)}
+                  {contextLinks.map(({ id, mobileLabel, href, Icon }) => (
+                    <Link key={id} href={href} onClick={() => setDrawer(false)} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm ${isActivePath(path, href) ? "bg-gold/15 text-gold-soft" : "text-gold-soft/70 hover:bg-gold/10"}`}>
+                      <Icon size={17} /> {mobileLabel}
+                    </Link>
+                  ))}
                 </nav>
               </div>
             )}
+
+            <div className="mt-6 rounded-2xl border border-line bg-white/[0.02] px-3 py-3 text-xs text-gold-soft/40">
+              Stellar {stellarNetwork === "public" ? "Mainnet" : "Testnet"}
+            </div>
           </aside>
         </div>
       )}
 
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">{children}</main>
+      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">{children}</main>
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-black/95 backdrop-blur-xl md:hidden" aria-label="Mobile navigation">
         <div className="mx-auto flex max-w-md items-stretch">
           <MobileLink href="/platform" label="Explore" active={isActivePath(path, "/platform")} Icon={Icons.Vote} />
+          {activePageantId && <MobileLink href={`/platform/pageants/${activePageantId}`} label="Pageant" active={path.startsWith(`/platform/pageants/${activePageantId}`)} Icon={Trophy} />}
           {isOrganizer && <MobileLink href="/manage" label="Manage" active={isActivePath(path, "/manage")} Icon={Icons.Lock} />}
           <MobileLink href="/account" label="Account" active={isActivePath(path, "/account")} Icon={Icons.Me} />
         </div>
@@ -256,11 +330,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-function MobileLink({ href, label, active, Icon }: { href: string; label: string; active: boolean; Icon: typeof Icons.Me }) {
+function MobileLink({ href, label, active, Icon }: { href: string; label: string; active: boolean; Icon: LucideIcon }) {
   return (
-    <Link href={href} className={`flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[11px] ${active ? "text-gold" : "text-gold-soft/50"}`}>
-      <Icon size={20} strokeWidth={1.75} />
-      {label}
+    <Link href={href} className={`flex min-h-16 flex-1 flex-col items-center justify-center gap-1 px-2 text-[10px] font-semibold ${active ? "text-gold" : "text-gold-soft/50"}`}>
+      <Icon size={19} strokeWidth={active ? 2.25 : 1.75} />
+      <span>{label}</span>
     </Link>
   );
 }
