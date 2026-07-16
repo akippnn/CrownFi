@@ -51,16 +51,19 @@ export function PageantHomeEditor({
       const defaults = cloneDefaults();
       setDraft(defaults);
       setApplied(defaults);
+      setSaved(false);
       return;
     }
     try {
       const restored = normalizePageantHomeWidgets(JSON.parse(raw));
       setDraft(restored);
       setApplied(restored);
+      setSaved(true);
     } catch {
       const defaults = cloneDefaults();
       setDraft(defaults);
       setApplied(defaults);
+      setSaved(false);
     }
   }, [pageant.id]);
 
@@ -197,11 +200,13 @@ export function PageantHomeEditor({
                 ))
               )}
               <div className="flex flex-wrap gap-2 border-t border-line pt-4">
-                <Button onClick={applyDraft} disabled={!changed && !saved}><Save size={15} /> {saved ? "Draft saved" : "Apply to preview"}</Button>
+                <Button onClick={applyDraft} disabled={!changed}>
+                  <Save size={15} /> {saved && !changed ? "Preview draft saved" : "Apply to preview"}
+                </Button>
                 <Button variant="ghost" onClick={reset}><RotateCcw size={15} /> Reset</Button>
               </div>
               <p className="text-xs leading-5 text-gold-soft/35">
-                This branch stores the editable layout as a browser draft while the durable pageant configuration write model is completed. The public route remains unchanged until a layout is explicitly published by that backend slice.
+                This branch stores the editable layout as a pageant-scoped browser draft while the durable pageant configuration write model is completed. Applying the draft updates the exact-route preview; it does not publish the layout to other users.
               </p>
             </CardContent>
           </Card>
