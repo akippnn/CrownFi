@@ -68,6 +68,58 @@ print(size)
 ' "$image"
 }
 
+enforce_remote_image_policy() {
+  local image="$1"
+  local size_bytes="$2"
+  python3 - "$image" "$size_bytes" "$token_file" <<'PY'
+import json
+import os
+import sys
+import urllib.error
+import urllib.request
+
+image, size_raw, token_path = sys.argv[1:]
+with open(".arcturus/project.json", encoding="utf-8") as handle:
+    project = json.load(handle)
+service = project["service"]
+api_url = os.environ.get("ARCTURUS_API_URL") or project["ci"]["apiUrl"]
+payload = json.dumps(
+    {"service": service, "image": image, "size_bytes": int(size_raw)},
+    separators=(",", ":"),
+).encode()
+with open(token_path, encoding="utf-8") as handle:
+    token = handle.read().strip()
+request = urllib.request.Request(
+    api_url.rstrip("/") + "/v1/image-policy",
+    data=payload,
+    method="POST",
+    headers={
+        "Authorization": "Bearer " + token,
+        "Content-Type": "application/json",
+    },
+)
+try:
+    with urllib.request.urlopen(request, timeout=20) as response:
+        body = response.read().decode("utf-8", "replace")
+        if response.status != 200:
+            raise SystemExit(f"Arcturus image policy returned HTTP {response.status}: {body}")
+except urllib.error.HTTPError as exc:
+    body = exc.read().decode("utf-8", "replace")
+    if exc.code == 404:
+        print(
+            "Arcturus host does not yet advertise image-size-policy; "
+            "the local pre-push limit remains enforced.",
+            file=sys.stderr,
+        )
+        raise SystemExit(0)
+    print(f"Arcturus image policy rejected the release (HTTP {exc.code}): {body}", file=sys.stderr)
+    raise SystemExit(3 if exc.code == 413 else 2)
+except urllib.error.URLError as exc:
+    print(f"Arcturus image policy could not be reached: {exc}", file=sys.stderr)
+    raise SystemExit(2)
+PY
+}
+
 printf '%s' "$REGISTRY_TOKEN" | buildah --root "$graph" --runroot "$runroot" \
   login --authfile "$authfile" --username "$registry_user" --password-stdin \
   "${ARCTURUS_REGISTRY_HOST:?ARCTURUS_REGISTRY_HOST is required}"
@@ -98,12 +150,13 @@ while IFS=$'\t' read -r name repository context containerfile validations releas
   buildah --root "$graph" --runroot "$runroot" bud --authfile "$authfile" \
     --file "$containerfile" "${target_args[@]}" --tag "$image" "$context"
   size_bytes="$(image_size_bytes "$image")"
-  printf 'Built %s: %s bytes; pre-push limit: %s bytes\n' \
+  printf 'Built %s: %s bytes; local pre-push limit: %s bytes\n' \
     "$image" "$size_bytes" "$max_image_size_bytes"
   if (( size_bytes > max_image_size_bytes )); then
     echo "Refusing to upload oversized image $image ($size_bytes bytes > $max_image_size_bytes bytes)." >&2
     exit 3
   fi
+  enforce_remote_image_policy "$image" "$size_bytes"
   digest_file="$work_rel/$name.digest"
   buildah --root "$graph" --runroot "$runroot" push --authfile "$authfile" \
     --digestfile "$digest_file" "$image" "docker://$image"
