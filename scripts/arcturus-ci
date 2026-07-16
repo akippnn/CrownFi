@@ -53,19 +53,83 @@ trap cleanup EXIT INT TERM
 
 image_size_bytes() {
   local image="$1"
-  buildah --root "$graph" --runroot "$runroot" images --json "$image" |
-    python3 -c '
+  local json_output formatted_size
+  json_output="$(buildah --root "$graph" --runroot "$runroot" images --json "$image")"
+  formatted_size="$(buildah --root "$graph" --runroot "$runroot" images \
+    --noheading --format '{{.Size}}' "$image")"
+  ARCTURUS_BUILDAH_IMAGE_JSON="$json_output" python3 - "$image" "$formatted_size" <<'PY'
 import json
+import os
+import re
 import sys
-rows = json.load(sys.stdin)
+from decimal import Decimal, InvalidOperation, ROUND_CEILING
+
+image, formatted = sys.argv[1:]
+rows = json.loads(os.environ["ARCTURUS_BUILDAH_IMAGE_JSON"])
 if len(rows) != 1:
-    raise SystemExit(f"expected one local image for {sys.argv[1]}, found {len(rows)}")
+    raise SystemExit(f"expected one local image for {image}, found {len(rows)}")
+
+
+def parse_size(value):
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int):
+        return value if value >= 0 else None
+    if isinstance(value, float):
+        return int(Decimal(str(value)).to_integral_value(rounding=ROUND_CEILING)) if value >= 0 else None
+
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        numeric = Decimal(text)
+    except InvalidOperation:
+        numeric = None
+    if numeric is not None:
+        return int(numeric.to_integral_value(rounding=ROUND_CEILING)) if numeric >= 0 else None
+
+    match = re.fullmatch(r"([0-9]+(?:\.[0-9]+)?)\s*([kmgtpe]?i?b)", text, re.IGNORECASE)
+    if not match:
+        return None
+    amount = Decimal(match.group(1))
+    unit = match.group(2).lower()
+    decimal_units = {
+        "b": 1,
+        "kb": 1000,
+        "mb": 1000**2,
+        "gb": 1000**3,
+        "tb": 1000**4,
+        "pb": 1000**5,
+        "eb": 1000**6,
+    }
+    binary_units = {
+        "kib": 1024,
+        "mib": 1024**2,
+        "gib": 1024**3,
+        "tib": 1024**4,
+        "pib": 1024**5,
+        "eib": 1024**6,
+    }
+    multiplier = decimal_units.get(unit, binary_units.get(unit))
+    return int((amount * multiplier).to_integral_value(rounding=ROUND_CEILING))
+
+
 row = rows[0]
-size = row.get("size", row.get("Size"))
-if not isinstance(size, int) or size < 0:
-    raise SystemExit(f"local image size is unavailable for {sys.argv[1]}")
-print(size)
-' "$image"
+for key in ("size", "Size", "virtualSize", "VirtualSize"):
+    measured = parse_size(row.get(key))
+    if measured is not None:
+        print(measured)
+        raise SystemExit(0)
+
+measured = parse_size(formatted)
+if measured is None:
+    available = ", ".join(sorted(row))
+    raise SystemExit(
+        f"local image size is unavailable for {image}; "
+        f"Buildah JSON keys: {available}; formatted size: {formatted!r}"
+    )
+print(measured)
+PY
 }
 
 enforce_remote_image_policy() {
