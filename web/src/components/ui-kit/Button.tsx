@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode } from "react";
 import Link, { type LinkProps } from "next/link";
 import { cn } from "./classNames";
 import type { Size } from "./types";
@@ -41,12 +41,13 @@ export function Button({ children, className, size = "md", variant = "primary", 
   );
 }
 
-export type ButtonLinkProps = LinkProps & {
-  children: ReactNode;
-  className?: string;
-  size?: Size;
-  variant?: ButtonVariant;
-};
+export type ButtonLinkProps = LinkProps &
+  Omit<AnchorHTMLAttributes<HTMLAnchorElement>, keyof LinkProps> & {
+    children: ReactNode;
+    className?: string;
+    size?: Size;
+    variant?: ButtonVariant;
+  };
 
 export function ButtonLink({ children, className, size = "md", variant = "primary", ...props }: ButtonLinkProps) {
   return (
