@@ -69,8 +69,7 @@ export function PageantHomeEditor({
 
   const selected = draft.find((widget) => widget.id === selectedId) ?? draft[0];
   const definition = pageantHomeWidgetDefinition(selected.id);
-  const previewLayout = encodeURIComponent(JSON.stringify(applied));
-  const previewUrl = `/platform/pageants/${pageant.id}?editorPreview=1&previewLayout=${previewLayout}`;
+  const previewUrl = `/platform/pageants/${pageant.id}?editorPreview=1`;
   const enabledCount = draft.filter((widget) => widget.enabled).length;
   const changed = useMemo(() => JSON.stringify(draft) !== JSON.stringify(applied), [draft, applied]);
 
