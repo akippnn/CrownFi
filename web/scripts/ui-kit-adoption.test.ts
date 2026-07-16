@@ -12,6 +12,7 @@ const appShell = source("src/components/AppShell.tsx");
 const manage = source("src/app/manage/page.tsx");
 const manageNavigation = source("src/components/manage/ManageNavigation.tsx");
 const pageantHome = source("src/components/pageant/PageantHomeExperience.tsx");
+const pageantHomeRoute = source("src/components/pageant/PageantHomeRoute.tsx");
 const pageantHomeEditor = source("src/components/manage/PageantHomeEditor.tsx");
 const publicPageant = source("src/app/platform/pageants/[pageantId]/page.tsx");
 const setup = source("src/app/setup/page.tsx");
@@ -35,7 +36,9 @@ assert.match(manage, /PageHeader/, "Manage must use the canonical page hierarchy
 assert.doesNotMatch(manage, /function (Input|Panel|TabButton)\(/, "Manage must not recreate local UI-kit controls");
 assert.match(manageNavigation, /min-h-\[calc\(100vh-86px\)\]/, "Desktop Manage navigation must fill the control-panel workspace");
 
-assert.match(publicPageant, /PageantHomeExperience/, "The public pageant route must use the shared widget renderer");
+assert.match(publicPageant, /PageantHomeRoute/, "The public pageant route must use the shared route bridge");
+assert.match(pageantHomeRoute, /PageantHomeExperience/, "The route bridge must render the shared widget experience");
+assert.match(pageantHomeRoute, /window\.localStorage\.getItem/, "Editor preview must read the pageant-scoped draft without serializing it into a long URL");
 assert.match(pageantHomeEditor, /src=\{previewUrl\}/, "The editor preview must load the exact public route");
 assert.match(pageantHomeEditor, /Exact public experience/, "The editor must clearly identify the shared-route preview");
 assert.doesNotMatch(pageantHomeEditor, /HeroSection|OrnatePortrait|PromoSection/, "The editor must not duplicate user-facing widget markup");
