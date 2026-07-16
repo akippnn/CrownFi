@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import {
   BarChart3,
   Building2,
@@ -49,7 +50,6 @@ function availabilityLabel(module: ManageModule) {
 
 export function ManageNavigation({
   activeModule,
-  onSelect,
   isSiteAdmin,
   canManageMembers,
 }: {
@@ -58,11 +58,17 @@ export function ManageNavigation({
   isSiteAdmin: boolean;
   canManageMembers: boolean;
 }) {
+  const router = useRouter();
   const modules = visibleManageModules({ isSiteAdmin, canManageMembers });
   const active = manageModules.find((module) => module.id === activeModule) ?? modules[0];
   const groups = (Object.keys(groupLabels) as ManageModule["group"][])
     .map((group) => ({ group, modules: modules.filter((module) => module.group === group) }))
     .filter((entry) => entry.modules.length > 0);
+
+  function select(module: ManageModuleId) {
+    if (module === activeModule) return;
+    router.push(`/manage?module=${module}`, { scroll: false });
+  }
 
   return (
     <>
@@ -72,7 +78,7 @@ export function ManageNavigation({
             id="manage-module-mobile"
             label="Workspace section"
             value={activeModule}
-            onChange={(event) => onSelect(event.target.value as ManageModuleId)}
+            onChange={(event) => select(event.target.value as ManageModuleId)}
           >
             {modules.map((module) => (
               <option key={module.id} value={module.id}>
@@ -99,7 +105,7 @@ export function ManageNavigation({
                   <button
                     key={module.id}
                     type="button"
-                    onClick={() => onSelect(module.id)}
+                    onClick={() => select(module.id)}
                     aria-current={selected ? "page" : undefined}
                     className={`w-full rounded-2xl px-3 py-3 text-left transition ${
                       selected
