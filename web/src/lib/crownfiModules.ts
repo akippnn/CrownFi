@@ -10,6 +10,7 @@ export type PublicPageantModuleId =
 
 export type ManageModuleId =
   | "overview"
+  | "home"
   | "pageants"
   | "contestants"
   | "categories"
@@ -42,7 +43,7 @@ export type ManageModule = {
 export const publicPageantModules: PublicPageantModule[] = [
   {
     id: "overview",
-    label: "Overview",
+    label: "Home",
     mobileLabel: "Pageant",
     href: (pageantId) => `/platform/pageants/${pageantId}`,
   },
@@ -84,6 +85,16 @@ export const manageModules: ManageModule[] = [
     label: "Workspace overview",
     shortLabel: "Overview",
     description: "See the active organization, pageant context, readiness, and the next safe action.",
+    group: "workspace",
+    availability: "available",
+    milestone: "B",
+    visibility: "organizer",
+  },
+  {
+    id: "home",
+    label: "Pageant home editor",
+    shortLabel: "Home editor",
+    description: "Compose the public pageant home from reusable widgets and preview the exact user-facing route on desktop or mobile.",
     group: "workspace",
     availability: "available",
     milestone: "B",
