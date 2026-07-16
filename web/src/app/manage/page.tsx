@@ -2,12 +2,14 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import {
+  ArrowLeft,
   Building2,
   CheckCircle2,
   Crown,
   Database,
+  ExternalLink,
   Globe2,
   Images,
   Plus,
@@ -16,6 +18,7 @@ import {
   Users,
 } from "lucide-react";
 import { ManageNavigation } from "@/components/manage/ManageNavigation";
+import { PageantHomeEditor } from "@/components/manage/PageantHomeEditor";
 import {
   Badge,
   Button,
@@ -55,6 +58,8 @@ type Pageant = {
   slug: string;
   description?: string | null;
   status: string;
+  starts_at?: string | null;
+  ends_at?: string | null;
   timezone: string;
   venue_name?: string | null;
 };
@@ -91,11 +96,7 @@ type Member = {
 };
 
 function slugify(value: string) {
-  return value
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+  return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
 
 async function json(response: Response) {
@@ -103,7 +104,6 @@ async function json(response: Response) {
 }
 
 export default function ManagePage() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const {
     account,
@@ -139,18 +139,13 @@ export default function ManagePage() {
   );
   const selectedPageant = pageants.find((item) => item.id === pageantId) ?? null;
   const canManageMembers = isAdmin || selectedOrganization?.role === "owner" || selectedOrganization?.role === "admin";
-  const visibleModules = visibleManageModules({ isSiteAdmin: isAdmin, canManageMembers });
+  const visibleModules = visibleManageModules({ isSiteAdmin: isAdmin, canManageMembers: Boolean(canManageMembers) });
   const requestedModule = searchParams.get("module");
   const activeModule: ManageModuleId =
     isManageModuleId(requestedModule) && visibleModules.some((module) => module.id === requestedModule)
       ? requestedModule
       : "overview";
-
-  function selectModule(module: ManageModuleId) {
-    const next = new URLSearchParams(searchParams.toString());
-    next.set("module", module);
-    router.replace(`/manage?${next.toString()}`, { scroll: false });
-  }
+  const activeDefinition = manageModules.find((module) => module.id === activeModule)!;
 
   async function load() {
     if (!account) return;
@@ -161,11 +156,12 @@ export default function ManagePage() {
       const overviewData = await json(overviewResponse);
       if (!overviewResponse.ok) throw new Error(overviewData.error || "manage_overview_failed");
       setOverview(overviewData);
-      const firstOrganization = organizationId || overviewData.organizations?.[0]?.id || "";
-      setOrganizationId(firstOrganization);
-      const firstPageant =
-        pageantId || overviewData.pageants?.find((item: Pageant) => item.organization_id === firstOrganization)?.id || "";
-      setPageantId(firstPageant);
+      const nextOrganization = organizationId || overviewData.organizations?.[0]?.id || "";
+      const organizationChanged = nextOrganization !== organizationId;
+      setOrganizationId(nextOrganization);
+      const availablePageants = overviewData.pageants?.filter((item: Pageant) => item.organization_id === nextOrganization) || [];
+      const currentStillValid = !organizationChanged && availablePageants.some((item: Pageant) => item.id === pageantId);
+      setPageantId(currentStillValid ? pageantId : availablePageants[0]?.id || "");
 
       if (isAdmin) {
         const siteResponse = await fetch("/api/manage/site-settings", { cache: "no-store" });
@@ -258,7 +254,7 @@ export default function ManagePage() {
       { pageant_id: pageantId, name: categoryForm.name, slug: categoryForm.slug },
       "category",
     );
-    if (data) flash("Category saved. Lifecycle and segment membership continue in Milestone B.");
+    if (data) flash("Category saved for the selected pageant.");
   }
 
   async function createContestant(event: FormEvent) {
@@ -283,7 +279,7 @@ export default function ManagePage() {
   async function seedReference() {
     const data = await mutate("/api/manage/seed-miss-stellarverse", { organizationId }, "seed");
     if (!data) return;
-    flash("Miss Stellarverse reconciled. Contract and collectible records remain explicitly unverified fixtures.");
+    flash("Miss Stellarverse reference data reconciled.");
     await load();
     setPageantId(data.pageant_id);
   }
@@ -296,7 +292,7 @@ export default function ManagePage() {
       "member",
     );
     if (!data) return;
-    flash(memberForm.role === "editor" ? "Organizer access granted." : "Organization access updated.");
+    flash("Organization access updated.");
     setMemberForm({ walletAddress: "", role: "editor" });
     await loadMembers();
   }
@@ -322,214 +318,98 @@ export default function ManagePage() {
       return;
     }
     setSite(data);
-    flash("Site settings saved. The public context will use the selected published pageant.");
+    flash("Site settings saved.");
     await refreshSession();
   }
 
-  if (!ready) {
-    return <EmptyState title="Loading Manage" description="Checking your CrownFi account, roles, and organization access…" />;
-  }
-  if (setupRequired) {
-    return (
-      <EmptyState
-        title="CrownFi still needs its first administrator"
-        description="Finish the guarded setup before opening organizer and administrator tools."
-        action={<ButtonLink href="/setup">Open first-run setup</ButtonLink>}
-      />
-    );
-  }
-  if (!account) {
-    return (
-      <EmptyState
-        title="Sign in to Manage CrownFi"
-        description="Use a verified Freighter wallet to load organization-scoped tools."
-        action={<Button onClick={connect} disabled={connecting}>{connecting ? "Waiting for Freighter…" : "Sign in with Freighter"}</Button>}
-      />
-    );
-  }
-  if (!isOrganizer) {
-    return (
-      <EmptyState
-        title="Public user account"
-        description="This account has no organizer membership. A site or organization administrator can grant access after the wallet has signed in once."
-        action={<ButtonLink href="/account" variant="secondary">Open account and linked wallets</ButtonLink>}
-      />
-    );
-  }
+  if (!ready) return <Gate title="Loading control panel" description="Checking CrownFi roles and organization access…" />;
+  if (setupRequired) return <Gate title="First administrator required" description="Complete guarded setup before opening the control panel." action={<ButtonLink href="/setup">Open setup</ButtonLink>} />;
+  if (!account) return <Gate title="Sign in to CrownFi Control" description="Use a verified Freighter wallet to load organization-scoped tools." action={<Button onClick={connect} disabled={connecting}>{connecting ? "Waiting for Freighter…" : "Sign in with Freighter"}</Button>} />;
+  if (!isOrganizer) return <Gate title="Organizer access required" description="A site or organization administrator must grant this account an organizer role." action={<ButtonLink href="/account" variant="secondary">Open account</ButtonLink>} />;
 
-  const activeDefinition = manageModules.find((module) => module.id === activeModule)!;
+  const publicPageantHref = selectedPageant ? `/platform/pageants/${selectedPageant.id}` : "/platform";
 
   return (
-    <div className="space-y-5 sm:space-y-6">
-      <PageHeader
-        eyebrow="Role-aware management"
-        title="Manage CrownFi"
-        description="Work within one organization and pageant at a time. Platform foundations stay separate from Voting, Ticketing, Markets, and Collectibles so each milestone can ship safely."
-        actions={
-          <Button variant="secondary" size="sm" onClick={load} disabled={busy === "load"} className="w-full sm:w-auto">
-            <RefreshCw className={busy === "load" ? "animate-spin" : ""} size={15} /> Refresh data
-          </Button>
-        }
-        meta={
-          <>
+    <div className="min-h-screen bg-[#070708]">
+      <header className="sticky top-0 z-50 border-b border-line bg-[#08080a]/95 backdrop-blur-xl">
+        <div className="flex flex-col gap-4 px-4 py-3 sm:px-6 lg:flex-row lg:items-center">
+          <div className="flex items-center justify-between gap-4 lg:w-[260px] lg:shrink-0">
+            <Link href="/" className="flex items-center gap-3">
+              <img src="/assets/brand/crownfi_log_crown-chain_gold_transparency-fixed.webp" alt="" className="h-9 w-9" />
+              <span><span className="block font-display text-lg font-semibold text-gold">CrownFi Control</span><span className="block text-[10px] uppercase tracking-[0.14em] text-gold-soft/35">Organizer workspace</span></span>
+            </Link>
+            <ButtonLink href={publicPageantHref} variant="ghost" size="sm" className="lg:hidden"><ArrowLeft size={15} /> Exit</ButtonLink>
+          </div>
+
+          <div className="grid flex-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(190px,0.7fr)_minmax(240px,1fr)]">
+            <SelectField
+              id="manage-organization"
+              label="Organization"
+              value={organizationId}
+              onChange={(event) => {
+                const nextOrganizationId = event.target.value;
+                setOrganizationId(nextOrganizationId);
+                setPageantId(overview?.pageants.find((pageant) => pageant.organization_id === nextOrganizationId)?.id || "");
+              }}
+            >
+              {(overview?.organizations ?? []).map((organization) => <option key={organization.id} value={organization.id}>{organization.name}</option>)}
+            </SelectField>
+            <SelectField id="manage-pageant" label="Active pageant" value={pageantId} onChange={(event) => setPageantId(event.target.value)}>
+              <option value="">Organization-wide workspace</option>
+              {pageants.map((pageant) => <option key={pageant.id} value={pageant.id}>{pageant.name} · {pageant.status}</option>)}
+            </SelectField>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
             <Badge tone="gold">{selectedOrganization?.role === "editor" ? "Organizer" : selectedOrganization?.role || "Member"}</Badge>
-            <Badge tone="neutral">Stellar Testnet</Badge>
-            {isAdmin && <Badge tone="success">Site administrator</Badge>}
-          </>
-        }
-      />
-
-      <Card>
-        <CardContent className="grid gap-4 pt-5 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end">
-          <SelectField
-            id="manage-organization"
-            label="Organization"
-            value={organizationId}
-            onChange={(event) => {
-              const nextOrganizationId = event.target.value;
-              setOrganizationId(nextOrganizationId);
-              setPageantId(overview?.pageants.find((pageant) => pageant.organization_id === nextOrganizationId)?.id || "");
-            }}
-          >
-            {(overview?.organizations ?? []).map((organization) => <option key={organization.id} value={organization.id}>{organization.name}</option>)}
-          </SelectField>
-          <SelectField
-            id="manage-pageant"
-            label="Active pageant"
-            value={pageantId}
-            onChange={(event) => setPageantId(event.target.value)}
-          >
-            <option value="">No pageant selected</option>
-            {pageants.map((pageant) => <option key={pageant.id} value={pageant.id}>{pageant.name}</option>)}
-          </SelectField>
-          <div className="rounded-2xl border border-line bg-black/25 px-4 py-3 text-xs leading-5 text-gold-soft/45">
-            <strong className="block text-sm text-white">{selectedPageant?.name || "Organization context"}</strong>
-            {selectedPageant ? `${selectedPageant.status} · ${selectedPageant.timezone}` : "Choose or create a pageant to unlock pageant-scoped tasks."}
+            {isAdmin && <Badge tone="success">Site admin</Badge>}
+            <Button variant="secondary" size="sm" onClick={load} disabled={busy === "load"}><RefreshCw className={busy === "load" ? "animate-spin" : ""} size={15} /> Refresh</Button>
+            <ButtonLink href={publicPageantHref} variant="secondary" size="sm" className="hidden lg:inline-flex"><ArrowLeft size={15} /> Exit control panel</ButtonLink>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </header>
 
-      {notice.text && <Notice tone={notice.error ? "danger" : "success"}>{notice.text}</Notice>}
+      <div className="grid lg:grid-cols-[270px_minmax(0,1fr)]">
+        <ManageNavigation activeModule={activeModule} isSiteAdmin={isAdmin} canManageMembers={Boolean(canManageMembers)} />
 
-      <div className="grid gap-5 lg:grid-cols-[270px_minmax(0,1fr)] lg:gap-6">
-        <ManageNavigation
-          activeModule={activeModule}
-          onSelect={selectModule}
-          isSiteAdmin={isAdmin}
-          canManageMembers={Boolean(canManageMembers)}
-        />
+        <main className="min-w-0 space-y-5 p-4 sm:p-6 lg:p-8">
+          <PageHeader
+            eyebrow={`Milestone ${activeDefinition.milestone} workspace`}
+            title={activeDefinition.label}
+            description={activeDefinition.description}
+            actions={selectedPageant && <ButtonLink href={`/platform/pageants/${selectedPageant.id}`} target="_blank" variant="ghost" size="sm">Open public page <ExternalLink size={14} /></ButtonLink>}
+            meta={<><Badge tone="neutral">Stellar Testnet</Badge>{selectedPageant && <Badge tone="gold">{selectedPageant.name}</Badge>}{activeDefinition.availability !== "available" && <Badge tone="neutral">{activeDefinition.availability}</Badge>}</>}
+          />
 
-        <main className="min-w-0 space-y-5">
-          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line pb-4">
-            <div>
-              <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-gold-soft/35">Milestone {activeDefinition.milestone} module</div>
-              <h2 className="mt-1 font-display text-2xl font-semibold text-white sm:text-3xl">{activeDefinition.label}</h2>
-              <p className="mt-1 max-w-2xl text-sm leading-6 text-gold-soft/50">{activeDefinition.description}</p>
-            </div>
-            {activeDefinition.availability !== "available" && (
-              <Badge tone={activeDefinition.availability === "preview" ? "gold" : "neutral"}>
-                {activeDefinition.availability === "preview" ? "Foundation preview" : "Planned module"}
-              </Badge>
-            )}
-          </div>
+          {notice.text && <Notice tone={notice.error ? "danger" : "success"}>{notice.text}</Notice>}
 
-          {activeModule === "overview" && (
-            <OverviewModule
-              organization={selectedOrganization}
-              pageant={selectedPageant}
-              pageantCount={pageants.length}
-              memberCount={members.length}
-              site={site}
-              modules={visibleModules}
-              onSelect={selectModule}
-            />
-          )}
+          {activeModule === "overview" && <OverviewModule organization={selectedOrganization} pageant={selectedPageant} pageantCount={pageants.length} memberCount={members.length} site={site} modules={visibleModules} />}
+          {activeModule === "home" && (selectedPageant ? <PageantHomeEditor pageant={selectedPageant} organizationName={selectedOrganization?.name || "CrownFi organizer"} /> : <EmptyState title="Select a pageant" description="The pageant home editor needs an active pageant context." />)}
+          {activeModule === "pageants" && <PageantsModule organizationId={organizationId} pageants={pageants} pageantId={pageantId} setPageantId={setPageantId} pageantForm={pageantForm} setPageantForm={setPageantForm} createPageant={createPageant} seedReference={seedReference} busy={busy} />}
+          {activeModule === "contestants" && <ContestantsModule pageant={selectedPageant} form={contestantForm} setForm={setContestantForm} onSubmit={createContestant} busy={busy} />}
+          {activeModule === "categories" && <CategoriesModule pageant={selectedPageant} form={categoryForm} setForm={setCategoryForm} onSubmit={createCategory} busy={busy} />}
+          {activeModule === "people" && canManageMembers && <PeopleModule organization={selectedOrganization} members={members} form={memberForm} setForm={setMemberForm} onSubmit={grantMember} busy={busy} />}
+          {activeModule === "site" && isAdmin && site && <SiteModule overview={overview} site={site} form={siteForm} setForm={setSiteForm} onSubmit={saveSite} busy={busy} />}
+          {["media", "voting", "tickets", "markets", "collectibles"].includes(activeModule) && <ModuleBoundary moduleId={activeModule} organization={selectedOrganization} pageant={selectedPageant} />}
 
-          {activeModule === "pageants" && (
-            <PageantsModule
-              organizationId={organizationId}
-              pageants={pageants}
-              pageantId={pageantId}
-              setPageantId={setPageantId}
-              pageantForm={pageantForm}
-              setPageantForm={setPageantForm}
-              createPageant={createPageant}
-              seedReference={seedReference}
-              busy={busy}
-            />
-          )}
-
-          {activeModule === "contestants" && (
-            <ContestantsModule
-              pageant={selectedPageant}
-              form={contestantForm}
-              setForm={setContestantForm}
-              onSubmit={createContestant}
-              busy={busy}
-            />
-          )}
-
-          {activeModule === "categories" && (
-            <CategoriesModule
-              pageant={selectedPageant}
-              form={categoryForm}
-              setForm={setCategoryForm}
-              onSubmit={createCategory}
-              busy={busy}
-            />
-          )}
-
-          {activeModule === "people" && canManageMembers && (
-            <PeopleModule
-              organization={selectedOrganization}
-              members={members}
-              form={memberForm}
-              setForm={setMemberForm}
-              onSubmit={grantMember}
-              busy={busy}
-            />
-          )}
-
-          {activeModule === "site" && isAdmin && site && (
-            <SiteModule
-              overview={overview}
-              site={site}
-              form={siteForm}
-              setForm={setSiteForm}
-              onSubmit={saveSite}
-              busy={busy}
-            />
-          )}
-
-          {["media", "voting", "tickets", "markets", "collectibles"].includes(activeModule) && (
-            <ModuleBoundary moduleId={activeModule} organization={selectedOrganization} pageant={selectedPageant} />
-          )}
+          <div className="rounded-2xl border border-line bg-black/30 px-4 py-3 text-xs text-gold-soft/40">Signed in as {account.display_name} · {address}</div>
         </main>
-      </div>
-
-      <div className="rounded-2xl border border-line bg-black/30 px-4 py-3 text-xs text-gold-soft/40">
-        Signed in as {account.display_name} · {address}
       </div>
     </div>
   );
 }
 
-function OverviewModule({
-  organization,
-  pageant,
-  pageantCount,
-  memberCount,
-  site,
-  modules,
-  onSelect,
-}: {
+function Gate({ title, description, action }: { title: string; description: string; action?: React.ReactNode }) {
+  return <div className="grid min-h-screen place-items-center p-5"><EmptyState className="w-full max-w-xl" title={title} description={description} action={action} /></div>;
+}
+
+function OverviewModule({ organization, pageant, pageantCount, memberCount, site, modules }: {
   organization: Organization | null;
   pageant: Pageant | null;
   pageantCount: number;
   memberCount: number;
   site: SiteSettings | null;
   modules: ReturnType<typeof visibleManageModules>;
-  onSelect: (module: ManageModuleId) => void;
 }) {
   return (
     <div className="space-y-5">
@@ -538,59 +418,21 @@ function OverviewModule({
           ["Organization", organization?.name || "Not selected", organization?.status || "Choose context"],
           ["Pageants", String(pageantCount), pageant ? `Managing ${pageant.name}` : "Create or select one"],
           ["Known members", String(memberCount), "Organization-scoped access"],
-          ["Integrations", String(site?.integrations.length ?? 0), "Masked browser metadata only"],
-        ].map(([label, value, copy]) => (
-          <Card key={label}>
-            <CardContent className="pt-5">
-              <div className="text-[10px] font-bold uppercase tracking-[0.15em] text-gold-soft/35">{label}</div>
-              <div className="mt-2 truncate font-display text-2xl font-semibold text-white">{value}</div>
-              <p className="mt-1 text-xs leading-5 text-gold-soft/45">{copy}</p>
-            </CardContent>
-          </Card>
-        ))}
+          ["Integrations", String(site?.integrations.length ?? 0), "Protected deployment services"],
+        ].map(([label, value, copy]) => <Card key={label}><CardContent className="pt-5"><div className="text-[10px] font-bold uppercase tracking-[0.15em] text-gold-soft/35">{label}</div><div className="mt-2 truncate font-display text-2xl font-semibold text-white">{value}</div><p className="mt-1 text-xs leading-5 text-gold-soft/45">{copy}</p></CardContent></Card>)}
       </div>
-
       <Card>
-        <CardHeader>
-          <CardTitle>Choose the next task</CardTitle>
-          <CardDescription>Each capability owns its own workspace instead of adding another form to one long page.</CardDescription>
-        </CardHeader>
+        <CardHeader><CardTitle>Choose the next task</CardTitle><CardDescription>Each capability owns a complete workspace instead of extending one long form.</CardDescription></CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {modules.filter((module) => module.id !== "overview").map((module) => (
-            <button
-              key={module.id}
-              type="button"
-              onClick={() => onSelect(module.id)}
-              className="rounded-2xl border border-line bg-black/25 p-4 text-left transition hover:border-gold/35 hover:bg-gold/[0.06]"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="font-semibold text-white">{module.shortLabel}</div>
-                <Badge tone={module.availability === "available" ? "success" : module.availability === "preview" ? "gold" : "neutral"}>
-                  {module.availability === "available" ? "Available" : `M${module.milestone}`}
-                </Badge>
-              </div>
-              <p className="mt-2 line-clamp-3 text-xs leading-5 text-gold-soft/45">{module.description}</p>
-            </button>
-          ))}
+          {modules.filter((module) => module.id !== "overview").map((module) => <Link key={module.id} href={`/manage?module=${module.id}`} className="rounded-2xl border border-line bg-black/25 p-4 transition hover:border-gold/35 hover:bg-gold/[0.06]"><div className="flex items-start justify-between gap-3"><div className="font-semibold text-white">{module.shortLabel}</div><Badge tone={module.availability === "available" ? "success" : module.availability === "preview" ? "gold" : "neutral"}>{module.availability === "available" ? "Available" : `M${module.milestone}`}</Badge></div><p className="mt-2 line-clamp-3 text-xs leading-5 text-gold-soft/45">{module.description}</p></Link>)}
         </CardContent>
       </Card>
-
-      {!pageant && <Notice tone="gold" title="Select a pageant">Pageant-scoped modules remain intentionally unavailable until a pageant context is selected.</Notice>}
+      {!pageant && <Notice tone="gold" title="Select a pageant">Pageant-scoped modules remain unavailable until a pageant context is selected.</Notice>}
     </div>
   );
 }
 
-function PageantsModule({
-  organizationId,
-  pageants,
-  pageantId,
-  setPageantId,
-  pageantForm,
-  setPageantForm,
-  createPageant,
-  seedReference,
-  busy,
-}: {
+function PageantsModule({ organizationId, pageants, pageantId, setPageantId, pageantForm, setPageantForm, createPageant, seedReference, busy }: {
   organizationId: string;
   pageants: Pageant[];
   pageantId: string;
@@ -603,153 +445,35 @@ function PageantsModule({
 }) {
   return (
     <div className="grid gap-5 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-      <Card>
-        <CardHeader>
-          <CardTitle>Pageant list</CardTitle>
-          <CardDescription>Choose which persistent pageant the other modules should manage.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {pageants.length === 0 ? (
-            <EmptyState title="No pageants yet" description="Create the first pageant draft for this organization." />
-          ) : (
-            <div className="space-y-2">
-              {pageants.map((pageant) => (
-                <button
-                  key={pageant.id}
-                  type="button"
-                  onClick={() => setPageantId(pageant.id)}
-                  className={`w-full rounded-2xl border p-4 text-left transition ${pageantId === pageant.id ? "border-gold/50 bg-gold/10" : "border-line bg-black/25 hover:border-gold/30"}`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="font-semibold text-white">{pageant.name}</div>
-                      <div className="mt-1 text-xs text-gold-soft/40">/{pageant.slug} · {pageant.venue_name || "Venue TBA"}</div>
-                    </div>
-                    <Badge tone={pageantId === pageant.id ? "gold" : "neutral"}>{pageant.status}</Badge>
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-          <Button variant="secondary" className="mt-4 w-full" onClick={seedReference} disabled={!organizationId || busy === "seed"}>
-            <Sprout size={16} /> {busy === "seed" ? "Reconciling reference data…" : "Seed Miss Stellarverse reference"}
-          </Button>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Create a pageant draft</CardTitle>
-          <CardDescription>Lifecycle editing, publication, and scheduling remain separate actions instead of being implied at creation.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={createPageant} className="grid gap-4 sm:grid-cols-2">
-            <TextField
-              id="pageant-name"
-              label="Pageant name"
-              value={pageantForm.name}
-              onChange={(event) => setPageantForm((current) => ({ ...current, name: event.target.value, slug: current.slug || slugify(event.target.value) }))}
-              required
-            />
-            <TextField
-              id="pageant-slug"
-              label="Slug"
-              value={pageantForm.slug}
-              onChange={(event) => setPageantForm((current) => ({ ...current, slug: slugify(event.target.value) }))}
-              required
-            />
-            <TextField id="pageant-venue" label="Venue" value={pageantForm.venueName} onChange={(event) => setPageantForm((current) => ({ ...current, venueName: event.target.value }))} />
-            <TextareaField id="pageant-description" label="Description" value={pageantForm.description} onChange={(event) => setPageantForm((current) => ({ ...current, description: event.target.value }))} className="min-h-24" />
-            <Button type="submit" disabled={!organizationId || busy === "pageant"} className="w-full sm:col-span-2">
-              <Plus size={16} /> {busy === "pageant" ? "Creating draft…" : "Create durable pageant draft"}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-
-      <Notice tone="gold" className="xl:col-span-2">
-        <Database className="mr-1 inline" size={16} /> The deterministic reference seed never claims contract deployment, minting, payment, ownership, market settlement, or Explorer evidence.
-      </Notice>
+      <Card><CardHeader><CardTitle>Pageant portfolio</CardTitle><CardDescription>Selecting a pageant changes the editor context and public-navigation preview.</CardDescription></CardHeader><CardContent>{pageants.length === 0 ? <EmptyState title="No pageants yet" description="Create the first pageant draft for this organization." /> : <div className="space-y-2">{pageants.map((pageant) => <button key={pageant.id} type="button" onClick={() => setPageantId(pageant.id)} className={`w-full rounded-2xl border p-4 text-left transition ${pageantId === pageant.id ? "border-gold/50 bg-gold/10" : "border-line bg-black/25 hover:border-gold/30"}`}><div className="flex items-start justify-between gap-3"><div><div className="font-semibold text-white">{pageant.name}</div><div className="mt-1 text-xs text-gold-soft/40">/{pageant.slug} · {pageant.venue_name || "Venue TBA"}</div></div><Badge tone={pageantId === pageant.id ? "gold" : "neutral"}>{pageant.status}</Badge></div></button>)}</div>}<Button variant="secondary" className="mt-4 w-full" onClick={seedReference} disabled={!organizationId || busy === "seed"}><Sprout size={16} /> {busy === "seed" ? "Reconciling…" : "Seed Miss Stellarverse reference"}</Button></CardContent></Card>
+      <Card><CardHeader><CardTitle>Create a pageant draft</CardTitle><CardDescription>Start with identity and venue. Publishing, schedules, and lifecycle controls remain explicit later steps.</CardDescription></CardHeader><CardContent><form className="space-y-4" onSubmit={createPageant}><TextField id="pageant-name" label="Pageant name" value={pageantForm.name} onChange={(event) => setPageantForm((current) => ({ ...current, name: event.target.value, slug: current.slug || slugify(event.target.value) }))} required /><TextField id="pageant-slug" label="Slug" value={pageantForm.slug} onChange={(event) => setPageantForm((current) => ({ ...current, slug: slugify(event.target.value) }))} required /><TextField id="pageant-venue" label="Venue" value={pageantForm.venueName} onChange={(event) => setPageantForm((current) => ({ ...current, venueName: event.target.value }))} /><TextareaField id="pageant-description" label="Description" value={pageantForm.description} onChange={(event) => setPageantForm((current) => ({ ...current, description: event.target.value }))} /><Button type="submit" disabled={!organizationId || busy === "pageant"}><Plus size={16} /> {busy === "pageant" ? "Creating…" : "Create pageant"}</Button></form></CardContent></Card>
     </div>
   );
 }
 
-function ContestantsModule({
-  pageant,
-  form,
-  setForm,
-  onSubmit,
-  busy,
-}: {
+function ContestantsModule({ pageant, form, setForm, onSubmit, busy }: {
   pageant: Pageant | null;
   form: { displayName: string; countryCode: string; sash: string; contestantNumber: string };
   setForm: React.Dispatch<React.SetStateAction<{ displayName: string; countryCode: string; sash: string; contestantNumber: string }>>;
   onSubmit: (event: FormEvent) => void;
   busy: string;
 }) {
-  if (!pageant) return <EmptyState title="Select a pageant first" description="Contestants are always created inside an explicit pageant context." />;
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Add a contestant</CardTitle>
-        <CardDescription>Selected pageant: {pageant.name}. Portraits, galleries, ordering, visibility, and dynamic sections remain separate Milestone B tasks.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2">
-          <TextField id="contestant-display-name" label="Display name" value={form.displayName} onChange={(event) => setForm((current) => ({ ...current, displayName: event.target.value }))} required className="sm:col-span-2" />
-          <TextField id="contestant-country-code" label="Country code" value={form.countryCode} onChange={(event) => setForm((current) => ({ ...current, countryCode: event.target.value.toUpperCase().slice(0, 2) }))} required />
-          <TextField id="contestant-sash" label="Sash" value={form.sash} onChange={(event) => setForm((current) => ({ ...current, sash: event.target.value.toUpperCase() }))} required />
-          <TextField id="contestant-number" label="Contestant number" type="number" value={form.contestantNumber} onChange={(event) => setForm((current) => ({ ...current, contestantNumber: event.target.value }))} className="sm:col-span-2" />
-          <Button type="submit" disabled={busy === "contestant"} className="w-full sm:col-span-2">
-            {busy === "contestant" ? "Adding contestant…" : "Add contestant"}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
-  );
+  if (!pageant) return <EmptyState title="Select a pageant" description="Contestants are always scoped to one pageant." />;
+  return <Card><CardHeader><CardTitle>Add a contestant</CardTitle><CardDescription>The contestant becomes available to the public widget renderer after publication.</CardDescription></CardHeader><CardContent><form className="grid gap-4 sm:grid-cols-2" onSubmit={onSubmit}><TextField id="contestant-name" label="Display name" value={form.displayName} onChange={(event) => setForm((current) => ({ ...current, displayName: event.target.value }))} required /><TextField id="contestant-number" label="Contestant number" type="number" min="1" value={form.contestantNumber} onChange={(event) => setForm((current) => ({ ...current, contestantNumber: event.target.value }))} /><TextField id="contestant-country" label="Country code" value={form.countryCode} onChange={(event) => setForm((current) => ({ ...current, countryCode: event.target.value.toUpperCase().slice(0, 2) }))} required /><TextField id="contestant-sash" label="Sash" value={form.sash} onChange={(event) => setForm((current) => ({ ...current, sash: event.target.value.toUpperCase() }))} required /><div className="sm:col-span-2"><Button type="submit" disabled={busy === "contestant"}><Users size={16} /> {busy === "contestant" ? "Adding…" : `Add to ${pageant.name}`}</Button></div></form></CardContent></Card>;
 }
 
-function CategoriesModule({
-  pageant,
-  form,
-  setForm,
-  onSubmit,
-  busy,
-}: {
+function CategoriesModule({ pageant, form, setForm, onSubmit, busy }: {
   pageant: Pageant | null;
   form: { name: string; slug: string };
   setForm: React.Dispatch<React.SetStateAction<{ name: string; slug: string }>>;
   onSubmit: (event: FormEvent) => void;
   busy: string;
 }) {
-  if (!pageant) return <EmptyState title="Select a pageant first" description="Categories and outfit segments are pageant-scoped." />;
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Create a category</CardTitle>
-        <CardDescription>Selected pageant: {pageant.name}. Assignment, ordering, and visibility controls will build on this record.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2">
-          <TextField id="category-name" label="Category name" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value, slug: slugify(event.target.value) }))} required />
-          <TextField id="category-slug" label="Slug" value={form.slug} onChange={(event) => setForm((current) => ({ ...current, slug: slugify(event.target.value) }))} required />
-          <Button type="submit" disabled={busy === "category"} className="w-full sm:col-span-2">
-            {busy === "category" ? "Saving category…" : "Save category"}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
-  );
+  if (!pageant) return <EmptyState title="Select a pageant" description="Categories are always scoped to one pageant." />;
+  return <Card><CardHeader><CardTitle>Create a category</CardTitle><CardDescription>Categories feed the public home widget and later voting configuration.</CardDescription></CardHeader><CardContent><form className="grid gap-4 sm:grid-cols-2" onSubmit={onSubmit}><TextField id="category-name" label="Category name" value={form.name} onChange={(event) => setForm({ name: event.target.value, slug: slugify(event.target.value) })} required /><TextField id="category-slug" label="Slug" value={form.slug} onChange={(event) => setForm((current) => ({ ...current, slug: slugify(event.target.value) }))} required /><div className="sm:col-span-2"><Button type="submit" disabled={busy === "category"}><Plus size={16} /> {busy === "category" ? "Saving…" : "Save category"}</Button></div></form></CardContent></Card>;
 }
 
-function PeopleModule({
-  organization,
-  members,
-  form,
-  setForm,
-  onSubmit,
-  busy,
-}: {
+function PeopleModule({ organization, members, form, setForm, onSubmit, busy }: {
   organization: Organization | null;
   members: Member[];
   form: { walletAddress: string; role: string };
@@ -757,65 +481,10 @@ function PeopleModule({
   onSubmit: (event: FormEvent) => void;
   busy: string;
 }) {
-  if (!organization) return <EmptyState title="Select an organization first" description="Memberships are organization-scoped." />;
-  return (
-    <div className="space-y-5">
-      <Card>
-        <CardHeader>
-          <CardTitle>Grant organization access</CardTitle>
-          <CardDescription>The target wallet must sign in once first. Organizer access maps to the organization editor role and never grants site administration.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_180px_auto]">
-            <TextField id="member-wallet" label="Verified wallet address" value={form.walletAddress} onChange={(event) => setForm((current) => ({ ...current, walletAddress: event.target.value.toUpperCase() }))} required />
-            <SelectField id="member-role" label="Role" value={form.role} onChange={(event) => setForm((current) => ({ ...current, role: event.target.value }))}>
-              <option value="editor">Organizer</option>
-              <option value="viewer">Viewer</option>
-              <option value="admin">Organization admin</option>
-            </SelectField>
-            <Button type="submit" disabled={busy === "member"} className="w-full self-end sm:w-auto">Grant access</Button>
-          </form>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Current members</CardTitle>
-          <CardDescription>{organization.name} roles are evaluated server-side on every protected request.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {members.length === 0 ? (
-            <EmptyState title="No members returned" description="Only authorized organization owners and administrators may read this list." />
-          ) : (
-            <div className="divide-y divide-line rounded-2xl border border-line">
-              {members.map((member) => (
-                <div key={member.user_id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0">
-                    <div className="font-semibold text-white">{member.display_name}</div>
-                    <div className="mt-1 truncate font-mono text-xs text-gold-soft/40">{member.primary_wallet || "No primary wallet"}</div>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Badge tone="gold">{member.role === "editor" ? "organizer" : member.role}</Badge>
-                    <Badge tone={member.status === "active" ? "success" : "neutral"}>{member.status}</Badge>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
-  );
+  return <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(300px,0.85fr)]"><Card><CardHeader><CardTitle>{organization?.name || "Organization"} members</CardTitle><CardDescription>Roles remain organization-scoped unless the account is a site administrator.</CardDescription></CardHeader><CardContent>{members.length === 0 ? <EmptyState title="No members returned" description="Members appear after their wallet has signed in and access is granted." /> : <div className="space-y-2">{members.map((member) => <div key={member.user_id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-black/25 p-4"><div><div className="font-semibold text-white">{member.display_name}</div><div className="mt-1 text-xs text-gold-soft/40">{member.primary_wallet || member.email || member.user_id}</div></div><Badge tone={member.status === "active" ? "success" : "neutral"}>{member.role}</Badge></div>)}</div>}</CardContent></Card><Card><CardHeader><CardTitle>Grant access</CardTitle><CardDescription>The wallet must have signed in at least once.</CardDescription></CardHeader><CardContent><form className="space-y-4" onSubmit={onSubmit}><TextField id="member-wallet" label="Stellar wallet address" value={form.walletAddress} onChange={(event) => setForm((current) => ({ ...current, walletAddress: event.target.value }))} required /><SelectField id="member-role" label="Organization role" value={form.role} onChange={(event) => setForm((current) => ({ ...current, role: event.target.value }))}><option value="editor">Organizer/editor</option><option value="viewer">Viewer/auditor</option><option value="admin">Organization admin</option></SelectField><Button type="submit" disabled={busy === "member"}><Users size={16} /> {busy === "member" ? "Updating…" : "Grant access"}</Button></form></CardContent></Card></div>;
 }
 
-function SiteModule({
-  overview,
-  site,
-  form,
-  setForm,
-  onSubmit,
-  busy,
-}: {
+function SiteModule({ overview, site, form, setForm, onSubmit, busy }: {
   overview: Overview | null;
   site: SiteSettings;
   form: { siteName: string; defaultPageantId: string; selector: boolean };
@@ -823,83 +492,11 @@ function SiteModule({
   onSubmit: (event: FormEvent) => void;
   busy: string;
 }) {
-  return (
-    <form onSubmit={onSubmit} className="space-y-5">
-      <Card>
-        <CardHeader>
-          <CardTitle>Hosted pageant and public context</CardTitle>
-          <CardDescription>Control the public selector without rebuilding the frontend. Mainnet remains disabled.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <TextField id="site-name" label="Site name" value={form.siteName} onChange={(event) => setForm((current) => ({ ...current, siteName: event.target.value }))} required />
-            <SelectField id="default-pageant" label="Default hosted pageant" value={form.defaultPageantId} onChange={(event) => setForm((current) => ({ ...current, defaultPageantId: event.target.value }))}>
-              <option value="">No default pageant</option>
-              {(overview?.pageants ?? []).filter((pageant) => ["published", "active"].includes(pageant.status)).map((pageant) => <option key={pageant.id} value={pageant.id}>{pageant.name}</option>)}
-            </SelectField>
-          </div>
-          <label className="flex items-start gap-3 rounded-2xl border border-line bg-white/[0.02] p-4 text-sm text-gold-soft/65">
-            <input type="checkbox" checked={form.selector} onChange={(event) => setForm((current) => ({ ...current, selector: event.target.checked }))} className="mt-1 accent-[#d4af37]" />
-            <span><strong className="block text-white">Enable public pageant selector</strong>Visitors may choose among published pageants while deep links remain pageant-specific.</span>
-          </label>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Notice tone="success" title="Stellar Testnet">Enabled for the current build.</Notice>
-            <Notice tone="neutral" title="Stellar Mainnet" className="opacity-55">Unavailable until the deployment and persisted production-readiness gates are explicitly enabled.</Notice>
-          </div>
-          <Button type="submit" disabled={busy === "site"} className="w-full sm:w-auto">Save site settings</Button>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Integration status</CardTitle>
-          <CardDescription>Only masked metadata reaches the browser; protected values are never echoed.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {site.integrations.length === 0 ? (
-            <EmptyState title="No optional integrations saved" description="R2 remains unavailable until the deployment configuration is complete and validated." />
-          ) : (
-            <div className="grid gap-3">
-              {site.integrations.map((integration) => (
-                <div key={integration.provider} className="flex flex-col gap-3 rounded-2xl border border-line p-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <div className="font-semibold text-white">{integration.provider}</div>
-                    <div className="mt-1 text-xs text-gold-soft/40">Ending in {integration.value_suffix || "••••"}</div>
-                  </div>
-                  <Badge tone={integration.validation_status === "valid" ? "success" : "neutral"}>{integration.validation_status.replaceAll("_", " ")}</Badge>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </form>
-  );
+  return <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.8fr)]"><Card><CardHeader><CardTitle>Hosted site context</CardTitle><CardDescription>The public shell uses these settings only after the selected pageant exists and is available.</CardDescription></CardHeader><CardContent><form className="space-y-4" onSubmit={onSubmit}><TextField id="site-name" label="Site name" value={form.siteName} onChange={(event) => setForm((current) => ({ ...current, siteName: event.target.value }))} required /><SelectField id="default-pageant" label="Default pageant" value={form.defaultPageantId} onChange={(event) => setForm((current) => ({ ...current, defaultPageantId: event.target.value }))}><option value="">No default pageant</option>{(overview?.pageants ?? []).map((pageant) => <option key={pageant.id} value={pageant.id}>{pageant.name}</option>)}</SelectField><label className="flex items-start gap-3 rounded-2xl border border-line bg-black/25 p-4"><input type="checkbox" checked={form.selector} onChange={(event) => setForm((current) => ({ ...current, selector: event.target.checked }))} className="mt-1 h-4 w-4 accent-[#d4af37]" /><span><span className="block text-sm font-semibold text-white">Allow public pageant switching</span><span className="mt-1 block text-xs leading-5 text-gold-soft/40">The unified navbar exposes the hierarchical pageant chooser when multiple pageants exist.</span></span></label><Button type="submit" disabled={busy === "site"}>{busy === "site" ? "Saving…" : "Save site settings"}</Button></form></CardContent></Card><Card><CardHeader><CardTitle>Deployment readiness</CardTitle><CardDescription>Secrets remain server-side. The browser only sees masked provider status.</CardDescription></CardHeader><CardContent className="space-y-3"><div className="rounded-2xl border border-line bg-black/25 p-4"><div className="flex items-center justify-between gap-3"><span className="text-sm font-semibold text-white">Stellar network</span><Badge tone="gold">Testnet</Badge></div><p className="mt-2 text-xs text-gold-soft/40">Mainnet is disabled by deployment and persisted readiness gates.</p></div>{site.integrations.length === 0 ? <EmptyState title="No integrations reported" description="Configure R2 and other runtime providers through protected deployment settings." /> : site.integrations.map((integration) => <div key={integration.provider} className="rounded-2xl border border-line bg-black/25 p-4"><div className="flex items-center justify-between gap-3"><span className="text-sm font-semibold text-white">{integration.provider}</span><Badge tone={integration.validation_status === "valid" ? "success" : "gold"}>{integration.validation_status}</Badge></div>{integration.value_suffix && <p className="mt-2 font-mono text-xs text-gold-soft/40">…{integration.value_suffix}</p>}</div>)}</CardContent></Card></div>;
 }
 
-function ModuleBoundary({ moduleId, organization, pageant }: { moduleId: ManageModuleId; organization: Organization | null; pageant: Pageant | null }) {
-  const module = manageModules.find((item) => item.id === moduleId)!;
-  const isMedia = moduleId === "media";
-  return (
-    <Card>
-      <CardContent className="py-10 text-center sm:py-14">
-        <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl border border-gold/20 bg-gold/10 text-gold">
-          {isMedia ? <Images size={25} /> : moduleId === "markets" ? <Globe2 size={25} /> : <Crown size={25} />}
-        </span>
-        <Badge tone={module.availability === "preview" ? "gold" : "neutral"} className="mt-5">Milestone {module.milestone}</Badge>
-        <h3 className="mt-4 font-display text-3xl font-semibold text-white">{module.label}</h3>
-        <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-gold-soft/50">{module.description}</p>
-        <div className="mx-auto mt-6 max-w-xl rounded-2xl border border-line bg-black/25 p-4 text-left text-sm leading-6 text-gold-soft/50">
-          <strong className="text-white">Current context</strong><br />
-          Organization: {organization?.name || "not selected"}<br />
-          Pageant: {pageant?.name || "not selected"}
-        </div>
-        {isMedia && (
-          <Notice tone="gold" className="mx-auto mt-5 max-w-xl text-left">
-            The R2 API foundation exists, but the automatic browser upload, Media Library, and asset picker are not represented as complete until the real Cloudflare flow passes.
-          </Notice>
-        )}
-      </CardContent>
-    </Card>
-  );
+function ModuleBoundary({ moduleId, organization, pageant }: { moduleId: string; organization: Organization | null; pageant: Pageant | null }) {
+  const definition = manageModules.find((module) => module.id === moduleId)!;
+  const icon = moduleId === "media" ? <Images size={25} /> : moduleId === "markets" ? <Globe2 size={25} /> : <Database size={25} />;
+  return <Card className="border-gold/20"><CardContent className="py-10 text-center"><span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl border border-gold/20 bg-gold/10 text-gold">{icon}</span><Badge tone={definition.availability === "preview" ? "gold" : "neutral"} className="mt-5">Milestone {definition.milestone} · {definition.availability}</Badge><h3 className="mt-4 font-display text-3xl font-semibold text-white">{definition.label}</h3><p className="mx-auto mt-3 max-w-2xl text-sm leading-7 text-gold-soft/50">{definition.description}</p><div className="mx-auto mt-6 grid max-w-xl gap-3 text-left sm:grid-cols-2"><div className="rounded-2xl border border-line bg-black/25 p-4"><div className="text-[10px] font-bold uppercase tracking-[0.14em] text-gold-soft/35">Organization</div><div className="mt-2 text-sm font-semibold text-white">{organization?.name || "Not selected"}</div></div><div className="rounded-2xl border border-line bg-black/25 p-4"><div className="text-[10px] font-bold uppercase tracking-[0.14em] text-gold-soft/35">Pageant</div><div className="mt-2 text-sm font-semibold text-white">{pageant?.name || "Not selected"}</div></div></div><Notice className="mx-auto mt-6 max-w-2xl text-left" tone="gold" title="Truthful boundary">This control panel reserves the complete workspace without presenting unfinished fixture actions as production-ready controls.</Notice></CardContent></Card>;
 }
