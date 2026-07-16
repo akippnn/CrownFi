@@ -23,7 +23,26 @@ function routePath(href: string) {
 
 function isActivePath(path: string, href: string) {
   const target = routePath(href);
+  if (target === "/platform") return path === target;
   return path === target || (target !== "/" && path.startsWith(`${target}/`));
+}
+
+function isPublicModuleActive(id: PublicPageantModuleId, path: string, pageantId: string) {
+  const pageantPath = `/platform/pageants/${pageantId}`;
+  switch (id) {
+    case "overview":
+      return path === pageantPath;
+    case "contestants":
+      return path.startsWith(`${pageantPath}/contestants`);
+    case "vote":
+      return path === "/vote";
+    case "tickets":
+      return path === "/tickets";
+    case "predict":
+      return path === `/pageants/${pageantId}/predict`;
+    case "results":
+      return path === `/pageants/${pageantId}/results`;
+  }
 }
 
 function short(address: string, count = 5) {
@@ -113,6 +132,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         ...module,
         href: module.href(activePageantId),
         Icon: contextIcons[module.id],
+        active: isPublicModuleActive(module.id, path, activePageantId),
       }))
     : [];
 
@@ -224,11 +244,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <nav className="hidden border-t border-line/70 md:block" aria-label="Active pageant navigation">
             <div className="mx-auto flex max-w-7xl items-center gap-1 overflow-x-auto px-4 py-2 sm:px-6">
               <span className="mr-2 hidden shrink-0 text-[10px] font-bold uppercase tracking-[0.15em] text-gold-soft/30 lg:inline">{activePageant?.name}</span>
-              {contextLinks.map(({ id, label, href, Icon }) => (
+              {contextLinks.map(({ id, label, href, Icon, active }) => (
                 <Link
                   key={id}
                   href={href}
-                  className={`flex shrink-0 items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${isActivePath(path, href) ? "bg-gold/15 text-gold-soft" : "text-gold-soft/60 hover:bg-gold/10 hover:text-white"}`}
+                  aria-current={active ? "page" : undefined}
+                  className={`flex shrink-0 items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${active ? "bg-gold/15 text-gold-soft" : "text-gold-soft/60 hover:bg-gold/10 hover:text-white"}`}
                 >
                   <Icon size={14} /> {label}
                 </Link>
@@ -300,8 +321,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <div className="mt-6 border-t border-line pt-5">
                 <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.14em] text-gold-soft/30">Pageant experience</div>
                 <nav className="grid gap-1">
-                  {contextLinks.map(({ id, mobileLabel, href, Icon }) => (
-                    <Link key={id} href={href} onClick={() => setDrawer(false)} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm ${isActivePath(path, href) ? "bg-gold/15 text-gold-soft" : "text-gold-soft/70 hover:bg-gold/10"}`}>
+                  {contextLinks.map(({ id, mobileLabel, href, Icon, active }) => (
+                    <Link key={id} href={href} onClick={() => setDrawer(false)} aria-current={active ? "page" : undefined} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm ${active ? "bg-gold/15 text-gold-soft" : "text-gold-soft/70 hover:bg-gold/10"}`}>
                       <Icon size={17} /> {mobileLabel}
                     </Link>
                   ))}
@@ -320,7 +341,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-black/95 backdrop-blur-xl md:hidden" aria-label="Mobile navigation">
         <div className="mx-auto flex max-w-md items-stretch">
-          <MobileLink href="/platform" label="Explore" active={isActivePath(path, "/platform")} Icon={Icons.Vote} />
+          <MobileLink href="/platform" label="Explore" active={path === "/platform"} Icon={Icons.Vote} />
           {activePageantId && <MobileLink href={`/platform/pageants/${activePageantId}`} label="Pageant" active={path.startsWith(`/platform/pageants/${activePageantId}`)} Icon={Trophy} />}
           {isOrganizer && <MobileLink href="/manage" label="Manage" active={isActivePath(path, "/manage")} Icon={Icons.Lock} />}
           <MobileLink href="/account" label="Account" active={isActivePath(path, "/account")} Icon={Icons.Me} />
@@ -332,7 +353,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
 function MobileLink({ href, label, active, Icon }: { href: string; label: string; active: boolean; Icon: LucideIcon }) {
   return (
-    <Link href={href} className={`flex min-h-16 flex-1 flex-col items-center justify-center gap-1 px-2 text-[10px] font-semibold ${active ? "text-gold" : "text-gold-soft/50"}`}>
+    <Link href={href} aria-current={active ? "page" : undefined} className={`flex min-h-16 flex-1 flex-col items-center justify-center gap-1 px-2 text-[10px] font-semibold ${active ? "text-gold" : "text-gold-soft/50"}`}>
       <Icon size={19} strokeWidth={active ? 2.25 : 1.75} />
       <span>{label}</span>
     </Link>
