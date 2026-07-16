@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { PageantHomeExperience } from "@/components/pageant/PageantHomeExperience";
-import { normalizePageantHomeWidgets } from "@/lib/pageantHome";
+import { PageantHomeRoute } from "@/components/pageant/PageantHomeRoute";
 import {
   findPlatformPageant,
   platformGet,
@@ -9,21 +8,12 @@ import {
   type PlatformContestant,
 } from "@/lib/platform-api";
 
-function previewWidgets(value?: string) {
-  if (!value) return undefined;
-  try {
-    return normalizePageantHomeWidgets(JSON.parse(value));
-  } catch {
-    return undefined;
-  }
-}
-
 export default async function PlatformPageantPage({
   params,
   searchParams,
 }: {
   params: Promise<{ pageantId: string }>;
-  searchParams: Promise<{ previewLayout?: string; editorPreview?: string }>;
+  searchParams: Promise<{ editorPreview?: string }>;
 }) {
   const { pageantId } = await params;
   const query = await searchParams;
@@ -48,16 +38,14 @@ export default async function PlatformPageantPage({
     platformGet<PlatformContestant[]>(`/platform/pageants/${pageantId}/contestants`, []),
   ]);
   const { organization, pageant } = found;
-  const widgets = previewWidgets(query.previewLayout);
 
   return (
-    <PageantHomeExperience
+    <PageantHomeRoute
       pageant={pageant}
       organizationName={organization.name}
       contestants={contestants}
       categories={categories}
-      widgets={widgets}
-      preview={query.editorPreview === "1"}
+      editorPreview={query.editorPreview === "1"}
     />
   );
 }
