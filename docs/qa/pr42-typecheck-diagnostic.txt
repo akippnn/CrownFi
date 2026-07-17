@@ -1,0 +1,18 @@
+
+> crownfi-web@0.1.0 typecheck
+> prisma generate && tsc --noEmit
+
+Prisma schema loaded from prisma/schema.prisma
+
+✔ Generated Prisma Client (v5.22.0) to ./node_modules/@prisma/client in 123ms
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+Tip: Easily identify and fix slow SQL queries in your app. Optimize helps you enhance your visibility: https://pris.ly/--optimize
+
+src/app/vote/receipt/[receiptHash]/page.tsx(104,9): error TS2322: Type '{ eyebrow: string; title: string; description: string; trailing: Element; }' is not assignable to type 'IntrinsicAttributes & { eyebrow?: string | undefined; title: string; description?: string | undefined; className?: string | undefined; }'.
+  Property 'trailing' does not exist on type 'IntrinsicAttributes & { eyebrow?: string | undefined; title: string; description?: string | undefined; className?: string | undefined; }'.
+src/app/vote/receipt/[receiptHash]/page.tsx(144,20): error TS2322: Type '"success" | "warning"' is not assignable to type 'Tone | undefined'.
+  Type '"warning"' is not assignable to type 'Tone | undefined'.
+
+exit_status=2
