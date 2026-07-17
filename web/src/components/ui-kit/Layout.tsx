@@ -46,12 +46,27 @@ export function PageHeader({
   );
 }
 
-export function SectionHeader({ eyebrow, title, description, className }: { eyebrow?: string; title: string; description?: string; className?: string }) {
+export function SectionHeader({
+  eyebrow,
+  title,
+  description,
+  trailing,
+  className,
+}: {
+  eyebrow?: string;
+  title: string;
+  description?: string;
+  trailing?: ReactNode;
+  className?: string;
+}) {
   return (
-    <div className={cn("mb-6", className)}>
-      {eyebrow && <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-gold">{eyebrow}</div>}
-      <h2 className="text-balance font-display text-3xl font-semibold text-ink dark:text-white sm:text-4xl">{title}</h2>
-      {description && <p className={cn("mt-2 max-w-2xl text-sm leading-6 text-ink/60 dark:text-gold-soft/60", className?.includes("text-center") && "mx-auto")}>{description}</p>}
+    <div className={cn("mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between", className)}>
+      <div className="min-w-0 flex-1">
+        {eyebrow && <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-gold">{eyebrow}</div>}
+        <h2 className="text-balance font-display text-3xl font-semibold text-ink dark:text-white sm:text-4xl">{title}</h2>
+        {description && <p className={cn("mt-2 max-w-2xl text-sm leading-6 text-ink/60 dark:text-gold-soft/60", className?.includes("text-center") && "mx-auto")}>{description}</p>}
+      </div>
+      {trailing && <div className="shrink-0">{trailing}</div>}
     </div>
   );
 }
