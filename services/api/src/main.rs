@@ -8,6 +8,8 @@ mod error;
 mod fulfillment;
 mod identity;
 mod manage;
+mod market_positions;
+mod market_settlement;
 mod markets;
 mod media;
 mod models;
@@ -95,6 +97,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .merge(access::router().with_state(state.clone()))
         .merge(manage::router().with_state(state.clone()))
         .merge(markets::router().with_state(state.clone()))
+        .merge(market_positions::router().with_state(state.clone()))
+        .merge(market_settlement::router().with_state(state.clone()))
         .merge(ticketing::router().with_state(state.clone()))
         .merge(ticket_operations::router().with_state(state.clone()))
         .merge(ticket_transfers::router().with_state(state.clone()))
