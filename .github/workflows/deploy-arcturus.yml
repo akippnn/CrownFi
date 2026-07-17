@@ -29,6 +29,9 @@ jobs:
     env:
       ARCTURUS_REGISTRY_HOST: git.u128.org
       ARCTURUS_MAX_IMAGE_SIZE_BYTES: '805306368'
+      ARCTURUS_REMOTE_BUILD_CACHE: "true"
+      ARCTURUS_BUILD_CACHE_TTL: 168h
+      ARCTURUS_BUILD_JOBS: "2"
       CROWNFI_R2_ENABLED: ${{ vars.CROWNFI_R2_ENABLED || 'false' }}
       R2_ENDPOINT: ${{ vars.R2_ENDPOINT }}
       R2_BUCKET: ${{ vars.R2_BUCKET }}
