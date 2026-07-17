@@ -1,0 +1,204 @@
+name: Apply PR 42 ACL integration v2
+
+on:
+  push:
+    branches:
+      - feat/milestone-c-voting-v1
+    paths:
+      - .github/workflows/apply-pr42-acl-v2.yml
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: feat/milestone-c-voting-v1
+          persist-credentials: true
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Apply centralized voting authorization
+        run: |
+          set -euo pipefail
+          cat > /tmp/apply.py <<'PY'
+          from pathlib import Path
+
+          voting = Path('services/api/src/voting.rs')
+          source = voting.read_text(encoding='utf-8')
+          replacements = {
+              '.route("/voting/rounds", post(create_round))': '.route("/internal/voting/rounds", post(create_round))',
+              '"/voting/rounds/:round_id/open"': '"/internal/voting/rounds/:round_id/open"',
+              '"/voting/rounds/:round_id/close"': '"/internal/voting/rounds/:round_id/close"',
+              '"/voting/rounds/:round_id/votes"': '"/internal/voting/rounds/:round_id/votes"',
+          }
+          for old, new in replacements.items():
+              if old not in source:
+                  raise SystemExit(f'missing voting route marker: {old}')
+              source = source.replace(old, new)
+          voting.write_text(source, encoding='utf-8')
+
+          proofs = Path('services/api/src/voting_proofs.rs')
+          source = proofs.read_text(encoding='utf-8')
+          post_marker = '            post(create_snapshot).get(get_snapshot),'
+          if post_marker not in source:
+              raise SystemExit('missing voting snapshot handler marker')
+          source = source.replace(post_marker, '            get(get_snapshot),', 1)
+          receipt_marker = '''        .route(
+              "/voting/receipts/:receipt_hash/proof",
+              get(get_receipt_proof),
+          )'''
+          if receipt_marker not in source:
+              receipt_marker = '''        .route(
+            "/voting/receipts/:receipt_hash/proof",
+            get(get_receipt_proof),
+        )'''
+          internal_route = '''        .route(
+            "/internal/voting/rounds/:round_id/snapshot",
+            post(create_snapshot),
+        )
+'''
+          if receipt_marker not in source:
+              raise SystemExit('missing receipt route insertion marker')
+          source = source.replace(receipt_marker, internal_route + receipt_marker, 1)
+          proofs.write_text(source, encoding='utf-8')
+
+          acl = Path('services/api/src/authorization_acl.rs')
+          source = acl.read_text(encoding='utf-8')
+          edits = [
+              ('    PayoutRead,\n    SnapshotWrite,', '    PayoutRead,\n    VotingRoundManage,\n    VotingCast,\n    SnapshotWrite,'),
+              ('            Self::PayoutRead => "payout.read",\n            Self::SnapshotWrite => "voting.snapshot.write",', '            Self::PayoutRead => "payout.read",\n            Self::VotingRoundManage => "voting.round.manage",\n            Self::VotingCast => "voting.vote.cast",\n            Self::SnapshotWrite => "voting.snapshot.write",'),
+              ('    if capability == Capability::MarketStake {\n        return (true, "active_account");\n    }', '    if matches!(capability, Capability::VotingCast | Capability::MarketStake) {\n        return (true, "active_account");\n    }'),
+              ('                | Capability::PayoutRead\n                | Capability::MarketCreate', '                | Capability::PayoutRead\n                | Capability::VotingRoundManage\n                | Capability::MarketCreate'),
+              ('                | Capability::FulfillmentRead\n                | Capability::MarketCreate', '                | Capability::FulfillmentRead\n                | Capability::VotingRoundManage\n                | Capability::MarketCreate'),
+          ]
+          for old, new in edits:
+              if old not in source:
+                  raise SystemExit(f'missing ACL marker: {old}')
+              source = source.replace(old, new, 1)
+
+          dispatch_marker = '    if segments[0] == "internal" {'
+          worker_block = '''    if segments.len() == 5
+              && segments[0] == "internal"
+              && segments[1] == "voting-anchor"
+              && segments[2] == "intents"
+              && method == &Method::POST
+              && matches!(segments[4], "submission" | "evidence")
+          {
+              return Ok(RequestClass::TokenOnly(TokenGate {
+                  transport: Transport::PayoutWorker,
+                  actor_required: false,
+                  expected_actor_user_id: None,
+                  local_only: false,
+              }));
+          }
+
+          '''
+          if dispatch_marker not in source:
+              raise SystemExit('missing internal dispatch marker')
+          source = source.replace(dispatch_marker, worker_block + dispatch_marker, 1)
+
+          market_marker = '    if segments == ["internal", "markets"] && method == &Method::POST {'
+          block = '''    if segments == ["internal", "voting", "rounds"] && method == &Method::POST {
+              let organization_id = required_body_uuid(body, "organization_id")?;
+              return Ok(protected_web(
+                  Capability::VotingRoundManage,
+                  ScopeSource::Resolved(Scope::organization(
+                      organization_id,
+                      "organization",
+                      Some(organization_id),
+                  )),
+                  None,
+              ));
+          }
+
+          if segments.len() == 5
+              && segments[1] == "voting"
+              && segments[2] == "rounds"
+              && method == &Method::POST
+          {
+              let round_id = parse_uuid(segments[3])?;
+              let organization_id = organization_for_voting_round(pool, round_id).await?;
+              let capability = match segments[4] {
+                  "open" | "close" | "snapshot" => Capability::VotingRoundManage,
+                  "votes" => Capability::VotingCast,
+                  _ => return Ok(RequestClass::Deny(Transport::WebInternal)),
+              };
+              return Ok(protected_web(
+                  capability,
+                  ScopeSource::Resolved(Scope::organization(
+                      organization_id,
+                      "voting_round",
+                      Some(round_id),
+                  )),
+                  None,
+              ));
+          }
+
+          if segments.len() == 5
+              && segments[1] == "voting"
+              && segments[2] == "snapshots"
+              && segments[4] == "anchor-intents"
+              && method == &Method::POST
+          {
+              let snapshot_id = parse_uuid(segments[3])?;
+              let organization_id = organization_for_voting_snapshot(pool, snapshot_id).await?;
+              return Ok(protected_web(
+                  Capability::VotingRoundManage,
+                  ScopeSource::Resolved(Scope::organization(
+                      organization_id,
+                      "voting_snapshot",
+                      Some(snapshot_id),
+                  )),
+                  None,
+              ));
+          }
+
+          '''
+          if market_marker not in source:
+              raise SystemExit('missing internal markets insertion marker')
+          source = source.replace(market_marker, block + market_marker, 1)
+
+          helper_marker = 'async fn organization_for_market(pool: &PgPool, id: Uuid) -> Result<Uuid, ApiError> {'
+          helper = '''async fn organization_for_voting_round(pool: &PgPool, id: Uuid) -> Result<Uuid, ApiError> {
+              scalar_uuid(pool, "SELECT organization_id FROM voting_rounds WHERE id = $1", id).await
+          }
+
+          async fn organization_for_voting_snapshot(pool: &PgPool, id: Uuid) -> Result<Uuid, ApiError> {
+              scalar_uuid(pool, "SELECT organization_id FROM voting_snapshots WHERE id = $1", id).await
+          }
+
+          '''
+          if helper_marker not in source:
+              raise SystemExit('missing organization helper insertion marker')
+          source = source.replace(helper_marker, helper + helper_marker, 1)
+          acl.write_text(source, encoding='utf-8')
+          PY
+          set +e
+          python3 /tmp/apply.py > /tmp/pr42-acl-v2.log 2>&1
+          status=$?
+          if [ "$status" -eq 0 ]; then
+            cargo fmt --manifest-path services/api/Cargo.toml --all >> /tmp/pr42-acl-v2.log 2>&1
+            status=$?
+          fi
+          set -e
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          if [ "$status" -eq 0 ]; then
+            git rm .github/workflows/secure-voting-routes.yml .github/workflows/apply-pr42-acl.yml .github/workflows/apply-pr42-acl-v2.yml
+            rm -f docs/qa/pr42-acl-diagnostic.txt
+            git add -A services/api/src docs/qa
+            git commit -m 'feat(voting): enforce centralized route capabilities'
+          else
+            git restore services/api/src/voting.rs services/api/src/voting_proofs.rs services/api/src/voting_anchor.rs services/api/src/main.rs services/api/src/authorization_acl.rs || true
+            cp /tmp/pr42-acl-v2.log docs/qa/pr42-acl-diagnostic-v2.txt
+            printf '\nexit_status=%s\n' "$status" >> docs/qa/pr42-acl-diagnostic-v2.txt
+            git rm .github/workflows/apply-pr42-acl-v2.yml
+            git add docs/qa/pr42-acl-diagnostic-v2.txt
+            git commit -m 'chore(pr42): capture ACL v2 diagnostics'
+          fi
+          git push origin HEAD:feat/milestone-c-voting-v1
