@@ -205,3 +205,33 @@ jobs:
           persist-credentials: false
       - name: Look for high-risk committed secrets
         run: python3 scripts/secret-smoke-test.py
+
+  format-pr42:
+    name: Apply Rust formatting to reconstructed PR 42
+    if: github.event_name == 'pull_request' && github.head_ref == 'feat/milestone-c-voting-v1'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v5
+        with:
+          ref: feat/milestone-c-voting-v1
+          persist-credentials: true
+      - name: Setup Rust stable
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt
+          rustup default stable
+      - name: Format and push
+        run: |
+          set -euo pipefail
+          cargo fmt --manifest-path services/api/Cargo.toml --all
+          if git diff --quiet -- services/api; then
+            echo 'No formatting change required.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add services/api
+          git commit -m 'style(voting): apply rustfmt after reconstruction'
+          git push origin HEAD:feat/milestone-c-voting-v1
