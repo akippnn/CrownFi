@@ -200,19 +200,33 @@ while IFS=$'\t' read -r name repository context containerfile validations releas
     echo "Invalid build plan row for '$name'." >&2
     exit 2
   }
+
+  build_args=(
+    --authfile "$authfile"
+    --layers
+    --jobs "${ARCTURUS_BUILD_JOBS:-2}"
+    --file "$containerfile"
+  )
+  if [[ "${ARCTURUS_REMOTE_BUILD_CACHE:-false}" == "true" ]]; then
+    build_args+=(
+      --cache-from "${repository}-cache"
+      --cache-to "${repository}-cache"
+      --cache-ttl "${ARCTURUS_BUILD_CACHE_TTL:-168h}"
+    )
+  fi
+
   if [[ "$validations" != "-" ]]; then
     IFS=',' read -r -a targets <<<"$validations"
     for target in "${targets[@]}"; do
-      buildah --root "$graph" --runroot "$runroot" bud --authfile "$authfile" \
-        --file "$containerfile" --target "$target" \
-        --tag "$repository:validation-$revision-$target" "$context"
+      buildah --root "$graph" --runroot "$runroot" bud "${build_args[@]}" \
+        --target "$target" --tag "$repository:validation-$revision-$target" "$context"
     done
   fi
   target_args=()
   [[ "$release_target" == "-" ]] || target_args=(--target "$release_target")
   image="$repository:$revision"
-  buildah --root "$graph" --runroot "$runroot" bud --authfile "$authfile" \
-    --file "$containerfile" "${target_args[@]}" --tag "$image" "$context"
+  buildah --root "$graph" --runroot "$runroot" bud "${build_args[@]}" \
+    "${target_args[@]}" --tag "$image" "$context"
   size_bytes="$(image_size_bytes "$image")"
   printf 'Built %s: %s bytes; local pre-push limit: %s bytes\n' \
     "$image" "$size_bytes" "$max_image_size_bytes"
