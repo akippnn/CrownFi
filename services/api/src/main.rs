@@ -19,6 +19,9 @@ mod state;
 mod stellar_intents;
 mod stellar_reconciliation;
 mod storage;
+mod ticket_operations;
+mod ticket_transfers;
+mod ticketing;
 mod voting;
 mod voting_anchor;
 mod voting_proofs;
@@ -92,6 +95,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .merge(access::router().with_state(state.clone()))
         .merge(manage::router().with_state(state.clone()))
         .merge(markets::router().with_state(state.clone()))
+        .merge(ticketing::router().with_state(state.clone()))
+        .merge(ticket_operations::router().with_state(state.clone()))
+        .merge(ticket_transfers::router().with_state(state.clone()))
         .merge(voting::router().with_state(state.clone()))
         .merge(voting_proofs::router().with_state(state.clone()))
         .merge(voting_anchor::router().with_state(state.clone()))
