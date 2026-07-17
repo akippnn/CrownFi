@@ -407,6 +407,13 @@ async fn attach_contestant_media(
 
     let attachment_id = Uuid::new_v4();
     let mut tx = pool.begin().await.map_err(map_database_error)?;
+    if role == "portrait" {
+        sqlx::query("DELETE FROM contestant_media WHERE pageant_contestant_id = $1 AND role = 'portrait'")
+            .bind(pageant_contestant_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(map_database_error)?;
+    }
     sqlx::query("INSERT INTO contestant_media (id, pageant_contestant_id, media_asset_id, role, caption, sort_order) VALUES ($1, $2, $3, $4, $5, $6)")
         .bind(attachment_id)
         .bind(pageant_contestant_id)

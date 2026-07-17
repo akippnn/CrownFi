@@ -121,6 +121,10 @@ pub struct PageantContestantRecord {
     pub sort_order: i32,
     pub created_at: OffsetDateTime,
     pub updated_at: OffsetDateTime,
+    #[sqlx(default)]
+    pub portrait_url: Option<String>,
+    #[sqlx(default)]
+    pub portrait_object_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, FromRow)]
@@ -477,7 +481,10 @@ async fn create_pageant_contestant(
     .await
     .map_err(map_database_error)?;
 
-    let contestant = fetch_pageant_contestant(&mut tx, pageant_contestant_id).await?;
+    let mut contestant = fetch_pageant_contestant(&mut tx, pageant_contestant_id).await?;
+    if let Some(ref key) = contestant.portrait_object_key {
+        contestant.portrait_url = state.media_store.as_ref().and_then(|store| store.delivery_url(key));
+    }
     write_audit(
         &mut tx,
         Some(organization_id),
@@ -497,11 +504,16 @@ async fn list_pageant_contestants(
     Path(pageant_id): Path<Uuid>,
 ) -> Result<Json<Vec<PageantContestantRecord>>, ApiError> {
     let pool = database_pool(&state)?;
-    let contestants = sqlx::query_as::<_, PageantContestantRecord>(PAGEANT_CONTESTANT_SELECT)
+    let mut contestants = sqlx::query_as::<_, PageantContestantRecord>(PAGEANT_CONTESTANT_SELECT)
         .bind(pageant_id)
         .fetch_all(pool)
         .await
         .map_err(map_database_error)?;
+    for c in &mut contestants {
+        if let Some(ref key) = c.portrait_object_key {
+            c.portrait_url = state.media_store.as_ref().and_then(|store| store.delivery_url(key));
+        }
+    }
     Ok(Json(contestants))
 }
 
@@ -573,14 +585,14 @@ async fn list_contestant_sections(
 }
 
 const PAGEANT_CONTESTANT_SELECT: &str =
-    "SELECT pc.id, pc.pageant_id, pc.contestant_id, c.display_name, c.legal_name, c.biography, c.country_code, pc.sash, pc.contestant_number, pc.country_representation, pc.status, pc.sort_order, pc.created_at, pc.updated_at FROM pageant_contestants pc JOIN contestants c ON c.id = pc.contestant_id WHERE pc.pageant_id = $1 AND pc.status <> 'archived' ORDER BY pc.sort_order, pc.created_at";
+    "SELECT pc.id, pc.pageant_id, pc.contestant_id, c.display_name, c.legal_name, c.biography, c.country_code, pc.sash, pc.contestant_number, pc.country_representation, pc.status, pc.sort_order, pc.created_at, pc.updated_at, ma.object_key AS portrait_object_key FROM pageant_contestants pc JOIN contestants c ON c.id = pc.contestant_id LEFT JOIN contestant_media cm ON cm.pageant_contestant_id = pc.id AND cm.role = 'portrait' LEFT JOIN media_assets ma ON ma.id = cm.media_asset_id AND ma.status = 'ready' WHERE pc.pageant_id = $1 AND pc.status <> 'archived' ORDER BY pc.sort_order, pc.created_at";
 
 async fn fetch_pageant_contestant(
     tx: &mut Transaction<'_, Postgres>,
     pageant_contestant_id: Uuid,
 ) -> Result<PageantContestantRecord, ApiError> {
     sqlx::query_as::<_, PageantContestantRecord>(
-        "SELECT pc.id, pc.pageant_id, pc.contestant_id, c.display_name, c.legal_name, c.biography, c.country_code, pc.sash, pc.contestant_number, pc.country_representation, pc.status, pc.sort_order, pc.created_at, pc.updated_at FROM pageant_contestants pc JOIN contestants c ON c.id = pc.contestant_id WHERE pc.id = $1",
+        "SELECT pc.id, pc.pageant_id, pc.contestant_id, c.display_name, c.legal_name, c.biography, c.country_code, pc.sash, pc.contestant_number, pc.country_representation, pc.status, pc.sort_order, pc.created_at, pc.updated_at, ma.object_key AS portrait_object_key FROM pageant_contestants pc JOIN contestants c ON c.id = pc.contestant_id LEFT JOIN contestant_media cm ON cm.pageant_contestant_id = pc.id AND cm.role = 'portrait' LEFT JOIN media_assets ma ON ma.id = cm.media_asset_id AND ma.status = 'ready' WHERE pc.id = $1",
     )
     .bind(pageant_contestant_id)
     .fetch_one(&mut **tx)

@@ -25,16 +25,16 @@ export function HeroSection({
   icon
 }: HeroSectionProps) {
   return (
-    <section className="relative overflow-hidden rounded-3xl border border-gold/25 bg-cream/50 dark:bg-black/60 px-6 py-16 text-center sm:px-10 sm:py-24 shadow-2xl shadow-gold/5 dark:shadow-black/90">
+    <section className="relative overflow-hidden rounded-3xl border border-gold/25 bg-cream/20 dark:bg-black/25 backdrop-blur-[2px] px-6 py-16 text-center sm:px-10 sm:py-24 shadow-2xl shadow-gold/5 dark:shadow-black/90">
       {/* Background image */}
       <div 
-        className="absolute inset-0 bg-cover bg-center opacity-40 dark:opacity-25 dark:mix-blend-screen pointer-events-none" 
+        className="absolute inset-0 bg-cover bg-center opacity-75 dark:opacity-55 dark:mix-blend-screen pointer-events-none" 
         style={{ backgroundImage: `var(${bgVarName})` }} 
       />
       {/* Light mode white overlay */}
-      <div className="absolute inset-0 bg-white/70 dark:hidden pointer-events-none" />
-      <div className="absolute inset-0 bg-gradient-to-t from-cream via-cream/60 to-transparent dark:from-black dark:via-black/30 dark:to-transparent pointer-events-none" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(212,175,55,0.12),transparent_60%)] pointer-events-none" />
+      <div className="absolute inset-0 bg-white/30 dark:hidden pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-t from-cream/20 via-cream/5 to-transparent dark:from-black/30 dark:via-black/5 dark:to-transparent pointer-events-none" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(212,175,55,0.08),transparent_60%)] pointer-events-none" />
       
       <div className="relative z-10 space-y-6">
         <div className="eyebrow text-gold mb-2">{eyebrow}</div>

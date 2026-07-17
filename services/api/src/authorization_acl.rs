@@ -485,6 +485,39 @@ async fn classify_internal(
         ));
     }
 
+    if segments == ["internal", "manage", "pageants"] && method == &Method::PATCH {
+        let pageant_id = required_body_uuid(body, "pageant_id")?;
+        let organization_id = organization_for_pageant(pool, pageant_id).await?;
+        return Ok(protected_web(
+            Capability::PageantWrite,
+            ScopeSource::Resolved(Scope::organization(
+                organization_id,
+                "pageant",
+                Some(pageant_id),
+            )),
+            body_uuid(body, "actor_user_id"),
+        ));
+    }
+
+    if segments.len() == 4
+        && segments[0] == "internal"
+        && segments[1] == "manage"
+        && segments[2] == "pageants"
+        && method == &Method::DELETE
+    {
+        let pageant_id = parse_uuid(segments[3])?;
+        let organization_id = organization_for_pageant(pool, pageant_id).await?;
+        return Ok(protected_web(
+            Capability::PageantWrite,
+            ScopeSource::Resolved(Scope::organization(
+                organization_id,
+                "pageant",
+                Some(pageant_id),
+            )),
+            None,
+        ));
+    }
+
     if segments == ["internal", "manage", "categories"] && method == &Method::POST {
         let pageant_id = required_body_uuid(body, "pageant_id")?;
         let organization_id = organization_for_pageant(pool, pageant_id).await?;
@@ -510,6 +543,39 @@ async fn classify_internal(
                 Some(pageant_id),
             )),
             body_uuid(body, "actor_user_id"),
+        ));
+    }
+
+    if segments == ["internal", "manage", "contestants"] && method == &Method::PATCH {
+        let pageant_contestant_id = required_body_uuid(body, "pageant_contestant_id")?;
+        let organization_id = organization_for_pageant_contestant(pool, pageant_contestant_id).await?;
+        return Ok(protected_web(
+            Capability::PageantWrite,
+            ScopeSource::Resolved(Scope::organization(
+                organization_id,
+                "organization",
+                Some(organization_id),
+            )),
+            body_uuid(body, "actor_user_id"),
+        ));
+    }
+
+    if segments.len() == 4
+        && segments[0] == "internal"
+        && segments[1] == "manage"
+        && segments[2] == "contestants"
+        && method == &Method::DELETE
+    {
+        let pageant_contestant_id = parse_uuid(segments[3])?;
+        let organization_id = organization_for_pageant_contestant(pool, pageant_contestant_id).await?;
+        return Ok(protected_web(
+            Capability::PageantWrite,
+            ScopeSource::Resolved(Scope::organization(
+                organization_id,
+                "organization",
+                Some(organization_id),
+            )),
+            None,
         ));
     }
 
