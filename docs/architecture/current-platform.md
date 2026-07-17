@@ -1,157 +1,151 @@
 # CrownFi current platform architecture
 
-This document describes the repository as it exists during the platform consolidation. It is not a future-state diagram and it must not hide transitional or mock-only behavior.
+This document describes the default-branch implementation after the July 2026 PR-history consolidation. Future-state plans and acceptance evidence remain separate.
 
 ## Architectural decision
 
-CrownFi is hybrid and Stellar-first where blockchain provides real utility:
+CrownFi is hybrid and Stellar-first where blockchain provides useful public truth:
 
-- vote intake, eligibility, deduplication, and tallying are off-chain for scale and privacy;
-- closed-round commitments can be anchored to Soroban;
-- tickets, collectibles, payments, ownership, and settlement use Stellar/Soroban where live Testnet integrations are configured;
-- raw voter identity and individual vote selections remain off-chain;
-- purchases and fan support do not increase vote power.
+- vote intake, eligibility, deduplication, and tallying are off-chain;
+- immutable closed-round commitments can be anchored to Soroban;
+- tickets, collectibles, payments, ownership, settlement, and audit commitments use Stellar/Soroban when live integrations are configured;
+- raw voter identities and individual vote selections remain off-chain;
+- purchases and fan support never increase voting power.
 
 ## Current runtime
 
 ```mermaid
 flowchart LR
-  Browser[Browser / Freighter] --> Web[Next.js web application]
-  Web --> API[Rust / Axum API skeleton]
-  Web -. legacy routes .-> NextAPI[Next.js API handlers]
-  API --> Memory[Process-local prototype state]
-  API -. configured, not yet repository-backed .-> Postgres[(PostgreSQL)]
-  API -. configured, not yet canonical .-> Redis[(Redis)]
+  Browser[Browser / Freighter] --> Web[Next.js web]
+  Web --> API[Rust / Axum API]
+  Web -. compatibility .-> NextAPI[Next.js API routes]
+
+  API --> SQLx[SQLx domain modules]
+  SQLx --> PublicDB[(PostgreSQL public schema)]
   NextAPI --> Prisma[Prisma compatibility layer]
-  Prisma --> Postgres
-  API -. mock / partial live paths .-> Stellar[Stellar Testnet / Soroban]
-  NextAPI -. legacy helpers .-> Stellar
+  Prisma --> LegacyDB[(PostgreSQL legacy schema)]
+
+  API --> R2[Cloudflare R2 / S3-compatible media]
+  API -. configured transaction workflows .-> Stellar[Stellar Testnet / Soroban]
+  API -. provisioned; incomplete shared controls .-> Redis[(Redis)]
+  API -. legacy event routes .-> Memory[Process-local fixtures]
 ```
 
-The Rust service exists and is part of the canonical direction, but it does not yet own durable organizations, pageants, contestants, votes, snapshots, markets, or transaction intents.
+The Rust service contains persistent platform, identity/ACL, media, catalogue, orders, Stellar intents/reconciliation, fulfillment, payouts, voting, ticketing, and market position/settlement modules. Older event/tally/snapshot handlers in `services/api/src/app.rs` remain process-local demonstration paths.
 
-## Canonical responsibility boundaries
+## Authority boundaries
 
 ### Next.js
 
 Owns:
 
-- rendering and navigation;
-- forms and interaction state;
-- Freighter connection and signing approval;
+- rendering, navigation, responsive application shells, and browser interaction state;
+- pageant-aware public and management composition;
+- Freighter connection and user signing approval;
+- httpOnly CrownFi account sessions;
 - loading, empty, failure, unauthorized, and retry UX;
-- generated API clients as domains migrate.
+- server-side proxying into protected Rust routes.
 
 Must not permanently own:
 
-- vote rules;
-- payment settlement;
-- order fulfillment;
+- vote rules and tally truth;
+- inventory, payment, issuance, or order settlement;
 - mint authority;
 - KYC policy;
-- market accounting;
+- prediction-market accounting;
 - chain indexing or reconciliation.
+
+Selected Next.js/Prisma business routes remain compatibility code until their Rust replacements and browser acceptance gates pass.
 
 ### Rust/Axum API
 
-Canonical owner for:
+Merged PostgreSQL-backed modules own or model:
 
-- organizations and memberships;
-- pageants, categories, contestants, and sections;
-- voting and snapshots;
-- ticket and collectible commerce;
-- transaction intents;
-- provider webhooks;
-- audit logs;
-- Stellar indexing and reconciliation;
-- asynchronous jobs.
+- users, Stellar account links, site administrators, organizations, memberships, pageants, categories, contestants, pageant participation, sections, and audit records;
+- R2 media lifecycle, contestant attachments, and same-asset completion serialization;
+- products, integer prices, inventory, orders, payment attempts/events;
+- transaction intents, submissions, contract registry data, chain evidence, and reconciliation results;
+- collectible fulfillment and payout workflows;
+- voting rounds, accepted votes, receipts, snapshots, Merkle proofs, and anchor-intent/evidence records;
+- ticket events/products, reservations, issuance, ownership/transfer evidence, verification, and check-in records;
+- Testnet-gated market policy/lifecycle/stake intent, accepted positions, exposure, and deterministic settlement/refund evidence;
+- centralized capability/scope authorization and authorization-decision logging.
 
-Current limitation: most of this is not implemented durably yet.
+The route inventory is in [`../api/RUST_API_ENDPOINTS.md`](../api/RUST_API_ENDPOINTS.md).
+
+The newer voting, ticketing, and market route groups still need complete centralized capability classification, worker/indexer transport restrictions, authority separation, and negative authorization tests. Direct handler checks are implementation defenses but do not replace the shared ACL acceptance gate.
 
 ### PostgreSQL
 
-Will be authoritative for application and workflow state. SQLx migrations become the canonical schema authority in Milestone B.
+The `public` schema is canonical for new platform data and is managed by append-only SQLx migrations under `services/api/migrations/`.
 
-The current Compose bridge still runs Prisma `db push` and a demo seed so the existing web MVP remains testable.
+The `legacy` schema is temporary compatibility storage for Prisma-backed Next.js routes. It must not become the authority for new platform domains.
 
 ### Redis
 
-Will own distributed rate limits, short-lived coordination, locks, and job support where appropriate. The container and URL are present, but the Rust API does not yet use Redis as a durable platform dependency.
+Redis is provisioned in the canonical Compose stack. It is intended for distributed rate limits, short-lived coordination, and job support. The current API does not yet use it as the complete shared control plane.
+
+### R2
+
+Cloudflare R2, or an explicit S3-compatible test adapter, is authoritative for uploaded media bytes. PostgreSQL is authoritative for object identity, lifecycle status, integrity metadata, visibility, and relationships.
+
+Completion requests for one media asset are serialized across API processes by a PostgreSQL transaction-scoped advisory lock. This closes the concrete duplicate-completion race; it does not implement variants, expiry, orphan cleanup, replacement/removal, or retirement policy.
+
+R2 credentials stay server-side. KYC identity documents must not be stored in the general CrownFi media bucket.
 
 ### Stellar/Soroban
 
-Authoritative for confirmed ledger transactions, contract events, on-chain ownership, settlement, and audit commitments.
+The ledger is authoritative for confirmed transactions, contract events, on-chain ownership, settlement, and audit commitments.
 
-The database must not declare a mint, payment, ownership transfer, or market settlement successful before chain confirmation and reconciliation.
+A database row marked built, signed, submitted, planned, or pending is not ledger success. CrownFi requires accepted independently sourced chain evidence and reconciliation before exposing a completed result.
 
 ## Current service inventory
 
-| Service/capability | Current state |
+| Service/capability | Default-branch state |
 |---|---|
-| Next.js web | Working MVP and UI surface |
-| Next.js API routes | Legacy/compatibility business layer |
-| Rust API | Running skeleton with health/readiness and in-memory domain prototypes |
-| PostgreSQL | Available through Compose; canonical SQLx schema not created |
-| Redis | Available through Compose; canonical use incomplete |
-| Database initializer | Transitional Prisma `db push` plus demo seed |
-| Worker | Not a separate service yet |
-| Stellar adapter/indexer | Not a separate durable service yet |
-| Cloudflare R2 | Planned for Milestone B, not active |
-| KYC provider | Planned for Milestone C, not active |
+| Next.js web | Active application, shared UI kit, responsive public shell, full-screen Manage workspace, modular pageant-home editor/renderer, and compatibility routes |
+| Rust API | Active; persistent domain modules plus legacy in-memory event/tally routes |
+| PostgreSQL | SQLx-owned `public` schema plus Prisma-owned `legacy` compatibility schema |
+| SQLx migrations | Active and run by `db-init` |
+| Explicit Rust demo seed | Implemented; opt-in, idempotent, blocked in staging/production |
+| Redis | Provisioned; complete distributed controls remain unfinished |
+| R2 media | Server-side upload/verification/attachment and completion lock implemented; full lifecycle/Media Library work remains |
+| Voting | Durable SQLx implementation merged; ACL, real Testnet anchor/indexer, scale/restart, browser, and deployment acceptance remain |
+| Ticketing | Durable catalogue/reservation/issuance/ownership/check-in implementation merged; ACL, real payment/issuance/indexer, recovery UI, and acceptance remain |
+| Prediction markets | Deterministic Testnet-only positions/settlement implementation merged; policy, authority, real XDR/indexer/transfers, and acceptance remain |
+| Stellar intents/reconciliation | Durable records and APIs implemented; real network evidence remains capability-specific |
+| Worker/indexer | Workflow boundaries exist, but no complete independent general worker/indexer service |
+| KYC/provider integration | Not complete |
+| Arcturus deployment | Main-only immutable release path with cache acceleration and temporary legacy-preflight compatibility |
+
+## Legacy in-memory routes
+
+The following routes use process-local fixtures and must not be confused with persistent platform domains:
+
+```text
+GET  /events
+GET  /events/:event_id
+GET  /events/:event_id/contestants
+POST /events/:event_id/vote
+GET  /events/:event_id/tally
+POST /admin/events/:event_id/snapshot
+POST /admin/snapshots/:snapshot_id/anchor
+GET  /snapshots/:snapshot_id
+GET  /snapshots/:snapshot_id/verify
+```
+
+They may remain temporarily for compatibility and demonstrations. Persistent claims must reference the corresponding SQLx route group and exact evidence.
 
 ## Clean-clone path
-
-The canonical reproducibility command is:
 
 ```bash
 bash scripts/acceptance/clean-clone-smoke.sh
 ```
 
-It checks PostgreSQL, Redis, the Rust API, transitional database initialization, and the web application. See [`../setup/clean-clone.md`](../setup/clean-clone.md).
+It builds PostgreSQL, Redis, SQLx initialization, the Rust API, Prisma compatibility initialization, and Next.js. It proves startup and basic readiness—not complete authorization, product behavior, Testnet settlement, concurrency/restart recovery, or production deployment.
 
-The complete Milestone A gate remains open until the missing worker/Stellar processing boundaries and human clean-clone verification are resolved.
+See [`../setup/clean-clone.md`](../setup/clean-clone.md).
 
-## Data and migration authority
+## Current-state rule
 
-See [`database-migration-ownership.md`](database-migration-ownership.md).
-
-Summary:
-
-- SQLx under `services/api/migrations/` becomes canonical;
-- Prisma remains temporary compatibility/reference material;
-- new domains must not be built only in Prisma;
-- seed data is separate from migrations;
-- migration files are serialized shared infrastructure.
-
-## Testnet deployment authority
-
-See [`../blockchain/testnet-contract-registry.md`](../blockchain/testnet-contract-registry.md).
-
-A configured contract ID is not considered verified until the network, WASM hash, source revision, deployment transaction, and independent Explorer check are recorded.
-
-## Known hardcoded/prototype state
-
-The following remain migration fixtures rather than product architecture:
-
-- seeded pageant/event data;
-- seeded contestants/categories/market;
-- in-memory votes, tallies, snapshots, markets, and intents in Rust;
-- Prisma floating-point commerce prices;
-- global/demo administrator assumptions;
-- mock Stellar transaction results;
-- direct server-side platform signer compatibility paths;
-- duplicated Next.js and Rust business routes.
-
-See [`../planning/CAPABILITY_AND_HARDCODING_INVENTORY.md`](../planning/CAPABILITY_AND_HARDCODING_INVENTORY.md).
-
-## Target transition order
-
-1. Finish Milestone A reproducibility, documentation, registry, and ownership decisions.
-2. Add SQLx, PostgreSQL repositories, organizations, pageants, contestants, sections, and R2 media.
-3. Migrate one vertical domain at a time from Next.js routes to Rust.
-4. Introduce persistent transaction intents, workers, indexers, and reconciliation.
-5. Remove legacy Prisma/Next.js business routes only after replacement acceptance tests pass.
-
-## Honest status statement
-
-CrownFi currently has a real multi-service platform path and preserved MVP behavior, but it is still transitional. It should not be described as a completed Rust platform, a fully persistent multi-tenant product, or production-ready Stellar infrastructure until the acceptance gates are met.
+Use [`../status/CURRENT_IMPLEMENTATION_STATUS.md`](../status/CURRENT_IMPLEMENTATION_STATUS.md) as the dated status record. Merged implementation, automated checks, human acceptance, Testnet proof, and deployed-SHA evidence must remain distinct.

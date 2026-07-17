@@ -1,75 +1,122 @@
 # Contributing to CrownFi
 
-CrownFi is being consolidated into a production-shaped, multi-pageant Stellar Testnet platform. Git history is the collaboration medium. Do not exchange replacement ZIP trees or create unrelated repository roots.
+CrownFi is a production-shaped, multi-pageant Stellar Testnet project under active consolidation. Git history and pull requests are the collaboration medium. Do not exchange replacement ZIP trees or create unrelated repository roots.
+
+## Source-of-truth rule
+
+Before changing code or documentation:
+
+1. identify the exact target branch and SHA;
+2. distinguish behavior merged on `main` from behavior present only in an open PR;
+3. read [`docs/status/CURRENT_IMPLEMENTATION_STATUS.md`](docs/status/CURRENT_IMPLEMENTATION_STATUS.md);
+4. check the relevant issue, PR checklist, and acceptance matrix;
+5. declare shared files, migrations, contracts, deployment manifests, and documentation affected.
+
+Documentation must not promote branch-only implementation into default-branch claims.
 
 ## Branch model
 
 - `main` must remain deployable.
-- Shared integration work currently lands on `integration/finale-platform-rebuild`; after the baseline is accepted, the canonical integration branch becomes `integration/platform-v1`.
-- Create short-lived feature branches from the current integration branch.
-- Use one vertical capability per branch, for example `slice/organizer-pageants`, `slice/voting-platform`, or `slice/ticketing-platform`.
+- New independent work normally branches from current `main`.
+- Work that extends an existing milestone PR must branch from that PR head only when the dependency is explicit and the final merge order is documented.
+- Use one vertical capability or one coherent documentation correction per branch.
+- Keep branches short-lived.
 - Do not develop directly on `main`.
 - Do not force-push shared branches.
 - Do not merge unrelated histories.
+- Do not reintegrate source trees through ZIP archives.
 
-## Before starting work
+Examples:
 
-1. Pull the latest integration branch.
-2. Read `docs/planning/PLATFORM_V1_EXECUTION_PLAN.md`.
-3. Check `docs/testing/PLATFORM_ACCEPTANCE_MATRIX.md`.
-4. Identify database, contract, API, UI, and deployment boundaries affected by the change.
-5. Declare any shared files that must change before implementation begins.
+```text
+docs/current-state-YYYY-MM-DD
+fix/<specific-runtime-defect>
+feat/<milestone>-<capability>
+```
+
+Historical integration branches may remain for audit, but they are not automatically the current collaboration base.
 
 ## Shared-file collision policy
 
-Changes to these files must be coordinated and kept minimal:
+Coordinate and minimize changes to:
 
 - root workspace manifests and lockfiles;
-- database migration ordering;
-- `services/api/src/main.rs` and root router registration;
+- SQLx migration ordering;
+- `services/api/src/main.rs` and central router registration;
 - global navigation and application shell;
-- `.env.example` files;
-- deployment manifests;
-- CI workflows.
+- `.env.example` files and runtime contracts;
+- deployment manifests and Arcturus release configuration;
+- CI workflows;
+- README, current-state, architecture, and acceptance documents.
 
-Prefer adding a domain module over expanding central files. Each API domain should expose a small router or registration function. The integration owner performs the final central registration when practical.
+Prefer adding a domain module over expanding central files. Migration and documentation authority should be explicit in the PR.
 
 ## Pull-request contract
 
-Every pull request must state:
+Every PR must state:
 
 ```text
 Purpose:
+Base branch/SHA:
 Depends on:
 Database migration:
 Contracts affected:
 Shared files touched:
-Feature flag:
+Runtime/config changes:
 Local/mock behavior:
 Testnet behavior:
-Acceptance tests:
-Rollback procedure:
+Automated tests:
+Human acceptance still required:
+Rollback or repair procedure:
+Documentation updated:
 ```
 
-A pull request should not combine a database redesign, contract rewrite, unrelated UI restyling, and deployment changes unless they are inseparable and explicitly reviewed as one integration slice.
+A PR should not combine a database redesign, contract rewrite, unrelated UI restyling, and deployment changes unless they are inseparable and reviewed as one integration slice.
+
+## Documentation requirements
+
+A behavior-changing PR updates documentation in the same branch.
+
+At minimum:
+
+- update the dated status document when the PR changes default-branch capability after merge;
+- update architecture when authority, persistence, transport, or service boundaries change;
+- update API docs when routes, headers, state transitions, or errors change;
+- update setup/deployment docs when commands or required variables change;
+- update feature and acceptance docs without overstating unverified behavior;
+- preserve historical evidence instead of rewriting it as current evidence.
+
+Use exact language:
+
+- **merged on `main`**;
+- **in review in PR #…**;
+- **mock/demo only**;
+- **planned**;
+- **not independently verified**.
+
+Avoid vague completion statements such as “done” or “production-ready” without the supporting gate and evidence.
 
 ## Runtime rules
 
 - Seed data is allowed only through explicit, repeatable seed commands.
 - Mock adapters are allowed in local development and automated tests.
 - Testnet and staging must never silently fall back to mock behavior.
-- Process-local state must not represent votes, orders, payment events, transaction intents, ownership, or financial settlement.
-- Do not store unrestricted Stellar signing secrets in the public web runtime.
+- Process-local state must not represent production votes, orders, payment events, transaction intents, ownership, or settlement.
+- Do not store unrestricted Stellar signing secrets in the browser/public web runtime.
 - Do not use floating-point values for money.
+- A built, signed, or submitted transaction is not successful until ledger evidence is accepted and reconciled.
 
 ## Definition of done
 
-A change is complete only when:
+A change is complete only when the applicable conditions are satisfied:
 
-- behavior is covered by tests;
-- migrations work from a clean database;
+- implementation behavior is covered by tests;
+- migrations work from an empty database and through the required upgrade path;
 - existing acceptance flows still pass;
-- failure and retry behavior are documented;
-- mock and Testnet behavior are explicit;
-- relevant documentation matches the implementation;
+- failure, retry, and recovery behavior are documented;
+- mock, Testnet, and deployment boundaries are explicit;
+- relevant documentation matches the exact branch behavior;
+- required browser, device, role, concurrency, restart, Testnet, and deployment evidence is attached;
 - the branch can be integrated without discarding another developer's work.
+
+Checked implementation tasks do not waive independent acceptance gates.
