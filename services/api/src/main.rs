@@ -12,6 +12,7 @@ mod market_positions;
 mod market_settlement;
 mod markets;
 mod media;
+mod media_completion_lock;
 mod models;
 mod orders;
 mod payouts;
@@ -114,6 +115,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .merge(stellar_reconciliation::router().with_state(state.clone()))
         .merge(fulfillment::router().with_state(state.clone()))
         .merge(payouts::router().with_state(state.clone()))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            media_completion_lock::serialize,
+        ))
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
             authorization_acl::enforce,

@@ -1,0 +1,39 @@
+name: Media completion concurrency smoke
+
+on:
+  pull_request:
+    branches: [main, integration/platform-v1]
+    paths:
+      - "services/api/**"
+      - "infra/**"
+      - "scripts/acceptance/media-completion-concurrency-smoke.sh"
+      - ".github/workflows/media-completion-concurrency-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: media-completion-concurrency-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  concurrency-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Run concurrent media completion regression
+        env:
+          CROWNFI_MEDIA_CONCURRENCY_TIMEOUT_SECONDS: "900"
+        run: bash scripts/acceptance/media-completion-concurrency-smoke.sh
+      - name: Upload concurrency evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crownfi-media-completion-concurrency
+          path: .artifacts/acceptance/media-completion-concurrency
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7
