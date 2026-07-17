@@ -1,3 +1,0 @@
-missing voting snapshot route block
-
-exit_status=1
