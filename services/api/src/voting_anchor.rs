@@ -142,7 +142,10 @@ async fn create_anchor_intent(
     .map_err(map_database_error)?
     .ok_or(ApiError::NotFound)?;
     require_organization_editor_tx(&mut tx, snapshot.organization_id, actor_user_id).await?;
-    if !matches!(snapshot.snapshot_status.as_str(), "created" | "anchor_pending") {
+    if !matches!(
+        snapshot.snapshot_status.as_str(),
+        "created" | "anchor_pending"
+    ) {
         return Err(ApiError::Conflict("voting_snapshot_not_anchorable"));
     }
 
@@ -170,12 +173,11 @@ async fn create_anchor_intent(
     .ok_or(ApiError::Conflict("verified_audit_anchor_contract_missing"))?;
 
     let intent_id = Uuid::new_v4();
-    let contract_round_key = sqlx::query_scalar::<_, i64>(
-        "SELECT nextval('voting_anchor_round_key_seq')::BIGINT",
-    )
-    .fetch_one(&mut *tx)
-    .await
-    .map_err(map_database_error)?;
+    let contract_round_key =
+        sqlx::query_scalar::<_, i64>("SELECT nextval('voting_anchor_round_key_seq')::BIGINT")
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(map_database_error)?;
     let operation_json = json!({
         "network": "testnet",
         "contract_id": deployment.1,
