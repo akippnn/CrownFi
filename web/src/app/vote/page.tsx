@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { CheckCircle2, ShieldCheck, Vote as VoteIcon, Wallet } from "lucide-react";
+import { CheckCircle2, ShieldCheck, Wallet } from "lucide-react";
 import { useSession } from "@/session/SessionProvider";
 import { Toast } from "@/components/ui";
 import { getJson, postJson } from "@/lib/api";
@@ -21,8 +21,32 @@ import {
   StatusBadge,
 } from "@/components/ui-kit";
 
-type Round = { id: string; title: string; status: string };
-type Contestant = { id: string; name: string; country: string; sash: string; portraitUrl?: string };
+type Round = {
+  id: string;
+  title: string;
+  status: string;
+  opens_at: string;
+  closes_at: string;
+  total_votes: number;
+};
+
+type Contestant = {
+  pageant_contestant_id: string;
+  display_name: string;
+  country_code?: string | null;
+  country_representation?: string | null;
+  sash?: string | null;
+  portrait_url?: string | null;
+};
+
+type RoundView = { round: Round; contestants: Contestant[] };
+type VoteReceipt = {
+  vote_id: string;
+  round_id: string;
+  pageant_contestant_id: string;
+  receipt_hash: string;
+  accepted_at: string;
+};
 
 const getPortraitPath = (sash: string) => {
   const map: Record<string, string> = {
@@ -40,8 +64,15 @@ const getPortraitPath = (sash: string) => {
   return map[sash.toLowerCase()] || `/portraits/${sash.toLowerCase()}.webp`;
 };
 
+function idempotencyKey(roundId: string, contestantId: string): string {
+  const nonce = typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return `vote:${roundId}:${contestantId}:${nonce}`;
+}
+
 function VotePageContent() {
-  const { fan, address, ready, connecting, connect } = useSession();
+  const { fan, address, ready, connecting, connect, hostedPageantId } = useSession();
   const searchParams = useSearchParams();
   const initialCandidate = searchParams.get("candidate") || "";
   const [contestants, setContestants] = useState<Contestant[]>([]);
@@ -49,22 +80,38 @@ function VotePageContent() {
   const [picked, setPicked] = useState<string>("");
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [voteId, setVoteId] = useState("");
+  const [receipt, setReceipt] = useState<VoteReceipt | null>(null);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ msg: string; tone: "ok" | "err" }>({ msg: "", tone: "ok" });
 
   useEffect(() => {
-    Promise.all([
-      getJson<Contestant[]>("/api/contestants", []).then((items) => {
-        setContestants(items);
-        if (initialCandidate && items.some((contestant) => contestant.id === initialCandidate)) {
+    if (!hostedPageantId) {
+      setRound(null);
+      setContestants([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    getJson<RoundView[]>(
+      `/api/voting/rounds?pageantId=${encodeURIComponent(hostedPageantId)}`,
+      [],
+    )
+      .then((items) => {
+        const selected = items.find((item) => item.round.status === "open") ?? items[0] ?? null;
+        setRound(selected?.round ?? null);
+        setContestants(selected?.contestants ?? []);
+        if (
+          initialCandidate &&
+          selected?.contestants.some(
+            (contestant) => contestant.pageant_contestant_id === initialCandidate,
+          )
+        ) {
           setPicked(initialCandidate);
           setConfirming(true);
         }
-      }),
-      getJson<Round[]>("/api/rounds", []).then((rounds) => setRound(rounds.find((item) => item.status === "open") ?? rounds[0] ?? null)),
-    ]).finally(() => setLoading(false));
-  }, [initialCandidate]);
+      })
+      .finally(() => setLoading(false));
+  }, [hostedPageantId, initialCandidate]);
 
   function flash(msg: string, tone: "ok" | "err") {
     setToast({ msg, tone });
@@ -73,7 +120,7 @@ function VotePageContent() {
 
   function chooseCandidate(id: string) {
     setPicked(id);
-    setVoteId("");
+    setReceipt(null);
     setConfirming(true);
   }
 
@@ -81,32 +128,36 @@ function VotePageContent() {
     if (!fan || !round || !picked) return;
     setBusy(true);
     try {
-      const { ok, data } = await postJson<{ error?: string; voteId?: string }>("/api/vote", {
-        roundId: round.id,
-        fanId: fan.id,
-        contestantId: picked,
-      });
-      const payload = data as { error?: string; voteId?: string };
-      const error = payload.error;
+      const { ok, data } = await postJson<VoteReceipt & { error?: string }>(
+        "/api/voting/votes",
+        {
+          roundId: round.id,
+          pageantContestantId: picked,
+          idempotencyKey: idempotencyKey(round.id, picked),
+        },
+      );
+      const payload = data as VoteReceipt & { error?: string };
       if (ok) {
-        setVoteId(payload.voteId ?? "recorded");
+        setReceipt(payload);
         setConfirming(false);
-        flash("Vote recorded. You can verify it after the round closes.", "ok");
-      } else if (error === "duplicate_vote" || error === "quota_reached") {
-        flash("This wallet has already used its vote for the round.", "err");
-      } else if (error === "round_closed") {
+        flash("Vote accepted. Keep your receipt for proof verification after closure.", "ok");
+      } else if (payload.error === "duplicate_vote" || payload.error === "quota_reached") {
+        flash("This account has already used its vote for the round.", "err");
+      } else if (payload.error === "voting_closed" || payload.error === "round_closed") {
         flash("Voting closed before this vote could be submitted.", "err");
-      } else if (error === "db_unavailable") {
-        flash("The database is not configured yet. Follow SUPABASE.md.", "err");
+      } else if (payload.error === "authentication_required") {
+        flash("Connect and verify your wallet before voting.", "err");
       } else {
-        flash(`Could not record the vote${error ? `: ${error}` : "."}`, "err");
+        flash(`Could not accept the vote${payload.error ? `: ${payload.error}` : "."}`, "err");
       }
     } finally {
       setBusy(false);
     }
   }
 
-  const pickedContestant = contestants.find((contestant) => contestant.id === picked);
+  const pickedContestant = contestants.find(
+    (contestant) => contestant.pageant_contestant_id === picked,
+  );
   const votingOpen = round?.status === "open";
 
   return (
@@ -115,7 +166,7 @@ function VotePageContent() {
         <SectionHeader
           eyebrow="Cast your vote"
           title="Choose the next crown bearer"
-          description="Compare every contestant in one view. Your vote is recorded off-chain for speed and included in a Stellar-anchored checkpoint after the round closes."
+          description="Your account-bound vote is committed exactly once. Closing the round freezes an immutable Merkle snapshot before its audit checkpoint can be accepted from Stellar Testnet."
           className="mb-0"
         />
         <div className="flex flex-wrap items-center gap-2">
@@ -127,18 +178,30 @@ function VotePageContent() {
           ) : (
             <Badge tone="neutral">No voting round</Badge>
           )}
-          <Badge tone="info">Off-chain intake</Badge>
+          <Badge tone="info">Durable intake</Badge>
         </div>
       </div>
 
-      {ready && !fan && (
+      {!hostedPageantId && (
+        <Card className="border-gold/25 bg-gold/5">
+          <CardContent className="flex flex-wrap items-center justify-between gap-4 pt-5">
+            <div>
+              <h2 className="font-semibold text-white">Choose a pageant first</h2>
+              <p className="mt-1 text-sm text-gold-soft/45">Voting rounds are pageant-scoped and never use one global fixture ballot.</p>
+            </div>
+            <ButtonLink href="/pageants" variant="secondary">Explore pageants</ButtonLink>
+          </CardContent>
+        </Card>
+      )}
+
+      {ready && hostedPageantId && !fan && (
         <Card className="border-gold/25 bg-gold/5">
           <CardContent className="flex flex-wrap items-center justify-between gap-4 pt-5">
             <div className="flex items-start gap-3">
               <span className="grid h-10 w-10 place-items-center rounded-2xl border border-gold/20 bg-gold/10 text-gold"><Wallet size={19} /></span>
               <div>
                 <h2 className="font-semibold text-white">Connect before choosing your finalist</h2>
-                <p className="mt-1 text-sm text-gold-soft/45">CrownFi associates one vote receipt with the connected wallet for this round.</p>
+                <p className="mt-1 text-sm text-gold-soft/45">CrownFi requires an active account with a verified Testnet wallet for this round.</p>
               </div>
             </div>
             <Button onClick={connect} disabled={connecting}>{connecting ? "Connecting…" : "Connect Freighter"}</Button>
@@ -148,7 +211,7 @@ function VotePageContent() {
 
       {!votingOpen && round && (
         <div className="rounded-2xl border border-gold/20 bg-gold/5 px-4 py-3 text-sm text-gold-soft/60">
-          Voting is closed for <strong className="text-gold-soft">{round.title}</strong>. Receipts can now be checked from the verification page after its checkpoint is available.
+          Voting is {round.status} for <strong className="text-gold-soft">{round.title}</strong>. Receipts can be checked after its immutable snapshot is available.
         </div>
       )}
 
@@ -157,38 +220,42 @@ function VotePageContent() {
           {Array.from({ length: 8 }).map((_, index) => <div key={index} className="aspect-[3/5] animate-pulse rounded-2xl border border-line bg-white/5" />)}
         </div>
       ) : contestants.length === 0 ? (
-        <EmptyState title="No contestants are available" description="An administrator must add contestants before voting can begin." />
+        <EmptyState title="No contestants are available" description="The selected pageant has no published voting round with eligible contestants." />
       ) : (
         <section aria-labelledby="candidate-grid-heading">
           <div className="mb-4 flex items-center justify-between gap-3">
-            <h2 id="candidate-grid-heading" className="font-display text-2xl font-semibold text-white">All contestants</h2>
+            <h2 id="candidate-grid-heading" className="font-display text-2xl font-semibold text-white">Eligible contestants</h2>
             <span className="text-sm text-gold-soft/40">{contestants.length} candidates</span>
           </div>
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {contestants.map((contestant) => (
-              <OrnatePortrait
-                key={contestant.id}
-                id={contestant.id}
-                name={contestant.name}
-                country={contestant.country}
-                sash={contestant.sash}
-                imageUrl={contestant.portraitUrl || getPortraitPath(contestant.sash)}
-                onVote={() => chooseCandidate(contestant.id)}
-                className={picked === contestant.id ? "ring-2 ring-gold shadow-[0_0_25px_rgba(212,175,55,0.28)]" : ""}
-              />
-            ))}
+            {contestants.map((contestant) => {
+              const sash = contestant.sash || contestant.country_code || "";
+              const country = contestant.country_representation || contestant.country_code || "Contestant";
+              return (
+                <OrnatePortrait
+                  key={contestant.pageant_contestant_id}
+                  id={contestant.pageant_contestant_id}
+                  name={contestant.display_name}
+                  country={country}
+                  sash={sash}
+                  imageUrl={contestant.portrait_url || getPortraitPath(sash)}
+                  onVote={() => chooseCandidate(contestant.pageant_contestant_id)}
+                  className={picked === contestant.pageant_contestant_id ? "ring-2 ring-gold shadow-[0_0_25px_rgba(212,175,55,0.28)]" : ""}
+                />
+              );
+            })}
           </div>
         </section>
       )}
 
-      {voteId && pickedContestant && (
+      {receipt && pickedContestant && (
         <Card className="border-emerald/30 bg-emerald/5">
           <CardContent className="flex flex-wrap items-center justify-between gap-4 pt-5">
             <div className="flex items-start gap-3">
               <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-emerald/15 text-emerald"><CheckCircle2 size={23} /></span>
               <div>
-                <h2 className="font-display text-xl font-semibold text-white">Vote recorded for {pickedContestant.name}</h2>
-                <p className="mt-1 text-sm text-gold-soft/50">Receipt {short(voteId, 8)} becomes independently verifiable after the round closes and its checkpoint is published.</p>
+                <h2 className="font-display text-xl font-semibold text-white">Vote accepted for {pickedContestant.display_name}</h2>
+                <p className="mt-1 break-all text-sm text-gold-soft/50">Receipt {receipt.receipt_hash} becomes independently verifiable after snapshot creation.</p>
               </div>
             </div>
             <ButtonLink href="/verify" variant="secondary"><ShieldCheck size={17} /> Open verification</ButtonLink>
@@ -201,27 +268,31 @@ function VotePageContent() {
         onClose={() => setConfirming(false)}
         onConfirm={cast}
         title="Confirm your vote"
-        description="Review the selected contestant and round before the vote is submitted."
-        confirmLabel={pickedContestant ? `Vote for ${pickedContestant.name}` : "Cast vote"}
-        pendingLabel="Recording vote…"
+        description="Review the selected contestant and round before this account-bound vote is submitted."
+        confirmLabel={pickedContestant ? `Vote for ${pickedContestant.display_name}` : "Cast vote"}
+        pendingLabel="Accepting vote…"
         pending={busy}
       >
         {pickedContestant && (
           <div className="space-y-5">
             <div className="grid gap-4 sm:grid-cols-[110px_1fr]">
               <div className="aspect-[4/5] overflow-hidden rounded-2xl border border-gold/25 bg-black/30">
-                <img src={pickedContestant.portraitUrl || getPortraitPath(pickedContestant.sash)} alt={pickedContestant.name} className="h-full w-full object-cover" />
+                <img
+                  src={pickedContestant.portrait_url || getPortraitPath(pickedContestant.sash || pickedContestant.country_code || "")}
+                  alt={pickedContestant.display_name}
+                  className="h-full w-full object-cover"
+                />
               </div>
               <div className="flex flex-col justify-center">
-                <Badge tone="gold" className="w-fit">{flag(pickedContestant.sash)} {pickedContestant.country}</Badge>
-                <h3 className="mt-3 font-display text-3xl font-semibold text-white">{pickedContestant.name}</h3>
-                <p className="mt-2 text-sm leading-6 text-gold-soft/50">This selection cannot be changed after the vote is accepted for the current round.</p>
+                <Badge tone="gold" className="w-fit">{flag(pickedContestant.sash || pickedContestant.country_code || "")} {pickedContestant.country_representation || pickedContestant.country_code || "Contestant"}</Badge>
+                <h3 className="mt-3 font-display text-3xl font-semibold text-white">{pickedContestant.display_name}</h3>
+                <p className="mt-2 text-sm leading-6 text-gold-soft/50">A second submission from this account is rejected by a database uniqueness constraint.</p>
               </div>
             </div>
             <dl className="space-y-2 rounded-2xl border border-line bg-black/25 p-4 text-sm">
               <div className="flex justify-between gap-4"><dt className="text-gold-soft/40">Voting round</dt><dd className="font-semibold text-gold-soft">{round?.title ?? "Unavailable"}</dd></div>
               <div className="flex justify-between gap-4"><dt className="text-gold-soft/40">Wallet</dt><dd className="mono text-xs text-gold-soft">{address ? short(address, 8) : "Not connected"}</dd></div>
-              <div className="flex justify-between gap-4"><dt className="text-gold-soft/40">Blockchain step</dt><dd className="text-right text-gold-soft">Final checkpoint after closure</dd></div>
+              <div className="flex justify-between gap-4"><dt className="text-gold-soft/40">Blockchain step</dt><dd className="text-right text-gold-soft">Accepted audit evidence after closure</dd></div>
             </dl>
             {!fan && <p className="rounded-2xl border border-ruby/30 bg-ruby/10 px-4 py-3 text-sm text-ruby">Connect Freighter before confirming this vote.</p>}
             {!votingOpen && <p className="rounded-2xl border border-ruby/30 bg-ruby/10 px-4 py-3 text-sm text-ruby">This round is not open for voting.</p>}

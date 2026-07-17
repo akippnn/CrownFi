@@ -19,6 +19,10 @@ mod state;
 mod stellar_intents;
 mod stellar_reconciliation;
 mod storage;
+mod voting;
+mod voting_anchor;
+mod voting_proofs;
+mod voting_public;
 
 use std::{io, net::SocketAddr};
 
@@ -88,6 +92,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .merge(access::router().with_state(state.clone()))
         .merge(manage::router().with_state(state.clone()))
         .merge(markets::router().with_state(state.clone()))
+        .merge(voting::router().with_state(state.clone()))
+        .merge(voting_proofs::router().with_state(state.clone()))
+        .merge(voting_anchor::router().with_state(state.clone()))
+        .merge(voting_public::router().with_state(state.clone()))
         .merge(platform::router().with_state(state.clone()))
         .merge(media::router().with_state(state.clone()))
         .merge(commerce::router().with_state(state.clone()))
