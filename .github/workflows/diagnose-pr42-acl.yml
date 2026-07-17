@@ -1,0 +1,61 @@
+name: Diagnose and apply PR 42 ACL
+
+on:
+  push:
+    branches:
+      - feat/milestone-c-voting-v1
+    paths:
+      - .github/workflows/diagnose-pr42-acl.yml
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: feat/milestone-c-voting-v1
+          persist-credentials: true
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Apply or capture ACL integration failure
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          lines = Path('.github/workflows/secure-voting-routes.yml').read_text(encoding='utf-8').splitlines()
+          start = next(i for i, line in enumerate(lines) if "python3 - <<'PY'" in line) + 1
+          end = next(i for i in range(start, len(lines)) if lines[i].strip() == 'PY')
+          script = []
+          for line in lines[start:end]:
+              script.append(line[10:] if line.startswith('          ') else line)
+          Path('/tmp/pr42-acl.py').write_text('\n'.join(script) + '\n', encoding='utf-8')
+          PY
+          set +e
+          python3 /tmp/pr42-acl.py > /tmp/pr42-acl.log 2>&1
+          status=$?
+          if [ "$status" -eq 0 ]; then
+            cargo fmt --manifest-path services/api/Cargo.toml --all >> /tmp/pr42-acl.log 2>&1
+            status=$?
+          fi
+          set -e
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          if [ "$status" -eq 0 ]; then
+            git rm .github/workflows/secure-voting-routes.yml .github/workflows/apply-pr42-acl.yml .github/workflows/diagnose-pr42-acl.yml
+            git add services/api/src/voting.rs services/api/src/voting_proofs.rs services/api/src/voting_anchor.rs services/api/src/main.rs services/api/src/authorization_acl.rs
+            git commit -m 'feat(voting): enforce centralized route capabilities'
+          else
+            git restore services/api/src/voting.rs services/api/src/voting_proofs.rs services/api/src/voting_anchor.rs services/api/src/main.rs services/api/src/authorization_acl.rs || true
+            mkdir -p docs/qa
+            cp /tmp/pr42-acl.log docs/qa/pr42-acl-diagnostic.txt
+            printf '\nexit_status=%s\n' "$status" >> docs/qa/pr42-acl-diagnostic.txt
+            git rm .github/workflows/diagnose-pr42-acl.yml
+            git add docs/qa/pr42-acl-diagnostic.txt
+            git commit -m 'chore(pr42): capture ACL integration diagnostics'
+          fi
+          git push origin HEAD:feat/milestone-c-voting-v1
