@@ -97,12 +97,15 @@ export default function VoteReceiptPage() {
   const anchored = proof.snapshot_status === "anchored" && Boolean(anchor?.evidence);
   return (
     <PageSection className="max-w-4xl space-y-8 px-0 py-0">
-      <SectionHeader
-        eyebrow="Vote receipt verification"
-        title="Immutable inclusion proof"
-        description="This receipt is included in the closed round's deterministic Merkle tree. Anchored status is shown only when CrownFi has accepted matching AuditAnchor contract-event evidence."
-        trailing={<StatusBadge status={proof.snapshot_status as "open" | "closed"} />}
-      />
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <SectionHeader
+          eyebrow="Vote receipt verification"
+          title="Immutable inclusion proof"
+          description="This receipt is included in the closed round's deterministic Merkle tree. Anchored status is shown only when CrownFi has accepted matching AuditAnchor contract-event evidence."
+          className="mb-0"
+        />
+        <StatusBadge status={proof.snapshot_status as "open" | "closed"} />
+      </div>
 
       <Card className="border-emerald/30 bg-emerald/5">
         <CardContent className="space-y-5 pt-6">
@@ -141,7 +144,7 @@ export default function VoteReceiptPage() {
         <CardContent className="space-y-4 pt-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex items-start gap-3"><ShieldCheck className={anchored ? "text-gold" : "text-gold-soft/35"} size={21} /><div><h2 className="font-display text-2xl font-semibold text-white">Stellar audit anchor</h2><p className="mt-1 text-sm text-gold-soft/45">{anchored ? "Matching Testnet contract-event evidence is accepted." : "The snapshot exists, but accepted anchor evidence is still pending."}</p></div></div>
-            <Badge tone={anchored ? "success" : "warning"}>{anchored ? "Anchored" : anchor?.intent.status ?? "Not requested"}</Badge>
+            <Badge tone={anchored ? "success" : "gold"}>{anchored ? "Anchored" : anchor?.intent.status ?? "Not requested"}</Badge>
           </div>
           {anchor?.intent && (
             <dl className="divide-y divide-line rounded-2xl border border-line bg-black/20 text-sm">
