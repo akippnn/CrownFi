@@ -1,0 +1,45 @@
+name: Diagnose PR 42 typecheck
+
+on:
+  push:
+    branches:
+      - feat/milestone-c-voting-v1
+    paths:
+      - .github/workflows/diagnose-pr42-typecheck.yml
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: feat/milestone-c-voting-v1
+          persist-credentials: true
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Capture exact typecheck output
+        run: |
+          set -euo pipefail
+          cd web
+          npm ci
+          set +e
+          npm run typecheck > /tmp/pr42-typecheck.log 2>&1
+          status=$?
+          set -e
+          cd ..
+          mkdir -p docs/qa
+          cp /tmp/pr42-typecheck.log docs/qa/pr42-typecheck-diagnostic.txt
+          printf '\nexit_status=%s\n' "$status" >> docs/qa/pr42-typecheck-diagnostic.txt
+          git rm .github/workflows/diagnose-pr42-typecheck.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/qa/pr42-typecheck-diagnostic.txt
+          git commit -m 'chore(pr42): capture typecheck diagnostics'
+          git push origin HEAD:feat/milestone-c-voting-v1
