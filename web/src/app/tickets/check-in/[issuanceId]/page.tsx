@@ -12,9 +12,9 @@ import {
   Card,
   CardContent,
   EmptyState,
-  Field,
   PageSection,
   SectionHeader,
+  TextField,
 } from "@/components/ui-kit";
 
 type CheckInRecord = {
@@ -119,12 +119,22 @@ export default function TicketCheckInPage() {
               <span className="grid h-11 w-11 place-items-center rounded-2xl border border-gold/20 bg-gold/10 text-gold"><ScanLine size={21} /></span>
               <div><h2 className="font-display text-2xl font-semibold text-white">Confirm scanned ticket</h2><p className="mt-1 text-sm leading-6 text-gold-soft/45">Use the nonce encoded in the organizer-issued QR. The database stores only its hash.</p></div>
             </div>
-            <Field label="Check-in nonce" htmlFor="check-in-nonce">
-              <input id="check-in-nonce" value={nonce} onChange={(event) => setNonce(event.target.value)} autoComplete="off" className="min-h-11 w-full rounded-xl border border-line bg-black/30 px-3 font-mono text-sm text-white" />
-            </Field>
-            <Field label="Device reference" hint="Optional operator scanner or gate label" htmlFor="device-reference">
-              <input id="device-reference" value={deviceReference} onChange={(event) => setDeviceReference(event.target.value)} className="min-h-11 w-full rounded-xl border border-line bg-black/30 px-3 text-sm text-white" placeholder="Gate A · Scanner 2" />
-            </Field>
+            <TextField
+              id="check-in-nonce"
+              label="Check-in nonce"
+              value={nonce}
+              onChange={(event) => setNonce(event.target.value)}
+              autoComplete="off"
+              className="font-mono"
+            />
+            <TextField
+              id="device-reference"
+              label="Device reference"
+              helper="Optional operator scanner or gate label"
+              value={deviceReference}
+              onChange={(event) => setDeviceReference(event.target.value)}
+              placeholder="Gate A · Scanner 2"
+            />
             {error && <div className="flex gap-3 rounded-2xl border border-ruby/30 bg-ruby/10 p-4 text-sm leading-6 text-ruby"><ShieldAlert className="mt-0.5 shrink-0" size={18} />{error}</div>}
             <Button onClick={() => void checkIn()} loading={busy} disabled={!nonce.trim()} className="w-full">Accept first check-in</Button>
           </CardContent>

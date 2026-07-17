@@ -1,5 +1,6 @@
 import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode } from "react";
 import Link, { type LinkProps } from "next/link";
+import { Loader2 } from "lucide-react";
 import { cn } from "./classNames";
 import type { Size } from "./types";
 
@@ -31,11 +32,28 @@ export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   children: ReactNode;
   size?: Size;
   variant?: ButtonVariant;
+  loading?: boolean;
 };
 
-export function Button({ children, className, size = "md", variant = "primary", type = "button", ...props }: ButtonProps) {
+export function Button({
+  children,
+  className,
+  size = "md",
+  variant = "primary",
+  type = "button",
+  loading = false,
+  disabled,
+  ...props
+}: ButtonProps) {
   return (
-    <button className={cn(base, sizes[size], variants[variant], className)} type={type} {...props}>
+    <button
+      {...props}
+      aria-busy={loading ? true : undefined}
+      className={cn(base, sizes[size], variants[variant], className)}
+      disabled={disabled || loading}
+      type={type}
+    >
+      {loading && <Loader2 aria-hidden="true" className="animate-spin" size={16} />}
       {children}
     </button>
   );
