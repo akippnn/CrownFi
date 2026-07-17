@@ -26,6 +26,26 @@ jobs:
       - name: Compile materializer
         run: python3 -m py_compile scripts/materialize-production-manifest
 
+      - name: Prove accelerated build contract
+        run: |
+          set -euo pipefail
+          bash -n scripts/arcturus-ci
+          python3 - <<'PY'
+          from pathlib import Path
+
+          ci = Path('scripts/arcturus-ci').read_text(encoding='utf-8')
+          api = Path('services/api/Dockerfile').read_text(encoding='utf-8')
+          web = Path('web/Dockerfile').read_text(encoding='utf-8')
+
+          for required in ('--layers', '--cache-from', '--cache-to', '--cache-ttl'):
+              assert required in ci, required
+          assert 'ARCTURUS_REMOTE_BUILD_CACHE' in ci
+          assert 'cargo-chef' in api
+          assert 'cargo test --release --locked' in api
+          assert '/app/.next/standalone' in web
+          assert 'CMD ["node", "server.js"]' in web
+          PY
+
       - name: Prove disabled R2 stays absent
         run: |
           set -euo pipefail
