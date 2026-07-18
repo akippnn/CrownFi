@@ -35,7 +35,7 @@ function short(value: string, edge = 8): string {
     : value;
 }
 
-export default function TicketVerificationPage() {
+export default function TicketOwnershipVerificationPage() {
   const params = useParams<{ tokenId: string }>();
   const tokenId = params.tokenId;
   const [ticket, setTicket] = useState<TicketOwnership | null>(null);

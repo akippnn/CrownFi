@@ -128,6 +128,7 @@ export default function ManagePage() {
   const [contestantForm, setContestantForm] = useState({ displayName: "", countryCode: "PH", sash: "PH", contestantNumber: "" });
   const [memberForm, setMemberForm] = useState({ walletAddress: "", role: "editor" });
   const [siteForm, setSiteForm] = useState({ siteName: "CrownFi", defaultPageantId: "", selector: false });
+  const [contestants, setContestants] = useState<any[]>([]);
 
   const selectedOrganization = useMemo(
     () => overview?.organizations.find((item) => item.id === organizationId) ?? null,
@@ -192,6 +193,16 @@ export default function ManagePage() {
     setMembers(response.ok && Array.isArray(data) ? data : []);
   }
 
+  async function loadContestants(pId = pageantId) {
+    if (!pId) {
+      setContestants([]);
+      return;
+    }
+    const response = await fetch(`/api/manage/contestants?pageantId=${encodeURIComponent(pId)}`, { cache: "no-store" });
+    const data = await json(response);
+    setContestants(response.ok && Array.isArray(data) ? data : []);
+  }
+
   useEffect(() => {
     if (account && isOrganizer) load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -201,6 +212,11 @@ export default function ManagePage() {
     loadMembers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [organizationId, canManageMembers]);
+
+  useEffect(() => {
+    loadContestants();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageantId]);
 
   function flash(text: string, error = false) {
     setNotice({ text, error });
@@ -274,6 +290,7 @@ export default function ManagePage() {
     if (!data) return;
     flash("Contestant added and persisted.");
     setContestantForm({ displayName: "", countryCode: "PH", sash: "PH", contestantNumber: "" });
+    await loadContestants();
   }
 
   async function seedReference() {
@@ -385,8 +402,20 @@ export default function ManagePage() {
 
           {activeModule === "overview" && <OverviewModule organization={selectedOrganization} pageant={selectedPageant} pageantCount={pageants.length} memberCount={members.length} site={site} modules={visibleModules} />}
           {activeModule === "home" && (selectedPageant ? <PageantHomeEditor pageant={selectedPageant} organizationName={selectedOrganization?.name || "CrownFi organizer"} /> : <EmptyState title="Select a pageant" description="The pageant home editor needs an active pageant context." />)}
-          {activeModule === "pageants" && <PageantsModule organizationId={organizationId} pageants={pageants} pageantId={pageantId} setPageantId={setPageantId} pageantForm={pageantForm} setPageantForm={setPageantForm} createPageant={createPageant} seedReference={seedReference} busy={busy} />}
-          {activeModule === "contestants" && <ContestantsModule pageant={selectedPageant} form={contestantForm} setForm={setContestantForm} onSubmit={createContestant} busy={busy} />}
+          {activeModule === "pageants" && <PageantsModule organizationId={organizationId} pageants={pageants} pageantId={pageantId} setPageantId={setPageantId} pageantForm={pageantForm} setPageantForm={setPageantForm} createPageant={createPageant} seedReference={seedReference} busy={busy} mutate={mutate} load={load} flash={flash} />}
+          {activeModule === "contestants" && (
+            <ContestantsModule
+              pageant={selectedPageant}
+              contestants={contestants}
+              loadContestants={loadContestants}
+              form={contestantForm}
+              setForm={setContestantForm}
+              onSubmit={createContestant}
+              busy={busy}
+              mutate={mutate}
+              organizationId={organizationId}
+            />
+          )}
           {activeModule === "categories" && <CategoriesModule pageant={selectedPageant} form={categoryForm} setForm={setCategoryForm} onSubmit={createCategory} busy={busy} />}
           {activeModule === "people" && canManageMembers && <PeopleModule organization={selectedOrganization} members={members} form={memberForm} setForm={setMemberForm} onSubmit={grantMember} busy={busy} />}
           {activeModule === "site" && isAdmin && site && <SiteModule overview={overview} site={site} form={siteForm} setForm={setSiteForm} onSubmit={saveSite} busy={busy} />}
@@ -432,7 +461,144 @@ function OverviewModule({ organization, pageant, pageantCount, memberCount, site
   );
 }
 
-function PageantsModule({ organizationId, pageants, pageantId, setPageantId, pageantForm, setPageantForm, createPageant, seedReference, busy }: {
+function EditPageantCard({
+  pageant,
+  mutate,
+  load,
+  busy,
+  flash,
+}: {
+  pageant: Pageant;
+  mutate: (path: string, body: unknown, key: string) => Promise<any>;
+  load: () => Promise<void>;
+  busy: string;
+  flash: (text: string, error?: boolean) => void;
+}) {
+  const [form, setForm] = useState({
+    name: pageant.name || "",
+    slug: pageant.slug || "",
+    description: pageant.description || "",
+    venueName: pageant.venue_name || "",
+    status: pageant.status || "",
+  });
+
+  useEffect(() => {
+    setForm({
+      name: pageant.name || "",
+      slug: pageant.slug || "",
+      description: pageant.description || "",
+      venueName: pageant.venue_name || "",
+      status: pageant.status || "",
+    });
+  }, [pageant]);
+
+  async function handleSave(event: FormEvent) {
+    event.preventDefault();
+    const data = await mutate(
+      "/api/manage/pageants",
+      {
+        pageant_id: pageant.id,
+        name: form.name,
+        slug: form.slug,
+        description: form.description,
+        venue_name: form.venueName,
+        status: form.status,
+      },
+      `pageant-edit-${pageant.id}`,
+    );
+    if (data) {
+      flash("Pageant details updated successfully.");
+      await load();
+    }
+  }
+
+  async function handleDelete() {
+    if (!confirm(`Are you sure you want to archive/delete ${pageant.name}?`)) return;
+    try {
+      const response = await fetch(`/api/manage/pageants/${pageant.id}`, { method: "DELETE" });
+      if (response.ok) {
+        flash("Pageant deleted/archived successfully.");
+        await load();
+      } else {
+        flash("Failed to delete pageant.", true);
+      }
+    } catch (err) {
+      flash("Error deleting pageant.", true);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Modify Pageant</CardTitle>
+        <CardDescription>Update identity, settings, or archive this pageant.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form className="space-y-4" onSubmit={handleSave}>
+          <TextField
+            id="edit-pageant-name"
+            label="Pageant name"
+            value={form.name}
+            onChange={(e) => setForm((curr) => ({ ...curr, name: e.target.value, slug: curr.slug || slugify(e.target.value) }))}
+            required
+          />
+          <TextField
+            id="edit-pageant-slug"
+            label="Slug"
+            value={form.slug}
+            onChange={(e) => setForm((curr) => ({ ...curr, slug: slugify(e.target.value) }))}
+            required
+          />
+          <TextField
+            id="edit-pageant-venue"
+            label="Venue"
+            value={form.venueName}
+            onChange={(e) => setForm((curr) => ({ ...curr, venueName: e.target.value }))}
+          />
+          <SelectField
+            id="edit-pageant-status"
+            label="Status"
+            value={form.status}
+            onChange={(e) => setForm((curr) => ({ ...curr, status: e.target.value }))}
+          >
+            <option value="draft">Draft</option>
+            <option value="active">Active</option>
+            <option value="completed">Completed</option>
+          </SelectField>
+          <TextareaField
+            id="edit-pageant-description"
+            label="Description"
+            value={form.description}
+            onChange={(e) => setForm((curr) => ({ ...curr, description: e.target.value }))}
+          />
+          <div className="flex gap-2">
+            <Button type="submit" className="flex-1" disabled={busy === `pageant-edit-${pageant.id}`}>
+              Save Changes
+            </Button>
+            <Button type="button" variant="secondary" className="hover:border-red-500/40 hover:text-red-400" onClick={handleDelete}>
+              Delete
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+function PageantsModule({
+  organizationId,
+  pageants,
+  pageantId,
+  setPageantId,
+  pageantForm,
+  setPageantForm,
+  createPageant,
+  seedReference,
+  busy,
+  mutate,
+  load,
+  flash,
+}: {
   organizationId: string;
   pageants: Pageant[];
   pageantId: string;
@@ -442,24 +608,361 @@ function PageantsModule({ organizationId, pageants, pageantId, setPageantId, pag
   createPageant: (event: FormEvent) => void;
   seedReference: () => void;
   busy: string;
+  mutate: (path: string, body: unknown, key: string) => Promise<any>;
+  load: () => Promise<void>;
+  flash: (text: string, error?: boolean) => void;
 }) {
+  const selectedPageant = pageants.find((p) => p.id === pageantId);
+
   return (
-    <div className="grid gap-5 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-      <Card><CardHeader><CardTitle>Pageant portfolio</CardTitle><CardDescription>Selecting a pageant changes the editor context and public-navigation preview.</CardDescription></CardHeader><CardContent>{pageants.length === 0 ? <EmptyState title="No pageants yet" description="Create the first pageant draft for this organization." /> : <div className="space-y-2">{pageants.map((pageant) => <button key={pageant.id} type="button" onClick={() => setPageantId(pageant.id)} className={`w-full rounded-2xl border p-4 text-left transition ${pageantId === pageant.id ? "border-gold/50 bg-gold/10" : "border-line bg-black/25 hover:border-gold/30"}`}><div className="flex items-start justify-between gap-3"><div><div className="font-semibold text-white">{pageant.name}</div><div className="mt-1 text-xs text-gold-soft/40">/{pageant.slug} · {pageant.venue_name || "Venue TBA"}</div></div><Badge tone={pageantId === pageant.id ? "gold" : "neutral"}>{pageant.status}</Badge></div></button>)}</div>}<Button variant="secondary" className="mt-4 w-full" onClick={seedReference} disabled={!organizationId || busy === "seed"}><Sprout size={16} /> {busy === "seed" ? "Reconciling…" : "Seed Miss Stellarverse reference"}</Button></CardContent></Card>
-      <Card><CardHeader><CardTitle>Create a pageant draft</CardTitle><CardDescription>Start with identity and venue. Publishing, schedules, and lifecycle controls remain explicit later steps.</CardDescription></CardHeader><CardContent><form className="space-y-4" onSubmit={createPageant}><TextField id="pageant-name" label="Pageant name" value={pageantForm.name} onChange={(event) => setPageantForm((current) => ({ ...current, name: event.target.value, slug: current.slug || slugify(event.target.value) }))} required /><TextField id="pageant-slug" label="Slug" value={pageantForm.slug} onChange={(event) => setPageantForm((current) => ({ ...current, slug: slugify(event.target.value) }))} required /><TextField id="pageant-venue" label="Venue" value={pageantForm.venueName} onChange={(event) => setPageantForm((current) => ({ ...current, venueName: event.target.value }))} /><TextareaField id="pageant-description" label="Description" value={pageantForm.description} onChange={(event) => setPageantForm((current) => ({ ...current, description: event.target.value }))} /><Button type="submit" disabled={!organizationId || busy === "pageant"}><Plus size={16} /> {busy === "pageant" ? "Creating…" : "Create pageant"}</Button></form></CardContent></Card>
+    <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(300px,0.8fr)]">
+      <Card>
+        <CardHeader>
+          <CardTitle>Pageant portfolio</CardTitle>
+          <CardDescription>Selecting a pageant changes the editor context and public-navigation preview.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {pageants.length === 0 ? (
+            <EmptyState title="No pageants yet" description="Create the first pageant draft for this organization." />
+          ) : (
+            <div className="space-y-2">
+              {pageants.map((pageant) => (
+                <button
+                  key={pageant.id}
+                  type="button"
+                  onClick={() => setPageantId(pageant.id)}
+                  className={`w-full rounded-2xl border p-4 text-left transition ${
+                    pageantId === pageant.id ? "border-gold/50 bg-gold/10" : "border-line bg-black/25 hover:border-gold/30"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-semibold text-white">{pageant.name}</div>
+                      <div className="mt-1 text-xs text-gold-soft/40">
+                        /{pageant.slug} · {pageant.venue_name || "Venue TBA"}
+                      </div>
+                    </div>
+                    <Badge tone={pageantId === pageant.id ? "gold" : "neutral"}>{pageant.status}</Badge>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+          <Button variant="secondary" className="mt-4 w-full" onClick={seedReference} disabled={!organizationId || busy === "seed"}>
+            <Sprout size={16} /> {busy === "seed" ? "Reconciling…" : "Seed Miss Stellarverse reference"}
+          </Button>
+        </CardContent>
+      </Card>
+      
+      {selectedPageant ? (
+        <EditPageantCard pageant={selectedPageant} mutate={mutate} load={load} busy={busy} flash={flash} />
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle>Create a pageant draft</CardTitle>
+            <CardDescription>Start with identity and venue. Publishing, schedules, and lifecycle controls remain explicit later steps.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form className="space-y-4" onSubmit={createPageant}>
+              <TextField
+                id="pageant-name"
+                label="Pageant name"
+                value={pageantForm.name}
+                onChange={(event) =>
+                  setPageantForm((current) => ({ ...current, name: event.target.value, slug: current.slug || slugify(event.target.value) }))
+                }
+                required
+              />
+              <TextField
+                id="pageant-slug"
+                label="Slug"
+                value={pageantForm.slug}
+                onChange={(event) => setPageantForm((current) => ({ ...current, slug: slugify(event.target.value) }))}
+                required
+              />
+              <TextField
+                id="pageant-venue"
+                label="Venue"
+                value={pageantForm.venueName}
+                onChange={(event) => setPageantForm((current) => ({ ...current, venueName: event.target.value }))}
+              />
+              <TextareaField
+                id="pageant-description"
+                label="Description"
+                value={pageantForm.description}
+                onChange={(event) => setPageantForm((current) => ({ ...current, description: event.target.value }))}
+              />
+              <Button type="submit" disabled={!organizationId || busy === "pageant"}>
+                <Plus size={16} /> {busy === "pageant" ? "Creating…" : "Create pageant"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
 
-function ContestantsModule({ pageant, form, setForm, onSubmit, busy }: {
+function ContestantItem({
+  contestant,
+  loadContestants,
+  mutate,
+  organizationId,
+}: {
+  contestant: any;
+  loadContestants: () => Promise<void>;
+  mutate: (path: string, body: unknown, key: string) => Promise<any>;
+  organizationId: string;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState({
+    displayName: contestant.display_name || "",
+    biography: contestant.biography || "",
+    countryCode: contestant.country_code || "",
+    sash: contestant.sash || "",
+    contestantNumber: contestant.contestant_number?.toString() || "",
+  });
+  const [uploading, setUploading] = useState(false);
+
+  async function handleSave() {
+    const data = await mutate(
+      "/api/manage/contestants",
+      {
+        pageant_contestant_id: contestant.id,
+        display_name: editForm.displayName,
+        biography: editForm.biography,
+        country_code: editForm.countryCode,
+        sash: editForm.sash,
+        contestant_number: editForm.contestantNumber ? Number(editForm.contestantNumber) : null,
+        country_representation: editForm.countryCode,
+      },
+      `contestant-edit-${contestant.id}`,
+    );
+    if (data) {
+      setIsEditing(false);
+      await loadContestants();
+    }
+  }
+
+  async function handleDelete() {
+    if (!confirm(`Are you sure you want to remove ${contestant.display_name}?`)) return;
+    try {
+      const response = await fetch(`/api/manage/contestants/${contestant.id}`, { method: "DELETE" });
+      if (response.ok) {
+        await loadContestants();
+      } else {
+        alert("Failed to delete contestant.");
+      }
+    } catch (err) {
+      alert("Error deleting contestant.");
+    }
+  }
+
+  async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const buffer = await file.arrayBuffer();
+      const hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const sha256 = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+
+      const presignResponse = await fetch("/api/manage/contestants/upload-portrait", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          intent: "presign",
+          organizationId,
+          originalFilename: file.name,
+          contentType: file.type,
+          byteSize: file.size,
+          sha256,
+        }),
+      });
+      const presignData = await presignResponse.json();
+      if (!presignResponse.ok) throw new Error(presignData.error || "failed_to_get_upload_url");
+
+      const { id: mediaAssetId, upload } = presignData;
+
+      const headers = new Headers();
+      headers.set("content-type", file.type);
+      headers.set("x-amz-meta-sha256", sha256);
+      if (upload.headers) {
+        for (const [key, value] of Object.entries(upload.headers)) {
+          headers.set(key, value as string);
+        }
+      }
+      const uploadResponse = await fetch(upload.url, {
+        method: "PUT",
+        body: file,
+        headers,
+      });
+      if (!uploadResponse.ok) throw new Error("failed_to_upload_to_storage");
+
+      const completeResponse = await fetch("/api/manage/contestants/upload-portrait", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          intent: "complete",
+          mediaAssetId,
+          pageantContestantId: contestant.id,
+        }),
+      });
+      const completeData = await completeResponse.json();
+      if (!completeResponse.ok) throw new Error(completeData.error || "failed_to_complete_upload");
+
+      alert("Portrait uploaded successfully!");
+      await loadContestants();
+    } catch (error) {
+      alert(`Upload failed: ${String((error as Error).message || error)}`);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  if (isEditing) {
+    return (
+      <div className="rounded-2xl border border-gold/30 bg-black/45 p-4 space-y-3">
+        <TextField id={`edit-name-${contestant.id}`} label="Display name" value={editForm.displayName} onChange={(e) => setEditForm(curr => ({ ...curr, displayName: e.target.value }))} required />
+        <TextField id={`edit-number-${contestant.id}`} label="Contestant number" type="number" min="1" value={editForm.contestantNumber} onChange={(e) => setEditForm(curr => ({ ...curr, contestantNumber: e.target.value }))} />
+        <TextField id={`edit-country-${contestant.id}`} label="Country code" value={editForm.countryCode} onChange={(e) => setEditForm(curr => ({ ...curr, countryCode: e.target.value.toUpperCase().slice(0, 2) }))} required />
+        <TextField id={`edit-sash-${contestant.id}`} label="Sash" value={editForm.sash} onChange={(e) => setEditForm(curr => ({ ...curr, sash: e.target.value.toUpperCase() }))} required />
+        <TextareaField id={`edit-bio-${contestant.id}`} label="Biography" value={editForm.biography} onChange={(e) => setEditForm(curr => ({ ...curr, biography: e.target.value }))} />
+        <div className="flex gap-2 pt-2">
+          <Button onClick={handleSave} size="sm">Save</Button>
+          <Button onClick={() => setIsEditing(false)} variant="secondary" size="sm">Cancel</Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-line bg-black/25 p-4 transition hover:border-gold/20">
+      <div className="flex items-center gap-3">
+        <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-line bg-black/40 flex items-center justify-center text-gold font-bold">
+          {contestant.portrait_url ? (
+            <img src={contestant.portrait_url} alt="" className="h-full w-full object-cover" />
+          ) : (
+            contestant.display_name.slice(0, 2).toUpperCase()
+          )}
+        </div>
+        <div>
+          <div className="font-semibold text-white">{contestant.display_name}</div>
+          <div className="text-xs text-gold-soft/40">
+            #{contestant.contestant_number || "?"} · {contestant.sash} · {contestant.country_representation}
+          </div>
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <label className="cursor-pointer inline-flex items-center justify-center rounded-xl border border-line bg-black/35 px-3 py-1.5 text-xs text-gold-soft/75 transition hover:border-gold/30 hover:text-white">
+          {uploading ? "Uploading…" : "Upload Portrait"}
+          <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} disabled={uploading} />
+        </label>
+        <Button onClick={() => setIsEditing(true)} variant="secondary" size="sm">Edit</Button>
+        <Button onClick={handleDelete} variant="secondary" size="sm" className="hover:border-red-500/40 hover:text-red-400">Delete</Button>
+      </div>
+    </div>
+  );
+}
+
+function ContestantsModule({
+  pageant,
+  contestants,
+  loadContestants,
+  form,
+  setForm,
+  onSubmit,
+  busy,
+  mutate,
+  organizationId,
+}: {
   pageant: Pageant | null;
+  contestants: any[];
+  loadContestants: () => Promise<void>;
   form: { displayName: string; countryCode: string; sash: string; contestantNumber: string };
   setForm: React.Dispatch<React.SetStateAction<{ displayName: string; countryCode: string; sash: string; contestantNumber: string }>>;
   onSubmit: (event: FormEvent) => void;
   busy: string;
+  mutate: (path: string, body: unknown, key: string) => Promise<any>;
+  organizationId: string;
 }) {
   if (!pageant) return <EmptyState title="Select a pageant" description="Contestants are always scoped to one pageant." />;
-  return <Card><CardHeader><CardTitle>Add a contestant</CardTitle><CardDescription>The contestant becomes available to the public widget renderer after publication.</CardDescription></CardHeader><CardContent><form className="grid gap-4 sm:grid-cols-2" onSubmit={onSubmit}><TextField id="contestant-name" label="Display name" value={form.displayName} onChange={(event) => setForm((current) => ({ ...current, displayName: event.target.value }))} required /><TextField id="contestant-number" label="Contestant number" type="number" min="1" value={form.contestantNumber} onChange={(event) => setForm((current) => ({ ...current, contestantNumber: event.target.value }))} /><TextField id="contestant-country" label="Country code" value={form.countryCode} onChange={(event) => setForm((current) => ({ ...current, countryCode: event.target.value.toUpperCase().slice(0, 2) }))} required /><TextField id="contestant-sash" label="Sash" value={form.sash} onChange={(event) => setForm((current) => ({ ...current, sash: event.target.value.toUpperCase() }))} required /><div className="sm:col-span-2"><Button type="submit" disabled={busy === "contestant"}><Users size={16} /> {busy === "contestant" ? "Adding…" : `Add to ${pageant.name}`}</Button></div></form></CardContent></Card>;
+
+  return (
+    <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(300px,0.8fr)]">
+      <Card>
+        <CardHeader>
+          <CardTitle>Official Lineup</CardTitle>
+          <CardDescription>
+            Contestants currently competing in {pageant.name}. Expose profiles, edit metadata, and upload portrait assets.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {contestants.length === 0 ? (
+            <EmptyState title="No contestants yet" description="Add the first contestant for this pageant." />
+          ) : (
+            <div className="space-y-3">
+              {contestants.map((c) => (
+                <ContestantItem
+                  key={c.id}
+                  contestant={c}
+                  loadContestants={loadContestants}
+                  mutate={mutate}
+                  organizationId={organizationId}
+                />
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Add a contestant</CardTitle>
+          <CardDescription>
+            The contestant becomes available to the public widget renderer after publication.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form className="space-y-4" onSubmit={onSubmit}>
+            <TextField
+              id="contestant-name"
+              label="Display name"
+              value={form.displayName}
+              onChange={(event) => setForm((current) => ({ ...current, displayName: event.target.value }))}
+              required
+            />
+            <TextField
+              id="contestant-number"
+              label="Contestant number"
+              type="number"
+              min="1"
+              value={form.contestantNumber}
+              onChange={(event) => setForm((current) => ({ ...current, contestantNumber: event.target.value }))}
+            />
+            <TextField
+              id="contestant-country"
+              label="Country code"
+              value={form.countryCode}
+              onChange={(event) => setForm((current) => ({ ...current, countryCode: event.target.value.toUpperCase().slice(0, 2) }))}
+              required
+            />
+            <TextField
+              id="contestant-sash"
+              label="Sash"
+              value={form.sash}
+              onChange={(event) => setForm((current) => ({ ...current, sash: event.target.value.toUpperCase() }))}
+              required
+            />
+            <Button type="submit" className="w-full" disabled={busy === "contestant"}>
+              <Users size={16} /> {busy === "contestant" ? "Adding…" : "Add to lineup"}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
 
 function CategoriesModule({ pageant, form, setForm, onSubmit, busy }: {

@@ -1,7 +1,7 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},
-    routing::{get, post},
+    routing::{delete, get, post},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
@@ -15,9 +15,11 @@ use crate::{error::ApiError, state::AppState};
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/internal/manage/overview/:user_id", get(overview))
-        .route("/internal/manage/pageants", post(create_pageant))
+        .route("/internal/manage/pageants", post(create_pageant).patch(update_pageant))
+        .route("/internal/manage/pageants/:id", delete(delete_pageant))
         .route("/internal/manage/categories", post(create_category))
-        .route("/internal/manage/contestants", post(create_contestant))
+        .route("/internal/manage/contestants", post(create_contestant).patch(update_contestant))
+        .route("/internal/manage/contestants/:id", delete(delete_contestant))
         .route(
             "/internal/manage/seed-miss-stellarverse",
             post(seed_miss_stellarverse),
@@ -793,4 +795,359 @@ fn map_database_error(error: sqlx::Error) -> ApiError {
     }
     tracing::error!(error = %error, "manage database operation failed");
     ApiError::Database
+}
+
+#[derive(Debug, Deserialize)]
+struct UpdatePageantRequest {
+    actor_user_id: Uuid,
+    pageant_id: Uuid,
+    name: Option<String>,
+    slug: Option<String>,
+    description: Option<String>,
+    starts_at: Option<String>,
+    ends_at: Option<String>,
+    timezone: Option<String>,
+    venue_name: Option<String>,
+    status: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct UpdateContestantRequest {
+    actor_user_id: Uuid,
+    pageant_contestant_id: Uuid,
+    display_name: Option<String>,
+    legal_name: Option<String>,
+    biography: Option<String>,
+    country_code: Option<String>,
+    sash: Option<String>,
+    contestant_number: Option<i32>,
+    country_representation: Option<String>,
+    sort_order: Option<i32>,
+}
+
+#[derive(Debug, Deserialize)]
+struct DeleteParams {
+    actor_user_id: Uuid,
+}
+
+async fn update_pageant(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<UpdatePageantRequest>,
+) -> Result<Json<PageantSummary>, ApiError> {
+    require_internal(&state, &headers)?;
+    let pool = database_pool(&state)?;
+    let organization_id = organization_for_pageant(pool, body.pageant_id).await?;
+    require_editor(pool, organization_id, body.actor_user_id).await?;
+
+    let name = match body.name {
+        Some(val) => Some(required_text(val, 200, "invalid_pageant_name")?),
+        None => None,
+    };
+    let slug = match body.slug {
+        Some(val) => Some(required_slug(val)?),
+        None => None,
+    };
+    let description = match body.description {
+        Some(val) => Some(optional_text(Some(val), 20_000, "invalid_pageant_description")?),
+        None => None,
+    };
+    let starts_at = match body.starts_at {
+        Some(val) => Some(optional_timestamp(Some(val), "invalid_pageant_starts_at")?),
+        None => None,
+    };
+    let ends_at = match body.ends_at {
+        Some(val) => Some(optional_timestamp(Some(val), "invalid_pageant_ends_at")?),
+        None => None,
+    };
+    if let (Some(Some(start)), Some(Some(end))) = (&starts_at, &ends_at) {
+        if end < start {
+            return Err(ApiError::InvalidRequest("pageant_end_before_start"));
+        }
+    }
+    let timezone = match body.timezone {
+        Some(val) => Some(required_text(val, 120, "invalid_pageant_timezone")?),
+        None => None,
+    };
+    let venue_name = match body.venue_name {
+        Some(val) => Some(optional_text(Some(val), 300, "invalid_pageant_venue")?),
+        None => None,
+    };
+    let status = match body.status {
+        Some(val) => Some(required_text(val, 50, "invalid_pageant_status")?),
+        None => None,
+    };
+
+    let mut tx = pool.begin().await.map_err(map_database_error)?;
+    
+    // Check starts_at / ends_at constraints with existing values if one is omitted
+    if starts_at.is_some() || ends_at.is_some() {
+        let existing: (Option<OffsetDateTime>, Option<OffsetDateTime>) = sqlx::query_as(
+            "SELECT starts_at, ends_at FROM pageants WHERE id = $1"
+        )
+        .bind(body.pageant_id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(map_database_error)?;
+        let check_start = starts_at.clone().flatten().or(existing.0);
+        let check_end = ends_at.clone().flatten().or(existing.1);
+        if let (Some(start), Some(end)) = (check_start, check_end) {
+            if end < start {
+                return Err(ApiError::InvalidRequest("pageant_end_before_start"));
+            }
+        }
+    }
+
+    let pageant = sqlx::query_as::<_, PageantSummary>(
+        "UPDATE pageants SET
+            name = COALESCE($2, name),
+            slug = COALESCE($3, slug),
+            description = COALESCE($4, description),
+            starts_at = CASE WHEN $5 = TRUE THEN $6 ELSE starts_at END,
+            ends_at = CASE WHEN $7 = TRUE THEN $8 ELSE ends_at END,
+            timezone = COALESCE($9, timezone),
+            venue_name = CASE WHEN $10 = TRUE THEN $11 ELSE venue_name END,
+            status = COALESCE($12, status),
+            updated_at = now()
+        WHERE id = $1
+        RETURNING id, organization_id, name, slug, description, status, starts_at, ends_at, timezone, venue_name",
+    )
+    .bind(body.pageant_id)
+    .bind(name)
+    .bind(slug)
+    .bind(description)
+    .bind(starts_at.is_some())
+    .bind(starts_at.flatten())
+    .bind(ends_at.is_some())
+    .bind(ends_at.flatten())
+    .bind(timezone)
+    .bind(venue_name.is_some())
+    .bind(venue_name.flatten())
+    .bind(status)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(map_database_error)?;
+
+    audit(
+        &mut tx,
+        Some(organization_id),
+        body.actor_user_id,
+        "pageant.update",
+        "pageant",
+        body.pageant_id,
+        json!({"name": pageant.name}),
+    )
+    .await?;
+    tx.commit().await.map_err(map_database_error)?;
+    Ok(Json(pageant))
+}
+
+async fn delete_pageant(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(pageant_id): Path<Uuid>,
+    Query(params): Query<DeleteParams>,
+) -> Result<StatusCode, ApiError> {
+    require_internal(&state, &headers)?;
+    let pool = database_pool(&state)?;
+    let organization_id = organization_for_pageant(pool, pageant_id).await?;
+    require_editor(pool, organization_id, params.actor_user_id).await?;
+
+    let mut tx = pool.begin().await.map_err(map_database_error)?;
+    sqlx::query(
+        "UPDATE pageants SET status = 'archived', updated_at = now() WHERE id = $1",
+    )
+    .bind(pageant_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(map_database_error)?;
+
+    audit(
+        &mut tx,
+        Some(organization_id),
+        params.actor_user_id,
+        "pageant.delete",
+        "pageant",
+        pageant_id,
+        json!({}),
+    )
+    .await?;
+    tx.commit().await.map_err(map_database_error)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn update_contestant(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<UpdateContestantRequest>,
+) -> Result<Json<ContestantResponse>, ApiError> {
+    require_internal(&state, &headers)?;
+    let pool = database_pool(&state)?;
+
+    let pc: (Uuid, Uuid) = sqlx::query_as(
+        "SELECT pageant_id, contestant_id FROM pageant_contestants WHERE id = $1"
+    )
+    .bind(body.pageant_contestant_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(map_database_error)?
+    .ok_or(ApiError::NotFound)?;
+
+    let organization_id = organization_for_pageant(pool, pc.0).await?;
+    require_editor(pool, organization_id, body.actor_user_id).await?;
+
+    let display_name = match body.display_name {
+        Some(val) => Some(required_text(val, 200, "invalid_contestant_name")?),
+        None => None,
+    };
+    let legal_name = match body.legal_name {
+        Some(val) => Some(optional_text(Some(val), 200, "invalid_contestant_legal_name")?),
+        None => None,
+    };
+    let biography = match body.biography {
+        Some(val) => Some(optional_text(Some(val), 20_000, "invalid_contestant_biography")?),
+        None => None,
+    };
+    let country_code = match body.country_code {
+        Some(val) => Some(optional_country_code(Some(val))?),
+        None => None,
+    };
+    let sash = match body.sash {
+        Some(val) => Some(optional_text(Some(val), 100, "invalid_contestant_sash")?),
+        None => None,
+    };
+    let country_representation = match body.country_representation {
+        Some(val) => Some(optional_text(Some(val), 200, "invalid_country_representation")?),
+        None => None,
+    };
+    if let Some(number) = body.contestant_number {
+        if number <= 0 {
+            return Err(ApiError::InvalidRequest("invalid_contestant_number"));
+        }
+    }
+
+    let mut tx = pool.begin().await.map_err(map_database_error)?;
+
+    sqlx::query(
+        "UPDATE contestants SET
+            display_name = COALESCE($2, display_name),
+            legal_name = CASE WHEN $3 = TRUE THEN $4 ELSE legal_name END,
+            biography = CASE WHEN $5 = TRUE THEN $6 ELSE biography END,
+            country_code = COALESCE($7, country_code),
+            updated_at = now()
+        WHERE id = $1",
+    )
+    .bind(pc.1)
+    .bind(display_name)
+    .bind(legal_name.is_some())
+    .bind(legal_name.flatten())
+    .bind(biography.is_some())
+    .bind(biography.flatten())
+    .bind(country_code)
+    .execute(&mut *tx)
+    .await
+    .map_err(map_database_error)?;
+
+    sqlx::query(
+        "UPDATE pageant_contestants SET
+            sash = COALESCE($2, sash),
+            contestant_number = CASE WHEN $3 = TRUE THEN $4 ELSE contestant_number END,
+            country_representation = COALESCE($5, country_representation),
+            sort_order = COALESCE($6, sort_order),
+            updated_at = now()
+        WHERE id = $1",
+    )
+    .bind(body.pageant_contestant_id)
+    .bind(sash)
+    .bind(body.contestant_number.is_some())
+    .bind(body.contestant_number)
+    .bind(country_representation)
+    .bind(body.sort_order)
+    .execute(&mut *tx)
+    .await
+    .map_err(map_database_error)?;
+
+    let contestant = sqlx::query_as::<_, ContestantResponse>(
+        "SELECT pc.id, pc.pageant_id, pc.contestant_id, c.display_name, c.biography, c.country_code, pc.sash, pc.contestant_number, pc.country_representation, pc.status, pc.sort_order FROM pageant_contestants pc JOIN contestants c ON c.id = pc.contestant_id WHERE pc.id = $1",
+    )
+    .bind(body.pageant_contestant_id)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(map_database_error)?;
+
+    audit(
+        &mut tx,
+        Some(organization_id),
+        body.actor_user_id,
+        "contestant.update",
+        "pageant_contestant",
+        body.pageant_contestant_id,
+        json!({"pageant_id": pc.0, "contestant_id": pc.1}),
+    )
+    .await?;
+    tx.commit().await.map_err(map_database_error)?;
+    Ok(Json(contestant))
+}
+
+async fn delete_contestant(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(pageant_contestant_id): Path<Uuid>,
+    Query(params): Query<DeleteParams>,
+) -> Result<StatusCode, ApiError> {
+    require_internal(&state, &headers)?;
+    let pool = database_pool(&state)?;
+
+    let pc: (Uuid, Uuid) = sqlx::query_as(
+        "SELECT pageant_id, contestant_id FROM pageant_contestants WHERE id = $1"
+    )
+    .bind(pageant_contestant_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(map_database_error)?
+    .ok_or(ApiError::NotFound)?;
+
+    let organization_id = organization_for_pageant(pool, pc.0).await?;
+    require_editor(pool, organization_id, params.actor_user_id).await?;
+
+    let mut tx = pool.begin().await.map_err(map_database_error)?;
+
+    sqlx::query(
+        "DELETE FROM pageant_contestants WHERE id = $1",
+    )
+    .bind(pageant_contestant_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(map_database_error)?;
+
+    let count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM pageant_contestants WHERE contestant_id = $1",
+    )
+    .bind(pc.1)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(map_database_error)?;
+
+    if count == 0 {
+        sqlx::query(
+            "DELETE FROM contestants WHERE id = $1",
+        )
+        .bind(pc.1)
+        .execute(&mut *tx)
+        .await
+        .map_err(map_database_error)?;
+    }
+
+    audit(
+        &mut tx,
+        Some(organization_id),
+        params.actor_user_id,
+        "contestant.delete",
+        "pageant_contestant",
+        pageant_contestant_id,
+        json!({"pageant_id": pc.0, "contestant_id": pc.1}),
+    )
+    .await?;
+    tx.commit().await.map_err(map_database_error)?;
+    Ok(StatusCode::NO_CONTENT)
 }
